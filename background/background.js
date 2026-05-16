@@ -1,4 +1,7 @@
 importScripts('../config/providers.config.js');
+importScripts('./managers/prompt-manager.js');
+importScripts('./managers/prompt-folder-manager.js');
+importScripts('./managers/model-manager.js');
 
 /**
  * 检测浏览器信息
@@ -1154,12 +1157,26 @@ const pendingResponses = new Map();
 const pollingIntervals = new Map();
 let wsManager = null;
 
+// 新架构管理器
+let promptManager;
+let promptFolderManager;
+let modelManager;
+
 async function init() {
   tabManager = new TabManager();
   conversationManager = new ConversationManager(tabManager);
   roleManager = new RoleManager(tabManager);
   aiMessageManager = new AIMessageManager(tabManager, conversationManager);
   wsManager = new WebSocketManager(tabManager, pendingResponses);
+
+  // 初始化新架构管理器
+  promptManager = new PromptManager();
+  promptFolderManager = new PromptFolderManager();
+  modelManager = new ModelManager();
+
+  // 确保模型已导入
+  const models = await modelManager.getModels();
+  console.log('[Init] 已加载', models.length, '个模型');
 
   // 加载设置并连接 WebSocket
   const settings = await StorageManager.getSettings();
@@ -1453,6 +1470,101 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     case 'getSettings':
       StorageManager.getSettings().then(sendResponse);
+      return true;
+
+    // ========== 新架构：提示词管理 ==========
+    case 'getPrompts':
+      promptManager.getPrompts(request.folderId).then(sendResponse);
+      return true;
+
+    case 'getPromptById':
+      promptManager.getPromptById(request.promptId).then(sendResponse);
+      return true;
+
+    case 'createPrompt':
+      promptManager.createPrompt(request.data).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'updatePrompt':
+      promptManager.updatePrompt(request.promptId, request.data).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'deletePrompt':
+      promptManager.deletePrompt(request.promptId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'searchPrompts':
+      promptManager.searchPrompts(request.keyword).then(sendResponse);
+      return true;
+
+    case 'movePrompt':
+      promptManager.movePrompt(request.promptId, request.targetFolderId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    // ========== 新架构：文件夹管理 ==========
+    case 'getFolders':
+      promptFolderManager.getFolders().then(sendResponse);
+      return true;
+
+    case 'getFolderTree':
+      promptFolderManager.getFolderTree().then(sendResponse);
+      return true;
+
+    case 'createFolder':
+      promptFolderManager.createFolder(request.name, request.parentId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'updateFolder':
+      promptFolderManager.updateFolder(request.folderId, request.data).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'deleteFolder':
+      promptFolderManager.deleteFolder(request.folderId, request.force).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'moveFolder':
+      promptFolderManager.moveFolder(request.folderId, request.targetParentId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    // ========== 新架构：模型管理 ==========
+    case 'getModels':
+      modelManager.getModels().then(sendResponse);
+      return true;
+
+    case 'getModelById':
+      modelManager.getModelById(request.modelId).then(sendResponse);
+      return true;
+
+    case 'getModelsByProvider':
+      modelManager.getModelsByProvider(request.provider).then(sendResponse);
+      return true;
+
+    case 'createModel':
+      modelManager.createModel(request.data).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'updateModel':
+      modelManager.updateModel(request.modelId, request.data).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'deleteModel':
+      modelManager.deleteModel(request.modelId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'setDefaultModel':
+      modelManager.setDefaultModel(request.modelId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'getDefaultModel':
+      modelManager.getDefaultModel().then(sendResponse);
+      return true;
+
+    case 'toggleModelEnabled':
+      modelManager.toggleModelEnabled(request.modelId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'getEnabledModels':
+      modelManager.getEnabledModels().then(sendResponse);
       return true;
 
     case 'disconnectWebSocket':
