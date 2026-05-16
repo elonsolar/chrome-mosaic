@@ -2,7 +2,10 @@ const state = {
   conversations: [],
   roles: [],
   settings: { wsUrl: 'ws://localhost:8080', wsEnabled: false },
-  editingRoleId: null
+  editingRoleId: null,
+  models: [],        // 新增：模型列表
+  prompts: [],       // 新增：提示词列表
+  flows: []          // 新增：流程列表
 };
 
 // DOM元素
@@ -51,16 +54,20 @@ function initProviderSelect() {
 }
 
 async function loadData() {
-  const [conversations, roles, settings] = await Promise.all([
+  const [conversations, roles, settings, models, prompts] = await Promise.all([
     sendMessage({ action: 'getConversations' }),
     sendMessage({ action: 'getRoles' }),
-    sendMessage({ action: 'getSettings' })
+    sendMessage({ action: 'getSettings' }),
+    sendMessage({ action: 'getModels' }),
+    sendMessage({ action: 'getPrompts' })
   ]);
 
   state.conversations = conversations || [];
   state.roles = roles || [];
   state.settings = settings || { wsUrl: 'ws://localhost:8080', wsEnabled: false, contextMode: 'self', floatWindow: true };
-  
+  state.models = models || [];
+  state.prompts = prompts || [];
+
   // 加载设置到UI
   loadSettingsToUI();
 }
@@ -164,9 +171,20 @@ function renderConversations() {
   }
 
   elements.conversationList.innerHTML = state.conversations.map(conv => {
-    const roles = conv.roleIds.map(id => {
+    // 兼容旧数据：roleIds 和 新数据：modelIds
+    const modelIds = conv.modelIds || conv.roleIds || [];
+    const models = modelIds.map(id => {
+      // 优先从新models中查找，再从旧roles中查找
+      let model = state.models.find(m => m.id === id);
+      if (model) return model;
+
       const role = state.roles.find(r => r.id === id);
-      return role ? role.name : '未知角色';
+      return role ? { name: role.name, isVirtual: false } : null;
+    }).filter(Boolean);
+
+    const modelNames = models.map(m => {
+      if (m.isVirtual) return `${m.icon || '🤖'} ${m.name}`;
+      return m.name;
     }).join(', ');
 
     const lastMessage = conv.messages[conv.messages.length - 1];
@@ -192,7 +210,7 @@ function renderConversations() {
           <span class="conversation-message-count">💬 ${msgCount}</span>
           <span class="conversation-time">${formatTime(conv.updatedAt || conv.createdAt)}</span>
         </div>
-        <div class="conversation-roles">角色: ${roles || '未选择'}</div>
+        <div class="conversation-roles">模型: ${modelNames || '未选择'}</div>
         <div class="conversation-preview">${escapeHtml(preview)}</div>
       </div>
     `;
@@ -282,8 +300,9 @@ function renderRoles() {
 // 会话操作
 async function createConversation() {
   const name = document.getElementById('conversationName').value.trim();
-  const selectedRoles = Array.from(document.querySelectorAll('.role-selector input:checked'))
+  const selectedModelIds = Array.from(document.querySelectorAll('#modelSelector input:checked'))
     .map(cb => cb.value);
+  const promptId = document.getElementById('conversationPrompt').value || null;
   const contextMode = document.getElementById('contextMode').value;
 
   if (!name) {
@@ -291,25 +310,14 @@ async function createConversation() {
     return;
   }
 
-  if (selectedRoles.length === 0) {
-    alert('请至少选择一个角色');
+  if (selectedModelIds.length === 0) {
+    alert('请至少选择一个模型');
     return;
   }
 
-  const roleSettings = {};
-  selectedRoles.forEach(roleId => {
-    const nicknameInput = document.querySelector(`.role-nickname-input[data-role-id="${roleId}"]`);
-    const promptInput = document.querySelector(`.role-prompt-input[data-role-id="${roleId}"]`);
-
-    roleSettings[roleId] = {
-      nickname: nicknameInput?.value?.trim() || '',
-      additionalPrompt: promptInput?.value?.trim() || ''
-    };
-  });
-
   if (state.editingConversationId) {
-    // 编辑模式 - 不允许修改contextMode和roleSettings
-    const updates = { name, roleIds: selectedRoles };
+    // 编辑模式
+    const updates = { name, modelIds: selectedModelIds, promptId };
     await sendMessage({
       action: 'updateConversation',
       conversationId: state.editingConversationId,
@@ -327,9 +335,9 @@ async function createConversation() {
     const conversation = await sendMessage({
       action: 'createConversation',
       name,
-      roleIds: selectedRoles,
-      contextMode,
-      roleSettings
+      modelIds: selectedModelIds,
+      promptId,
+      contextMode
     });
 
     if (conversation) {
@@ -494,26 +502,57 @@ function showNewConversationModal() {
   document.getElementById('confirmConversationBtn').textContent = '创建';
   document.getElementById('contextMode').disabled = false;
 
-  // 渲染角色选择器
-  const roleSelector = document.getElementById('roleSelector');
-  if (state.roles.length === 0) {
-    roleSelector.innerHTML = '<div class="empty-state">请先创建角色</div>';
+  // 渲染模型选择器
+  const modelSelector = document.getElementById('modelSelector');
+  if (state.models.length === 0) {
+    modelSelector.innerHTML = '<div class="empty-state">暂无可用模型，请先在"模型"标签页创建模型</div>';
   } else {
-    roleSelector.innerHTML = state.roles.map(role => `
-      <label class="role-checkbox">
-        <input type="checkbox" value="${role.id}" data-role-change>
-        <span>${escapeHtml(role.name)}</span>
-        <small>(${role.provider})</small>
-      </label>
-    `).join('');
+    // 分组显示：虚拟模型一组，普通模型按提供商分组
+    const virtualModels = state.models.filter(m => m.isVirtual && m.enabled);
+    const regularModels = state.models.filter(m => !m.isVirtual && m.enabled);
 
-    roleSelector.querySelectorAll('input[data-role-change]').forEach(checkbox => {
-      checkbox.addEventListener('change', () => updateRoleSettings());
+    let html = '';
+
+    // 虚拟模型组
+    if (virtualModels.length > 0) {
+      html += '<div style="margin-bottom: 12px;"><strong style="color: #8b5cf6; font-size: 12px;">🤖 虚拟模型</strong></div>';
+      html += virtualModels.map(model => `
+        <label class="model-checkbox" style="display: block; padding: 6px 8px; margin: 4px 0; background: #f9f9f9; border-radius: 4px; cursor: pointer;">
+          <input type="checkbox" value="${model.id}" data-model-id="${model.id}">
+          <span style="margin-left: 8px;">${model.icon || '🤖'} ${escapeHtml(model.name)}</span>
+        </label>
+      `).join('');
+    }
+
+    // 普通模型按提供商分组
+    const grouped = {};
+    regularModels.forEach(model => {
+      if (!grouped[model.provider]) {
+        grouped[model.provider] = [];
+      }
+      grouped[model.provider].push(model);
     });
+
+    for (const [provider, models] of Object.entries(grouped)) {
+      const providerInfo = PROVIDERS[provider];
+      html += `<div style="margin-top: 12px; margin-bottom: 8px;"><strong style="color: ${providerInfo?.color || '#666'}; font-size: 12px;">${providerInfo?.name || provider}</strong></div>`;
+      html += models.map(model => `
+        <label class="model-checkbox" style="display: block; padding: 6px 8px; margin: 4px 0; background: #f9f9f9; border-radius: 4px; cursor: pointer;">
+          <input type="checkbox" value="${model.id}" data-model-id="${model.id}">
+          <span style="margin-left: 8px;">${escapeHtml(model.name)}</span>
+        </label>
+      `).join('');
+    }
+
+    modelSelector.innerHTML = html;
   }
 
-  document.getElementById('roleSettingsContainer').innerHTML = '';
-  document.getElementById('roleSettingsGroup').style.display = 'none';
+  // 渲染提示词选择器
+  const promptSelect = document.getElementById('conversationPrompt');
+  promptSelect.innerHTML = '<option value="">不使用提示词</option>' +
+    state.prompts.map(prompt =>
+      `<option value="${prompt.id}">${escapeHtml(prompt.name)}</option>`
+    ).join('');
 
   elements.newConversationModal.classList.add('active');
 }

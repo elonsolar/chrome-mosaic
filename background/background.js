@@ -642,28 +642,22 @@ class ConversationManager {
     this.messageQueues = new Map();
   }
 
-  async createConversation(name, roleIds, contextMode, roleSettings = {}) {
+  async createConversation(name, modelIds, contextMode, promptId = null, roleSettings = {}) {
     const conversations = await StorageManager.getConversations();
-    const roles = await StorageManager.getRoles();
 
-    const roleUrls = {};
-    if (roleIds && roleIds.length > 0) {
-      for (const roleId of roleIds) {
-        const role = roles.find(r => r.id === roleId);
-        if (role && PROVIDERS[role.provider]) {
-          roleUrls[roleId] = PROVIDERS[role.provider].baseUrl;
-        }
-      }
-    }
+    // 支持新的modelIds和旧的roleIds
+    const finalModelIds = modelIds || [];
 
     const newConversation = {
       id: this.generateId(),
       name: name || `会话 ${conversations.length + 1}`,
-      roleIds: roleIds || [],
+      modelIds: finalModelIds,          // 新字段
+      roleIds: finalModelIds,            // 兼容旧字段
+      promptId: promptId,                // 新字段：全局提示词
       contextMode: contextMode || 'self',
       sendMode: 'parallel',
       roleSettings: roleSettings || {},
-      roleUrls: roleUrls,
+      roleUrls: {},
       roleTabIds: {},
       roleLastMessageIds: {},
       messages: [],
@@ -1337,7 +1331,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   switch (request.action) {
     case 'createConversation':
-      conversationManager.createConversation(request.name, request.roleIds, request.contextMode, request.roleSettings)
+      conversationManager.createConversation(request.name, request.modelIds || request.roleIds, request.contextMode, request.promptId, request.roleSettings)
         .then(sendResponse);
       return true;
 
@@ -1347,9 +1341,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
 
     case 'updateConversation':
-      conversationManager.updateConversation(request.conversationId, request.updates)
-        .then(conversation => sendResponse(conversation))
-        .catch(error => sendResponse({ error: error.message }));
+      (async () => {
+        try {
+          const { conversationId, updates } = request;
+          // 支持modelIds，同时更新roleIds以保持兼容
+          if (updates.modelIds) {
+            updates.roleIds = updates.modelIds;
+          }
+          const conversation = await conversationManager.updateConversation(conversationId, updates);
+          sendResponse(conversation);
+        } catch (error) {
+          sendResponse({ error: error.message });
+        }
+      })();
       return true;
 
     case 'clearConversation':

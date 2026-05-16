@@ -15,9 +15,8 @@
         <button class="tab active" data-tab="conversations">会话</button>
         <button class="tab" data-tab="prompts">提示词</button>
         <button class="tab" data-tab="models">模型</button>
-        <button class="tab" data-tab="virtualModels">虚拟模型</button>
         <button class="tab" data-tab="flows">流程</button>
-        <button class="tab" data-tab="roles">角色</button>
+        <button class="tab" data-tab="roles">角色（旧）</button>
         <button class="tab" data-tab="settings">设置</button>
       </div>
     </div>
@@ -40,11 +39,6 @@
     <!-- 模型管理 -->
     <div class="tab-content" id="models-tab">
       <iframe src="tabs/models.html" class="tab-iframe"></iframe>
-    </div>
-
-    <!-- 虚拟模型管理 -->
-    <div class="tab-content" id="virtualModels-tab">
-      <iframe src="tabs/virtual-models.html" class="tab-iframe"></iframe>
     </div>
 
     <!-- 流程设计器 -->
@@ -117,51 +111,29 @@
         <button class="close-btn">&times;</button>
       </div>
        <div class="modal-body">
-         <div class="form-group">
-           <label for="conversationName">会话名称</label>
-           <input type="text" id="conversationName" placeholder="输入会话名称">
-         </div>
           <div class="form-group">
-            <label for="conversationMode">会话模式</label>
-            <select id="conversationMode">
-              <option value="simple">简单模式</option>
-              <option value="advanced">高级模式</option>
+            <label for="conversationName">会话名称</label>
+            <input type="text" id="conversationName" placeholder="输入会话名称">
+          </div>
+
+          <div class="form-group">
+            <label>选择模型（可多选）</label>
+            <div class="model-selector" id="modelSelector" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 4px;">
+              <div class="loading">加载中...</div>
+            </div>
+            <small style="color: #666; font-size: 11px; display: block; margin-top: 4px;">
+              可以同时选择普通模型和虚拟模型，它们会并行处理你的消息
+            </small>
+          </div>
+
+          <div class="form-group">
+            <label for="conversationPrompt">提示词（可选）</label>
+            <select id="conversationPrompt">
+              <option value="">不使用提示词</option>
             </select>
-          </div>
-
-          <!-- 简单模式 -->
-          <div id="simpleModeFields">
-            <div class="form-group">
-              <label for="conversationModel">选择模型</label>
-              <select id="conversationModel">
-                <option value="">请选择模型</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="conversationPrompt">选择提示词</label>
-              <select id="conversationPrompt">
-                <option value="">请选择提示词</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- 高级模式 -->
-          <div id="advancedModeFields" style="display: none;">
-            <div class="form-group">
-              <label for="conversationVirtualModel">选择虚拟模型</label>
-              <select id="conversationVirtualModel">
-                <option value="">请选择虚拟模型</option>
-              </select>
-              <small style="color: #666; font-size: 11px; display: block; margin-top: 4px;">
-                虚拟模型是预定义的多Agent协作流程
-              </small>
-            </div>
-            <div class="form-group">
-              <label for="conversationFlow">或选择流程</label>
-              <select id="conversationFlow">
-                <option value="">请选择流程</option>
-              </select>
-            </div>
+            <small style="color: #666; font-size: 11px; display: block; margin-top: 4px;">
+              提示词会应用到所有普通模型（虚拟模型有自己的提示词）
+            </small>
           </div>
 
           <div class="form-group">
@@ -175,18 +147,7 @@
               共享：所有对话历史都发送给每个AI，每次打开新会话
             </small>
           </div>
-         <div class="form-group">
-           <label for="contextMode">上下文模式</label>
-           <select id="contextMode">
-             <option value="self">独享</option>
-             <option value="full">共享</option>
-           </select>
-           <small style="color: #666; font-size: 11px; display: block; margin-top: 4px;">
-             独享：每个AI独立对话，互不干扰，使用各自的会话URL<br>
-             共享：所有对话历史都发送给每个AI，每次打开新会话
-           </small>
-         </div>
-       </div>
+        </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="cancelConversationBtn">取消</button>
         <button class="btn btn-primary" id="confirmConversationBtn">创建</button>
