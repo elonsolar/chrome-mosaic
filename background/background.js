@@ -3,7 +3,6 @@ importScripts('./managers/prompt-manager.js');
 importScripts('./managers/prompt-folder-manager.js');
 importScripts('./managers/model-manager.js');
 importScripts('./managers/flow-manager.js');
-importScripts('./managers/virtual-model-manager.js');
 importScripts('./managers/flow-executor.js');
 
 /**
@@ -1177,7 +1176,6 @@ async function init() {
   promptFolderManager = new PromptFolderManager();
   modelManager = new ModelManager();
   flowManager = new FlowManager();
-  virtualModelManager = new VirtualModelManager();
   flowExecutor = new FlowExecutor(tabManager, conversationManager);
 
   // 确保模型已导入
@@ -1618,33 +1616,32 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       flowManager.deleteConnection(request.flowId, request.connectionId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
       return true;
 
-    // ========== 新架构：虚拟模型管理 ==========
+    // ========== 新架构：虚拟模型（统一在ModelManager中） ==========
     case 'getVirtualModels':
-      virtualModelManager.getVirtualModels().then(sendResponse);
-      return true;
-
-    case 'getVirtualModelWithFlow':
-      virtualModelManager.getVirtualModelWithFlow(request.virtualModelId).then(sendResponse);
-      return true;
-
-    case 'getAllVirtualModelsWithFlows':
-      virtualModelManager.getAllVirtualModelsWithFlows().then(sendResponse);
+      modelManager.getVirtualModels().then(sendResponse);
       return true;
 
     case 'createVirtualModel':
-      virtualModelManager.createVirtualModel(request.data).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      modelManager.createModel({
+        ...request.data,
+        isVirtual: true
+      }).then(sendResponse).catch(error => sendResponse({ error: error.message }));
       return true;
 
-    case 'updateVirtualModel':
-      virtualModelManager.updateVirtualModel(request.virtualModelId, request.data).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+    case 'getVirtualModelWithFlow':
+      (async () => {
+        const model = await modelManager.getModelById(request.virtualModelId);
+        if (!model || !model.isVirtual) {
+          sendResponse({ error: '虚拟模型不存在' });
+          return;
+        }
+        const flow = await flowManager.getFlowById(model.flowId);
+        sendResponse({ ...model, flow });
+      })();
       return true;
 
     case 'deleteVirtualModel':
-      virtualModelManager.deleteVirtualModel(request.virtualModelId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
-      return true;
-
-    case 'duplicateVirtualModel':
-      virtualModelManager.duplicateVirtualModel(request.virtualModelId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      modelManager.deleteModel(request.virtualModelId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
       return true;
 
     // ========== 新架构：流程执行 ==========
@@ -1672,18 +1669,79 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case 'executeVirtualModel':
       (async () => {
         try {
-          const vmWithFlow = await virtualModelManager.getVirtualModelWithFlow(request.virtualModelId);
-          if (!vmWithFlow) {
+          const model = await modelManager.getModelById(request.virtualModelId);
+          if (!model || !model.isVirtual) {
             throw new Error('虚拟模型不存在');
           }
 
+          const flow = await flowManager.getFlowById(model.flowId);
+          if (!flow) {
+            throw new Error('流程不存在');
+          }
+
           const result = await flowExecutor.executeFlow(
-            vmWithFlow.flow,
+            flow,
             request.userInput,
             request.context || {}
           );
 
           sendResponse({ success: true, result });
+        } catch (error) {
+          sendResponse({ success: false, error: error.message });
+        }
+      })();
+      return true;
+
+    case 'validateFlow':
+      (async () => {
+        try {
+          const flow = await flowManager.getFlowById(request.flowId);
+          const validation = flowExecutor.validateFlow(flow);
+          sendResponse(validation);
+        } catch (error) {
+          sendResponse({ valid: false, errors: [error.message] });
+        }
+      })();
+      return true;
+
+    // ========== 新架构：混合执行（普通模型+虚拟模型） ==========
+    case 'executeMixedModels':
+      (async () => {
+        try {
+          const { modelIds, userInput, context } = request;
+
+          // 并行执行所有模型
+          const results = await Promise.all(
+            modelIds.map(async (modelId) => {
+              const model = await modelManager.getModelById(modelId);
+              if (!model) {
+                throw new Error(`模型不存在: ${modelId}`);
+              }
+
+              if (model.isVirtual) {
+                // 执行虚拟模型
+                const flow = await flowManager.getFlowById(model.flowId);
+                const result = await flowExecutor.executeFlow(flow, userInput, context);
+                return {
+                  modelId: model.id,
+                  modelName: model.name,
+                  isVirtual: true,
+                  result
+                };
+              } else {
+                // 执行普通模型
+                const result = await tabManager.sendMessage(model.provider, userInput);
+                return {
+                  modelId: model.id,
+                  modelName: model.name,
+                  isVirtual: false,
+                  result
+                };
+              }
+            })
+          );
+
+          sendResponse({ success: true, results });
         } catch (error) {
           sendResponse({ success: false, error: error.message });
         }

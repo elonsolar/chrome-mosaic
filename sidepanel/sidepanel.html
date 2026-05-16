@@ -13,6 +13,10 @@
       <h1>Free AI</h1>
       <div class="tabs">
         <button class="tab active" data-tab="conversations">会话</button>
+        <button class="tab" data-tab="prompts">提示词</button>
+        <button class="tab" data-tab="models">模型</button>
+        <button class="tab" data-tab="virtualModels">虚拟模型</button>
+        <button class="tab" data-tab="flows">流程</button>
         <button class="tab" data-tab="roles">角色</button>
         <button class="tab" data-tab="settings">设置</button>
       </div>
@@ -26,6 +30,26 @@
         </button>
       </div>
       <div class="conversation-list" id="conversationList"></div>
+    </div>
+
+    <!-- 提示词管理 -->
+    <div class="tab-content" id="prompts-tab">
+      <iframe src="tabs/prompts.html" class="tab-iframe"></iframe>
+    </div>
+
+    <!-- 模型管理 -->
+    <div class="tab-content" id="models-tab">
+      <iframe src="tabs/models.html" class="tab-iframe"></iframe>
+    </div>
+
+    <!-- 虚拟模型管理 -->
+    <div class="tab-content" id="virtualModels-tab">
+      <iframe src="tabs/virtual-models.html" class="tab-iframe"></iframe>
+    </div>
+
+    <!-- 流程设计器 -->
+    <div class="tab-content" id="flows-tab">
+      <iframe src="tabs/flows.html" class="tab-iframe"></iframe>
     </div>
 
     <!-- 角色列表 -->
@@ -97,14 +121,60 @@
            <label for="conversationName">会话名称</label>
            <input type="text" id="conversationName" placeholder="输入会话名称">
          </div>
-         <div class="form-group">
-           <label>选择角色</label>
-           <div class="role-selector" id="roleSelector"></div>
-         </div>
-         <div class="form-group" id="roleSettingsGroup" style="display: none;">
-           <label>角色设置</label>
-           <div id="roleSettingsContainer"></div>
-         </div>
+          <div class="form-group">
+            <label for="conversationMode">会话模式</label>
+            <select id="conversationMode">
+              <option value="simple">简单模式</option>
+              <option value="advanced">高级模式</option>
+            </select>
+          </div>
+
+          <!-- 简单模式 -->
+          <div id="simpleModeFields">
+            <div class="form-group">
+              <label for="conversationModel">选择模型</label>
+              <select id="conversationModel">
+                <option value="">请选择模型</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="conversationPrompt">选择提示词</label>
+              <select id="conversationPrompt">
+                <option value="">请选择提示词</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 高级模式 -->
+          <div id="advancedModeFields" style="display: none;">
+            <div class="form-group">
+              <label for="conversationVirtualModel">选择虚拟模型</label>
+              <select id="conversationVirtualModel">
+                <option value="">请选择虚拟模型</option>
+              </select>
+              <small style="color: #666; font-size: 11px; display: block; margin-top: 4px;">
+                虚拟模型是预定义的多Agent协作流程
+              </small>
+            </div>
+            <div class="form-group">
+              <label for="conversationFlow">或选择流程</label>
+              <select id="conversationFlow">
+                <option value="">请选择流程</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="contextMode">上下文模式</label>
+            <select id="contextMode">
+              <option value="self">独享</option>
+              <option value="full">共享</option>
+            </select>
+            <small style="color: #666; font-size: 11px; display: block; margin-top: 4px;">
+              独享：每个AI独立对话，互不干扰，使用各自的会话URL<br>
+              共享：所有对话历史都发送给每个AI，每次打开新会话
+            </small>
+          </div>
          <div class="form-group">
            <label for="contextMode">上下文模式</label>
            <select id="contextMode">
@@ -166,5 +236,13 @@
   <script src="../config/providers.config.js"></script>
   <script src="../utils/storage.js"></script>
   <script src="../sidepanel/sidepanel.js"></script>
+  <style>
+    .tab-iframe {
+      width: 100%;
+      height: calc(100vh - 120px);
+      border: none;
+      background: #fff;
+    }
+  </style>
 </body>
 </html>

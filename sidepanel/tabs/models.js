@@ -6,7 +6,8 @@ class ModelsTab {
     this.state = {
       models: [],
       selectedProvider: 'all',
-      editingModelId: null
+      editingModelId: null,
+      flows: [] // 缓存流程列表
     };
 
     this.elements = {};
@@ -40,10 +41,34 @@ class ModelsTab {
       });
     });
 
+    // 新建虚拟模型
+    this.elements.newVirtualModelBtn = document.getElementById('newVirtualModelBtn');
+    if (this.elements.newVirtualModelBtn) {
+      this.elements.newVirtualModelBtn.addEventListener('click', () => {
+        this.showVirtualModelModal();
+      });
+    }
+
     // 新建模型
     this.elements.newModelBtn.addEventListener('click', () => {
       this.showModelModal();
     });
+
+    // 虚拟模型确认
+    const confirmVirtualModelBtn = document.getElementById('confirmVirtualModelBtn');
+    if (confirmVirtualModelBtn) {
+      confirmVirtualModelBtn.addEventListener('click', () => {
+        this.saveVirtualModel();
+      });
+    }
+
+    // 虚拟模型取消
+    const cancelVirtualModelBtn = document.getElementById('cancelVirtualModelBtn');
+    if (cancelVirtualModelBtn) {
+      cancelVirtualModelBtn.addEventListener('click', () => {
+        this.hideVirtualModelModal();
+      });
+    }
 
     // 模型确认
     document.getElementById('confirmModelBtn').addEventListener('click', () => {
@@ -81,8 +106,12 @@ class ModelsTab {
 
   async loadModels() {
     try {
-      const models = await sendMessage({ action: 'getModels' });
+      const [models, flows] = await Promise.all([
+        sendMessage({ action: 'getModels' }),
+        sendMessage({ action: 'getFlows' })
+      ]);
       this.state.models = models || [];
+      this.state.flows = flows || [];
     } catch (error) {
       console.error('加载模型失败:', error);
     }
@@ -102,9 +131,16 @@ class ModelsTab {
   renderModels() {
     let filteredModels = this.state.models;
 
-    // 按提供商过滤
-    if (this.state.selectedProvider !== 'all') {
-      filteredModels = filteredModels.filter(m => m.provider === this.state.selectedProvider);
+    // 按提供商或类型过滤
+    if (this.state.selectedProvider === 'all') {
+      // 显示所有，不过滤
+    } else if (this.state.selectedProvider === 'regular') {
+      filteredModels = filteredModels.filter(m => !m.isVirtual);
+    } else if (this.state.selectedProvider === 'virtual') {
+      filteredModels = filteredModels.filter(m => m.isVirtual);
+    } else {
+      // 按提供商过滤（只显示普通模型）
+      filteredModels = filteredModels.filter(m => !m.isVirtual && m.provider === this.state.selectedProvider);
     }
 
     if (filteredModels.length === 0) {
@@ -112,16 +148,37 @@ class ModelsTab {
       return;
     }
 
-    // 按提供商分组
+    // 分组：虚拟模型单独一组，普通模型按提供商分组
+    const virtualModels = filteredModels.filter(m => m.isVirtual);
+    const regularModels = filteredModels.filter(m => !m.isVirtual);
+
+    let html = '';
+
+    // 虚拟模型组
+    if (virtualModels.length > 0) {
+      html += `
+        <div class="model-group">
+          <div class="model-group-header">
+            <span class="provider-badge virtual-badge">
+              🤖 虚拟模型
+            </span>
+          </div>
+          <div class="model-group-items">
+            ${virtualModels.map(model => this.renderModelItem(model)).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // 普通模型按提供商分组
     const grouped = {};
-    filteredModels.forEach(model => {
+    regularModels.forEach(model => {
       if (!grouped[model.provider]) {
         grouped[model.provider] = [];
       }
       grouped[model.provider].push(model);
     });
 
-    let html = '';
     for (const [provider, models] of Object.entries(grouped)) {
       const providerInfo = PROVIDERS[provider];
       html += `
@@ -145,22 +202,40 @@ class ModelsTab {
   }
 
   renderModelItem(model) {
-    const providerInfo = PROVIDERS[model.provider];
     const isDefault = model.isDefault;
     const isEnabled = model.enabled;
+    const isVirtual = model.isVirtual;
+
+    let detailsHtml = '';
+    if (isVirtual) {
+      const flow = this.state.flows.find(f => f.id === model.flowId);
+      detailsHtml = `
+        <div class="model-details">
+          <span class="model-provider">🤖 虚拟模型</span>
+          <span class="model-model">${flow ? this.escapeHtml(flow.name) : '未知流程'}</span>
+        </div>
+      `;
+    } else {
+      const providerInfo = PROVIDERS[model.provider];
+      detailsHtml = `
+        <div class="model-details">
+          <span class="model-provider">${providerInfo?.name || model.provider}</span>
+          <span class="model-model">${this.escapeHtml(model.model)}</span>
+        </div>
+      `;
+    }
 
     return `
-      <div class="model-item ${isDefault ? 'default' : ''} ${!isEnabled ? 'disabled' : ''}" data-id="${model.id}">
+      <div class="model-item ${isDefault ? 'default' : ''} ${!isEnabled ? 'disabled' : ''} ${isVirtual ? 'virtual' : ''}" data-id="${model.id}">
         <div class="model-info">
           <div class="model-name">
+            ${isVirtual ? `<span class="model-icon">${model.icon || '🤖'}</span>` : ''}
             ${this.escapeHtml(model.name)}
+            ${isVirtual ? '<span class="badge badge-virtual">虚拟</span>' : ''}
             ${isDefault ? '<span class="badge badge-default">默认</span>' : ''}
             ${!isEnabled ? '<span class="badge badge-disabled">已禁用</span>' : ''}
           </div>
-          <div class="model-details">
-            <span class="model-provider">${providerInfo?.name || model.provider}</span>
-            <span class="model-model">${this.escapeHtml(model.model)}</span>
-          </div>
+          ${detailsHtml}
           ${model.description ? `<div class="model-description">${this.escapeHtml(model.description)}</div>` : ''}
         </div>
         <div class="model-actions">
@@ -325,6 +400,60 @@ class ModelsTab {
       this.render();
     } catch (error) {
       alert('删除失败：' + error.message);
+    }
+  }
+
+  async showVirtualModelModal() {
+    // 加载流程列表
+    const flowSelect = document.getElementById('virtualModelFlow');
+    flowSelect.innerHTML = '<option value="">请选择流程...</option>' +
+      this.state.flows.map(f =>
+        `<option value="${f.id}">${this.escapeHtml(f.name)}</option>`
+      ).join('');
+
+    document.getElementById('virtualModelName').value = '';
+    document.getElementById('virtualModelDescription').value = '';
+    document.getElementById('virtualModelIcon').value = '🤖';
+
+    document.getElementById('virtualModelModal').classList.add('active');
+  }
+
+  hideVirtualModelModal() {
+    document.getElementById('virtualModelModal').classList.remove('active');
+  }
+
+  async saveVirtualModel() {
+    const name = document.getElementById('virtualModelName').value.trim();
+    const flowId = document.getElementById('virtualModelFlow').value;
+    const description = document.getElementById('virtualModelDescription').value.trim();
+    const icon = document.getElementById('virtualModelIcon').value.trim();
+
+    if (!name) {
+      alert('请输入虚拟模型名称');
+      return;
+    }
+
+    if (!flowId) {
+      alert('请选择流程');
+      return;
+    }
+
+    try {
+      await sendMessage({
+        action: 'createVirtualModel',
+        data: {
+          name,
+          flowId,
+          description,
+          icon
+        }
+      });
+
+      await this.loadModels();
+      this.render();
+      this.hideVirtualModelModal();
+    } catch (error) {
+      alert('创建失败：' + error.message);
     }
   }
 

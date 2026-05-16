@@ -9,16 +9,24 @@
 </head>
 <body>
   <div class="models-container">
-    <div class="models-header">
-      <h2>模型配置</h2>
+  <div class="models-header">
+    <h2>模型配置</h2>
+    <div class="header-actions">
+      <button class="btn btn-secondary" id="newVirtualModelBtn">
+        <span>🤖</span> 新建虚拟模型
+      </button>
       <button class="btn btn-primary" id="newModelBtn">
         <span>+</span> 新建模型
       </button>
     </div>
+  </div>
 
     <!-- 提供商标签页 -->
     <div class="provider-tabs" id="providerTabs">
       <button class="provider-tab active" data-provider="all">全部</button>
+      <button class="provider-tab" data-provider="regular">普通模型</button>
+      <button class="provider-tab" data-provider="virtual">虚拟模型</button>
+      <div class="tab-divider"></div>
       <button class="provider-tab" data-provider="deepseek">DeepSeek</button>
       <button class="provider-tab" data-provider="doubao">豆包</button>
       <button class="provider-tab" data-provider="qianwen">千问</button>
@@ -28,6 +36,41 @@
     <!-- 模型列表 -->
     <div class="models-list" id="modelsList">
       <div class="loading">加载中...</div>
+    </div>
+  </div>
+
+  <!-- 新建虚拟模型对话框 -->
+  <div class="modal" id="virtualModelModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>新建虚拟模型</h2>
+        <button class="close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="virtualModelName">虚拟模型名称</label>
+          <input type="text" id="virtualModelName" placeholder="例如：超级分析助手">
+        </div>
+        <div class="form-group">
+          <label for="virtualModelFlow">选择流程</label>
+          <select id="virtualModelFlow">
+            <option value="">请选择流程...</option>
+          </select>
+          <small class="help-text">虚拟模型将基于此流程执行</small>
+        </div>
+        <div class="form-group">
+          <label for="virtualModelDescription">描述</label>
+          <input type="text" id="virtualModelDescription" placeholder="描述此虚拟模型的功能">
+        </div>
+        <div class="form-group">
+          <label for="virtualModelIcon">图标</label>
+          <input type="text" id="virtualModelIcon" placeholder="🤖" value="🤖" maxlength="2">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancelVirtualModelBtn">取消</button>
+        <button class="btn btn-primary" id="confirmVirtualModelBtn">创建</button>
+      </div>
     </div>
   </div>
 

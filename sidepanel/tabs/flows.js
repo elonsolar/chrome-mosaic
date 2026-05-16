@@ -49,11 +49,6 @@ class FlowsTab {
       this.saveCurrentFlow();
     });
 
-    // 保存为虚拟模型
-    document.getElementById('saveAsVirtualModelBtn').addEventListener('click', () => {
-      this.showVirtualModelModal();
-    });
-
     // 流程确认
     document.getElementById('confirmFlowBtn').addEventListener('click', () => {
       this.saveFlow();
@@ -460,57 +455,12 @@ class FlowsTab {
     }
   }
 
-  async showVirtualModelModal() {
-    if (!this.state.selectedFlowId) {
-      alert('请先选择流程');
-      return;
-    }
-
-    const flow = this.state.flows.find(f => f.id === this.state.selectedFlowId);
-    document.getElementById('virtualModelName').value = flow.name + ' (虚拟模型)';
-    document.getElementById('virtualModelDescription').value = flow.description || '';
-    document.getElementById('virtualModelIcon').value = '🤖';
-    this.elements.virtualModelModal.classList.add('active');
-  }
-
-  async saveAsVirtualModel() {
-    const name = document.getElementById('virtualModelName').value.trim();
-    const description = document.getElementById('virtualModelDescription').value.trim();
-    const icon = document.getElementById('virtualModelIcon').value.trim();
-
-    if (!name) {
-      alert('请输入虚拟模型名称');
-      return;
-    }
-
-    try {
-      await sendMessage({
-        action: 'createVirtualModel',
-        data: {
-          name,
-          description,
-          flowId: this.state.selectedFlowId,
-          icon
-        }
-      });
-
-      alert('保存成功');
-      this.hideVirtualModelModal();
-    } catch (error) {
-      alert('保存失败：' + error.message);
-    }
-  }
-
   hideFlowModal() {
     this.elements.flowModal.classList.remove('active');
   }
 
   hideNodeModal() {
     this.elements.nodeModal.classList.remove('active');
-  }
-
-  hideVirtualModelModal() {
-    this.elements.virtualModelModal.classList.remove('active');
   }
 
   escapeHtml(text) {
