@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>流程设计器</title>
+  <link rel="stylesheet" href="../../styles/sidepanel.css">
+  <link rel="stylesheet" href="../../styles/flows.css">
+</head>
+<body>
+  <div class="flows-container">
+    <!-- 左侧工具栏 -->
+    <div class="flows-sidebar">
+      <div class="sidebar-header">
+        <h3>流程列表</h3>
+        <button class="icon-btn" id="newFlowBtn" title="新建流程">+</button>
+      </div>
+      <div class="flows-list" id="flowsList">
+        <div class="empty-state">加载中...</div>
+      </div>
+    </div>
+
+    <!-- 右侧Canvas区域 -->
+    <div class="flows-main">
+      <div class="flows-toolbar">
+        <button class="btn btn-secondary" id="addNodeBtn">+ 添加节点</button>
+        <button class="btn btn-secondary" id="saveFlowBtn">💾 保存</button>
+        <button class="btn btn-primary" id="saveAsVirtualModelBtn">🤖 保存为虚拟模型</button>
+      </div>
+
+      <div class="flows-canvas-container">
+        <div class="flows-canvas" id="flowsCanvas">
+          <div class="empty-state">请选择或创建流程</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 新建流程对话框 -->
+  <div class="modal" id="flowModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="flowModalTitle">新建流程</h2>
+        <button class="close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="flowName">流程名称</label>
+          <input type="text" id="flowName" placeholder="输入流程名称">
+        </div>
+        <div class="form-group">
+          <label for="flowDescription">描述</label>
+          <input type="text" id="flowDescription" placeholder="简要描述此流程">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancelFlowBtn">取消</button>
+        <button class="btn btn-primary" id="confirmFlowBtn">创建</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 添加节点对话框 -->
+  <div class="modal" id="nodeModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>添加节点</h2>
+        <button class="close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="nodeName">节点名称</label>
+          <input type="text" id="nodeName" placeholder="例如：分析专家">
+        </div>
+        <div class="form-group">
+          <label for="nodeModel">使用模型</label>
+          <select id="nodeModel">
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="nodePrompt">使用提示词</label>
+          <select id="nodePrompt">
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancelNodeBtn">取消</button>
+        <button class="btn btn-primary" id="confirmNodeBtn">添加</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 保存为虚拟模型对话框 -->
+  <div class="modal" id="virtualModelModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>保存为虚拟模型</h2>
+        <button class="close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="virtualModelName">虚拟模型名称</label>
+          <input type="text" id="virtualModelName" placeholder="例如：超级分析助手">
+        </div>
+        <div class="form-group">
+          <label for="virtualModelDescription">描述</label>
+          <input type="text" id="virtualModelDescription" placeholder="描述此虚拟模型的功能">
+        </div>
+        <div class="form-group">
+          <label for="virtualModelIcon">图标</label>
+          <input type="text" id="virtualModelIcon" placeholder="🤖" value="🤖" maxlength="2">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancelVirtualModelBtn">取消</button>
+        <button class="btn btn-primary" id="confirmVirtualModelBtn">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../../config/providers.config.js"></script>
+  <script src="../../utils/storage.js"></script>
+  <script src="../../../libs/leader-line.min.js"></script>
+  <script src="flows.js"></script>
+</body>
+</html>

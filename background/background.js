@@ -2,6 +2,9 @@ importScripts('../config/providers.config.js');
 importScripts('./managers/prompt-manager.js');
 importScripts('./managers/prompt-folder-manager.js');
 importScripts('./managers/model-manager.js');
+importScripts('./managers/flow-manager.js');
+importScripts('./managers/virtual-model-manager.js');
+importScripts('./managers/flow-executor.js');
 
 /**
  * 检测浏览器信息
@@ -1173,6 +1176,9 @@ async function init() {
   promptManager = new PromptManager();
   promptFolderManager = new PromptFolderManager();
   modelManager = new ModelManager();
+  flowManager = new FlowManager();
+  virtualModelManager = new VirtualModelManager();
+  flowExecutor = new FlowExecutor(tabManager, conversationManager);
 
   // 确保模型已导入
   const models = await modelManager.getModels();
@@ -1565,6 +1571,135 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     case 'getEnabledModels':
       modelManager.getEnabledModels().then(sendResponse);
+      return true;
+
+    // ========== 新架构：流程管理 ==========
+    case 'getFlows':
+      flowManager.getFlows().then(sendResponse);
+      return true;
+
+    case 'getFlowById':
+      flowManager.getFlowById(request.flowId).then(sendResponse);
+      return true;
+
+    case 'createFlow':
+      flowManager.createFlow(request.data).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'updateFlow':
+      flowManager.updateFlow(request.flowId, request.data).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'deleteFlow':
+      flowManager.deleteFlow(request.flowId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'duplicateFlow':
+      flowManager.duplicateFlow(request.flowId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'addNode':
+      flowManager.addNode(request.flowId, request.nodeData).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'updateNode':
+      flowManager.updateNode(request.flowId, request.nodeId, request.nodeData).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'deleteNode':
+      flowManager.deleteNode(request.flowId, request.nodeId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'addConnection':
+      flowManager.addConnection(request.flowId, request.connectionData).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'deleteConnection':
+      flowManager.deleteConnection(request.flowId, request.connectionId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    // ========== 新架构：虚拟模型管理 ==========
+    case 'getVirtualModels':
+      virtualModelManager.getVirtualModels().then(sendResponse);
+      return true;
+
+    case 'getVirtualModelWithFlow':
+      virtualModelManager.getVirtualModelWithFlow(request.virtualModelId).then(sendResponse);
+      return true;
+
+    case 'getAllVirtualModelsWithFlows':
+      virtualModelManager.getAllVirtualModelsWithFlows().then(sendResponse);
+      return true;
+
+    case 'createVirtualModel':
+      virtualModelManager.createVirtualModel(request.data).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'updateVirtualModel':
+      virtualModelManager.updateVirtualModel(request.virtualModelId, request.data).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'deleteVirtualModel':
+      virtualModelManager.deleteVirtualModel(request.virtualModelId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'duplicateVirtualModel':
+      virtualModelManager.duplicateVirtualModel(request.virtualModelId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    // ========== 新架构：流程执行 ==========
+    case 'executeFlow':
+      (async () => {
+        try {
+          const flow = await flowManager.getFlowById(request.flowId);
+          if (!flow) {
+            throw new Error('流程不存在');
+          }
+
+          const result = await flowExecutor.executeFlow(
+            flow,
+            request.userInput,
+            request.context || {}
+          );
+
+          sendResponse({ success: true, result });
+        } catch (error) {
+          sendResponse({ success: false, error: error.message });
+        }
+      })();
+      return true;
+
+    case 'executeVirtualModel':
+      (async () => {
+        try {
+          const vmWithFlow = await virtualModelManager.getVirtualModelWithFlow(request.virtualModelId);
+          if (!vmWithFlow) {
+            throw new Error('虚拟模型不存在');
+          }
+
+          const result = await flowExecutor.executeFlow(
+            vmWithFlow.flow,
+            request.userInput,
+            request.context || {}
+          );
+
+          sendResponse({ success: true, result });
+        } catch (error) {
+          sendResponse({ success: false, error: error.message });
+        }
+      })();
+      return true;
+
+    case 'validateFlow':
+      (async () => {
+        try {
+          const flow = await flowManager.getFlowById(request.flowId);
+          const validation = flowExecutor.validateFlow(flow);
+          sendResponse(validation);
+        } catch (error) {
+          sendResponse({ valid: false, errors: [error.message] });
+        }
+      })();
       return true;
 
     case 'disconnectWebSocket':

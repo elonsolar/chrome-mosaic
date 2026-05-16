@@ -1,0 +1,224 @@
+/* 流程设计器样式 */
+.flows-container {
+  display: flex;
+  height: 100%;
+  background: #f5f5f5;
+}
+
+.flows-sidebar {
+  width: 280px;
+  background: #fff;
+  border-right: 1px solid #e0e0e0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.sidebar-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.flows-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+.flow-item {
+  background: #f9f9f9;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.flow-item:hover {
+  border-color: #1e40af;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.flow-item.selected {
+  border-color: #1e40af;
+  background: #dbeafe;
+}
+
+.flow-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.flow-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.node-count {
+  font-size: 11px;
+  color: #999;
+}
+
+.flow-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.flow-actions button {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.flow-actions button:hover {
+  background: #f0f0f0;
+}
+
+.flows-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+}
+
+.flows-toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #f9f9f9;
+}
+
+.flows-canvas-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: #fafafa;
+  background-image:
+    linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.flows-canvas {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.flow-node {
+  position: absolute;
+  width: 200px;
+  background: #fff;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  cursor: move;
+  transition: box-shadow 0.2s;
+}
+
+.flow-node:hover {
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.flow-node.dragging {
+  opacity: 0.8;
+  cursor: grabbing;
+}
+
+.node-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
+  border-radius: 6px 6px 0 0;
+  cursor: move;
+}
+
+.node-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+
+.node-delete {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  color: #999;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.node-delete:hover {
+  background: #fee;
+  color: #c00;
+}
+
+.node-body {
+  padding: 10px 12px;
+}
+
+.node-info {
+  font-size: 11px;
+  color: #666;
+}
+
+.node-port {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: #1e40af;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px #1e40af;
+}
+
+.node-port-in {
+  left: -7px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.node-port-out {
+  right: -7px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #999;
+  font-size: 13px;
+}
+
+/* LeaderLine SVG样式优化 */
+.leader-line {
+  pointer-events: none !important;
+}
