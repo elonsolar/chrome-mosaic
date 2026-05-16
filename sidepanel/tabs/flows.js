@@ -35,47 +35,74 @@ class FlowsTab {
 
   bindEvents() {
     // 新建流程
-    document.getElementById('newFlowBtn').addEventListener('click', () => {
-      this.showFlowModal();
-    });
+    const newFlowBtn = document.getElementById('newFlowBtn');
+    if (newFlowBtn) {
+      newFlowBtn.addEventListener('click', () => {
+        this.showFlowModal();
+      });
+    }
 
     // 添加节点
-    document.getElementById('addNodeBtn').addEventListener('click', () => {
-      this.showNodeModal();
-    });
+    const addNodeBtn = document.getElementById('addNodeBtn');
+    if (addNodeBtn) {
+      addNodeBtn.addEventListener('click', () => {
+        this.showNodeModal();
+      });
+    }
 
     // 保存流程
-    document.getElementById('saveFlowBtn').addEventListener('click', () => {
-      this.saveCurrentFlow();
-    });
+    const saveFlowBtn = document.getElementById('saveFlowBtn');
+    if (saveFlowBtn) {
+      saveFlowBtn.addEventListener('click', () => {
+        this.saveCurrentFlow();
+      });
+    }
 
     // 流程确认
-    document.getElementById('confirmFlowBtn').addEventListener('click', () => {
-      this.saveFlow();
-    });
+    const confirmFlowBtn = document.getElementById('confirmFlowBtn');
+    if (confirmFlowBtn) {
+      confirmFlowBtn.addEventListener('click', () => {
+        this.saveFlow();
+      });
+    }
 
     // 节点确认
-    document.getElementById('confirmNodeBtn').addEventListener('click', () => {
-      this.addNode();
-    });
+    const confirmNodeBtn = document.getElementById('confirmNodeBtn');
+    if (confirmNodeBtn) {
+      confirmNodeBtn.addEventListener('click', () => {
+        this.addNode();
+      });
+    }
 
     // 虚拟模型确认
-    document.getElementById('confirmVirtualModelBtn').addEventListener('click', () => {
-      this.saveAsVirtualModel();
-    });
+    const confirmVirtualModelBtn = document.getElementById('confirmVirtualModelBtn');
+    if (confirmVirtualModelBtn) {
+      confirmVirtualModelBtn.addEventListener('click', () => {
+        this.saveAsVirtualModel();
+      });
+    }
 
     // 取消按钮
-    document.getElementById('cancelFlowBtn').addEventListener('click', () => {
-      this.hideFlowModal();
-    });
+    const cancelFlowBtn = document.getElementById('cancelFlowBtn');
+    if (cancelFlowBtn) {
+      cancelFlowBtn.addEventListener('click', () => {
+        this.hideFlowModal();
+      });
+    }
 
-    document.getElementById('cancelNodeBtn').addEventListener('click', () => {
-      this.hideNodeModal();
-    });
+    const cancelNodeBtn = document.getElementById('cancelNodeBtn');
+    if (cancelNodeBtn) {
+      cancelNodeBtn.addEventListener('click', () => {
+        this.hideNodeModal();
+      });
+    }
 
-    document.getElementById('cancelVirtualModelBtn').addEventListener('click', () => {
-      this.hideVirtualModelModal();
-    });
+    const cancelVirtualModelBtn = document.getElementById('cancelVirtualModelBtn');
+    if (cancelVirtualModelBtn) {
+      cancelVirtualModelBtn.addEventListener('click', () => {
+        this.hideVirtualModelModal();
+      });
+    }
 
     // 关闭按钮
     document.querySelectorAll('.close-btn').forEach(btn => {

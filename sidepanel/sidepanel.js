@@ -132,6 +132,22 @@ function bindEvents() {
     });
   }
 
+  // 执行策略选择
+  document.querySelectorAll('input[name="strategy"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      const designBtn = document.getElementById('designConversationFlowBtn');
+      if (designBtn) {
+        designBtn.style.display = e.target.value === 'custom' ? 'block' : 'none';
+      }
+    });
+  });
+
+  // 设计会话流程按钮
+  const designConversationFlowBtn = document.getElementById('designConversationFlowBtn');
+  if (designConversationFlowBtn) {
+    designConversationFlowBtn.addEventListener('click', showConversationFlowDesigner);
+  }
+
   // 保存设置
   const saveSettingsBtn = document.getElementById('saveSettingsBtn');
   if (saveSettingsBtn) {
@@ -698,6 +714,53 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+// 会话流程设计器
+let conversationFlowDesigner = null;
+
+function showConversationFlowDesigner() {
+  // 获取选中的模型
+  const selectedModelIds = Array.from(document.querySelectorAll('#modelSelector input:checked'))
+    .map(cb => cb.value)
+    .filter(id => id);
+
+  if (selectedModelIds.length === 0) {
+    alert('请先选择至少一个模型');
+    return;
+  }
+
+  conversationFlowDesigner = new FlowDesigner({
+    mode: 'conversation',
+    flowId: state.editingConversation?.flowId || null,
+    availableModels: state.models.filter(m => selectedModelIds.includes(m.id)),
+    onSave: async (flowData) => {
+      const result = await sendMessage({
+        action: 'saveFlow',
+        flow: flowData
+      });
+
+      if (result && result.id) {
+        if (state.editingConversation) {
+          state.editingConversation.flowId = result.id;
+        }
+        return result.id;
+      }
+      return null;
+    },
+    onClose: () => {
+      conversationFlowDesigner = null;
+    }
+  });
+
+  conversationFlowDesigner.open();
+}
+
+// 启动
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
 }
 
 function formatTime(timestamp) {

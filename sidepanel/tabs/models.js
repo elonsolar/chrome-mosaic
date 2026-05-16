@@ -35,11 +35,13 @@ class ModelsTab {
 
   bindEvents() {
     // 提供商标签切换
-    this.elements.providerTabs.querySelectorAll('.provider-tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        this.selectProvider(tab.dataset.provider);
+    if (this.elements.providerTabs) {
+      this.elements.providerTabs.querySelectorAll('.provider-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          this.selectProvider(tab.dataset.provider);
+        });
       });
-    });
+    }
 
     // 新建虚拟模型
     this.elements.newVirtualModelBtn = document.getElementById('newVirtualModelBtn');
@@ -49,10 +51,68 @@ class ModelsTab {
       });
     }
 
-    // 新建模型
-    this.elements.newModelBtn.addEventListener('click', () => {
-      this.showModelModal();
+    // 设计流程按钮
+    const designFlowBtn = document.getElementById('designFlowBtn');
+    if (designFlowBtn) {
+      designFlowBtn.addEventListener('click', () => {
+        const currentFlowId = document.getElementById('virtualModelFlow').value || null;
+        
+        const designer = new FlowDesigner({
+          mode: 'virtual-model',
+          flowId: currentFlowId,
+          onSave: async (flowData) => {
+            const result = await sendMessage({
+              action: 'saveFlow',
+              flow: flowData
+            });
+            
+            if (result && result.id) {
+              // 更新下拉框
+              await this.loadFlows();
+              document.getElementById('virtualModelFlow').value = result.id;
+              return result.id;
+            }
+            return null;
+          }
+        });
+        designer.open();
+      });
+    }
+
+  // 设计流程按钮
+  const designFlowBtn = document.getElementById('designFlowBtn');
+  if (designFlowBtn) {
+    designFlowBtn.addEventListener('click', () => {
+      const currentFlowId = document.getElementById('virtualModelFlow').value || null;
+      
+      const designer = new FlowDesigner({
+        mode: 'virtual-model',
+        flowId: currentFlowId,
+        onSave: async (flowData) => {
+          const result = await sendMessage({
+            action: 'saveFlow',
+            flow: flowData
+          });
+          
+          if (result && result.id) {
+            // 更新下拉框
+            await this.loadFlows();
+            document.getElementById('virtualModelFlow').value = result.id;
+            return result.id;
+          }
+          return null;
+        }
+      });
+      designer.open();
     });
+  }
+
+    // 新建模型
+    if (this.elements.newModelBtn) {
+      this.elements.newModelBtn.addEventListener('click', () => {
+        this.showModelModal();
+      });
+    }
 
     // 虚拟模型确认
     const confirmVirtualModelBtn = document.getElementById('confirmVirtualModelBtn');
@@ -71,14 +131,20 @@ class ModelsTab {
     }
 
     // 模型确认
-    document.getElementById('confirmModelBtn').addEventListener('click', () => {
-      this.saveModel();
-    });
+    const confirmModelBtn = document.getElementById('confirmModelBtn');
+    if (confirmModelBtn) {
+      confirmModelBtn.addEventListener('click', () => {
+        this.saveModel();
+      });
+    }
 
     // 取消按钮
-    document.getElementById('cancelModelBtn').addEventListener('click', () => {
-      this.hideModelModal();
-    });
+    const cancelModelBtn = document.getElementById('cancelModelBtn');
+    if (cancelModelBtn) {
+      cancelModelBtn.addEventListener('click', () => {
+        this.hideModelModal();
+      });
+    }
 
     // 关闭按钮
     document.querySelectorAll('.close-btn').forEach(btn => {
@@ -95,13 +161,15 @@ class ModelsTab {
     });
 
     // 提供商变化时自动填充模型名称
-    this.elements.modelProvider.addEventListener('change', (e) => {
-      const provider = PROVIDERS[e.target.value];
-      if (provider && provider.defaultModel) {
-        this.elements.modelModel.value = provider.defaultModel;
-        this.elements.modelName.value = provider.name;
-      }
-    });
+    if (this.elements.modelProvider) {
+      this.elements.modelProvider.addEventListener('change', (e) => {
+        const provider = PROVIDERS[e.target.value];
+        if (provider && provider.defaultModel) {
+          this.elements.modelModel.value = provider.defaultModel;
+          this.elements.modelName.value = provider.name;
+        }
+      });
+    }
   }
 
   async loadModels() {

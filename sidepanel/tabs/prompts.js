@@ -42,38 +42,56 @@ class PromptsTab {
 
   bindEvents() {
     // 搜索
-    this.elements.searchInput.addEventListener('input', (e) => {
-      this.handleSearch(e.target.value);
-    });
+    if (this.elements.searchInput) {
+      this.elements.searchInput.addEventListener('input', (e) => {
+        this.handleSearch(e.target.value);
+      });
+    }
 
     // 新建文件夹
-    this.elements.newFolderBtn.addEventListener('click', () => {
-      this.showFolderModal();
-    });
+    if (this.elements.newFolderBtn) {
+      this.elements.newFolderBtn.addEventListener('click', () => {
+        this.showFolderModal();
+      });
+    }
 
     // 新建提示词
-    this.elements.newPromptBtn.addEventListener('click', () => {
-      this.showPromptModal();
-    });
+    if (this.elements.newPromptBtn) {
+      this.elements.newPromptBtn.addEventListener('click', () => {
+        this.showPromptModal();
+      });
+    }
 
     // 文件夹确认
-    document.getElementById('confirmFolderBtn').addEventListener('click', () => {
-      this.saveFolder();
-    });
+    const confirmFolderBtn = document.getElementById('confirmFolderBtn');
+    if (confirmFolderBtn) {
+      confirmFolderBtn.addEventListener('click', () => {
+        this.saveFolder();
+      });
+    }
 
     // 提示词确认
-    document.getElementById('confirmPromptBtn').addEventListener('click', () => {
-      this.savePrompt();
-    });
+    const confirmPromptBtn = document.getElementById('confirmPromptBtn');
+    if (confirmPromptBtn) {
+      confirmPromptBtn.addEventListener('click', () => {
+        this.savePrompt();
+      });
+    }
 
     // 取消按钮
-    document.getElementById('cancelFolderBtn').addEventListener('click', () => {
-      this.hideFolderModal();
-    });
+    const cancelFolderBtn = document.getElementById('cancelFolderBtn');
+    if (cancelFolderBtn) {
+      cancelFolderBtn.addEventListener('click', () => {
+        this.hideFolderModal();
+      });
+    }
 
-    document.getElementById('cancelPromptBtn').addEventListener('click', () => {
-      this.hidePromptModal();
-    });
+    const cancelPromptBtn = document.getElementById('cancelPromptBtn');
+    if (cancelPromptBtn) {
+      cancelPromptBtn.addEventListener('click', () => {
+        this.hidePromptModal();
+      });
+    }
 
     // 关闭按钮
     document.querySelectorAll('.close-btn').forEach(btn => {
@@ -92,9 +110,11 @@ class PromptsTab {
     });
 
     // 提示词内容变化时提取变量
-    this.elements.promptContent.addEventListener('input', () => {
-      this.extractVariables();
-    });
+    if (this.elements.promptContent) {
+      this.elements.promptContent.addEventListener('input', () => {
+        this.extractVariables();
+      });
+    }
   }
 
   async loadData() {

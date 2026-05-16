@@ -40,11 +40,6 @@
       <iframe src="tabs/models.html" class="tab-iframe"></iframe>
     </div>
 
-    <!-- 流程设计器 -->
-    <div class="tab-content" id="flows-tab">
-      <iframe src="tabs/flows.html" class="tab-iframe"></iframe>
-    </div>
-
     <!-- 设置 -->
     <div class="tab-content" id="settings-tab">
       <div class="settings-info">
@@ -105,25 +100,46 @@
             <input type="text" id="conversationName" placeholder="输入会话名称">
           </div>
 
-          <div class="form-group">
-            <label>选择模型（可多选）</label>
-            <div class="model-selector" id="modelSelector" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 4px;">
-              <div class="loading">加载中...</div>
-            </div>
-            <small style="color: #666; font-size: 11px; display: block; margin-top: 4px;">
-              可以同时选择普通模型和虚拟模型，它们会并行处理你的消息
-            </small>
-          </div>
+           <div class="form-group">
+             <label>选择模型（可多选）</label>
+             <div class="model-selector" id="modelSelector" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 4px;">
+               <div class="loading">加载中...</div>
+             </div>
+             <small style="color: #666; font-size: 11px; display: block; margin-top: 4px;">
+               可以同时选择普通模型和虚拟模型
+             </small>
+           </div>
 
-          <div class="form-group">
-            <label for="conversationPrompt">提示词（可选）</label>
-            <select id="conversationPrompt">
-              <option value="">不使用提示词</option>
-            </select>
-            <small style="color: #666; font-size: 11px; display: block; margin-top: 4px;">
-              提示词会应用到所有普通模型（虚拟模型有自己的提示词）
-            </small>
-          </div>
+           <div class="form-group">
+             <label>执行策略</label>
+             <div class="execution-strategy">
+               <label style="display: block; margin-bottom: 8px;">
+                 <input type="radio" name="strategy" value="parallel" checked>
+                 并行执行（所有模型同时处理）
+               </label>
+               <label style="display: block; margin-bottom: 8px;">
+                 <input type="radio" name="strategy" value="sequential">
+                 串行执行（按顺序传递，上一步的输出作为下一步的输入）
+               </label>
+               <label style="display: block; margin-bottom: 8px;">
+                 <input type="radio" name="strategy" value="custom">
+                 自定义流程（完全自定义执行顺序）
+               </label>
+             </div>
+             <button class="btn btn-secondary" id="designConversationFlowBtn" type="button" style="display:none; margin-top: 8px;">
+               🎨 设计自定义流程
+             </button>
+           </div>
+
+           <div class="form-group">
+             <label for="conversationPrompt">提示词（可选，仅普通模型）</label>
+             <select id="conversationPrompt">
+               <option value="">不使用提示词</option>
+             </select>
+             <small style="color: #666; font-size: 11px; display: block; margin-top: 4px;">
+               提示词会应用到所有普通模型（虚拟模型有自己的提示词）
+             </small>
+           </div>
 
           <div class="form-group">
             <label for="contextMode">上下文模式</label>
@@ -185,6 +201,8 @@
 
   <script src="../config/providers.config.js"></script>
   <script src="../utils/storage.js"></script>
+  <script src="../libs/leader-line.min.js"></script>
+  <script src="../components/flow-designer.js"></script>
   <script src="../sidepanel/sidepanel.js"></script>
   <style>
     .tab-iframe {

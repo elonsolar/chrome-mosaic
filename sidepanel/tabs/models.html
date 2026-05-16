@@ -52,11 +52,16 @@
           <input type="text" id="virtualModelName" placeholder="例如：超级分析助手">
         </div>
         <div class="form-group">
-          <label for="virtualModelFlow">选择流程</label>
-          <select id="virtualModelFlow">
-            <option value="">请选择流程...</option>
-          </select>
-          <small class="help-text">虚拟模型将基于此流程执行</small>
+          <label for="virtualModelFlow">流程配置</label>
+          <div class="flow-selector-group">
+            <select id="virtualModelFlow">
+              <option value="">选择已有流程...</option>
+            </select>
+            <button class="btn btn-secondary" id="designFlowBtn" type="button">
+              🎨 设计流程
+            </button>
+          </div>
+          <small class="help-text">选择已有流程或点击"设计流程"创建新流程</small>
         </div>
         <div class="form-group">
           <label for="virtualModelDescription">描述</label>
@@ -111,6 +116,8 @@
 
   <script src="../../config/providers.config.js"></script>
   <script src="../../utils/storage.js"></script>
+  <script src="../../libs/leader-line.min.js"></script>
+  <script src="../components/flow-designer.js"></script>
   <script src="models.js"></script>
 </body>
 </html>

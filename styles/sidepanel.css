@@ -731,3 +731,33 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background-color: #a8a8a8;
 }
+
+/* 执行策略样式 */
+.execution-strategy {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: #f9f9f9;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+}
+
+.execution-strategy label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.5;
+  user-select: none;
+}
+
+.execution-strategy input[type="radio"] {
+  margin-top: 2px;
+  cursor: pointer;
+}
+
+.execution-strategy input[type="radio"]:checked {
+  accent-color: #8b5cf6;
+}
