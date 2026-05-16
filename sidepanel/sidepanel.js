@@ -257,6 +257,9 @@ function renderConversations() {
 }
 
 function renderRoles() {
+  // 角色功能已废弃，此函数保留以防旧代码调用
+  if (!elements.roleList) return;
+  
   if (state.roles.length === 0) {
     elements.roleList.innerHTML = '<div class="empty-state">暂无角色</div>';
     return;
