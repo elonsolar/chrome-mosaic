@@ -472,4 +472,8 @@ class FlowsTab {
 
 // 初始化
 const flowsTab = new FlowsTab();
-flowsTab.init();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => flowsTab.init());
+} else {
+  flowsTab.init();
+}

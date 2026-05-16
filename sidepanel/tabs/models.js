@@ -466,4 +466,8 @@ class ModelsTab {
 
 // 初始化
 const modelsTab = new ModelsTab();
-modelsTab.init();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => modelsTab.init());
+} else {
+  modelsTab.init();
+}

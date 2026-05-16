@@ -456,4 +456,8 @@ class PromptsTab {
 
 // 初始化
 const promptsTab = new PromptsTab();
-promptsTab.init();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => promptsTab.init());
+} else {
+  promptsTab.init();
+}

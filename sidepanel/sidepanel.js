@@ -717,4 +717,8 @@ function formatTime(timestamp) {
 }
 
 // 启动
-init();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
