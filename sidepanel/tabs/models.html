@@ -9,122 +9,19 @@
 </head>
 <body>
   <div class="models-container">
+    <!-- 头部 -->
     <div class="models-header">
       <button class="btn btn-primary" id="newModelBtn">
-        <span>+</span> 新建模型
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        新建模型
       </button>
     </div>
 
     <!-- 模型列表 -->
     <div class="models-list" id="modelsList">
       <div class="loading">加载中...</div>
-    </div>
-  </div>
-
-  <!-- 新建模型对话框 -->
-  <div class="modal" id="modelModal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2 id="modelModalTitle">新建模型</h2>
-        <button class="close-btn">&times;</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label for="modelType">模型类型</label>
-          <select id="modelType">
-            <option value="regular">普通模型</option>
-            <option value="virtual">虚拟模型</option>
-          </select>
-          <small class="help-text">虚拟模型可以组合多个提示词和模型</small>
-        </div>
-
-        <!-- 普通模型字段 -->
-        <div id="regularModelFields">
-          <div class="form-group">
-            <label for="modelProvider">提供商</label>
-            <select id="modelProvider">
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="modelModel">模型名称</label>
-            <input type="text" id="modelModel" placeholder="例如：deepseek-chat">
-            <small class="help-text">提供商的模型标识符</small>
-          </div>
-          <div class="form-group">
-            <label for="modelName">显示名称</label>
-            <input type="text" id="modelName" placeholder="例如：DeepSeek 聊天模型">
-            <small class="help-text">在界面中显示的名称</small>
-          </div>
-          <div class="form-group">
-            <label for="modelDescription">描述</label>
-            <input type="text" id="modelDescription" placeholder="简要描述此模型">
-          </div>
-        </div>
-
-        <!-- 虚拟模型字段 -->
-        <div id="virtualModelFields" style="display:none;">
-          <div class="form-group">
-            <label for="virtualModelName">虚拟模型名称</label>
-            <input type="text" id="virtualModelName" placeholder="例如：超级分析助手">
-          </div>
-          <div class="form-group">
-            <label for="virtualModelFlow">流程配置</label>
-            <div class="flow-selector-group">
-              <select id="virtualModelFlow">
-                <option value="">选择已有流程...</option>
-              </select>
-              <button class="btn btn-secondary" id="designFlowBtn" type="button">
-                🎨 设计流程
-              </button>
-            </div>
-            <small class="help-text">选择已有流程或点击"设计流程"创建新流程</small>
-          </div>
-          <div class="form-group">
-            <label for="virtualModelDescription">描述</label>
-            <input type="text" id="virtualModelDescription" placeholder="描述此虚拟模型的功能">
-          </div>
-          <div class="form-group">
-            <label for="virtualModelIcon">图标</label>
-            <input type="text" id="virtualModelIcon" placeholder="🤖" value="🤖" maxlength="2">
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" id="cancelModelBtn">取消</button>
-        <button class="btn btn-primary" id="confirmModelBtn">创建</button>
-      </div>
-    </div>
-  </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label for="virtualModelName">虚拟模型名称</label>
-          <input type="text" id="virtualModelName" placeholder="例如：超级分析助手">
-        </div>
-        <div class="form-group">
-          <label for="virtualModelFlow">流程配置</label>
-          <div class="flow-selector-group">
-            <select id="virtualModelFlow">
-              <option value="">选择已有流程...</option>
-            </select>
-            <button class="btn btn-secondary" id="designFlowBtn" type="button">
-              🎨 设计流程
-            </button>
-          </div>
-          <small class="help-text">选择已有流程或点击"设计流程"创建新流程</small>
-        </div>
-        <div class="form-group">
-          <label for="virtualModelDescription">描述</label>
-          <input type="text" id="virtualModelDescription" placeholder="描述此虚拟模型的功能">
-        </div>
-        <div class="form-group">
-          <label for="virtualModelIcon">图标</label>
-          <input type="text" id="virtualModelIcon" placeholder="🤖" value="🤖" maxlength="2">
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" id="cancelVirtualModelBtn">取消</button>
-        <button class="btn btn-primary" id="confirmVirtualModelBtn">创建</button>
-      </div>
     </div>
   </div>
 
@@ -136,24 +33,73 @@
         <button class="close-btn">&times;</button>
       </div>
       <div class="modal-body">
-        <div class="form-group">
-          <label for="modelProvider">提供商</label>
-          <select id="modelProvider">
-          </select>
+        <!-- 模型类型选择 -->
+        <div class="model-type-selector">
+          <label class="type-option">
+            <input type="radio" name="modelType" value="regular" checked>
+            <span class="type-card">
+              <span class="type-icon">🔷</span>
+              <span class="type-name">普通模型</span>
+              <span class="type-desc">单个AI模型</span>
+            </span>
+          </label>
+          <label class="type-option">
+            <input type="radio" name="modelType" value="virtual">
+            <span class="type-card">
+              <span class="type-icon">🤖</span>
+              <span class="type-name">虚拟模型</span>
+              <span class="type-desc">组合多个模型</span>
+            </span>
+          </label>
         </div>
-        <div class="form-group">
-          <label for="modelModel">模型名称</label>
-          <input type="text" id="modelModel" placeholder="例如：deepseek-chat">
-          <small class="help-text">提供商的模型标识符</small>
+
+        <!-- 普通模型表单 -->
+        <div class="model-form" id="regularModelForm">
+          <div class="form-group">
+            <label for="modelProvider">提供商</label>
+            <select id="modelProvider" class="form-select">
+              <option value="">请选择...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="modelModel">模型标识符</label>
+            <input type="text" id="modelModel" class="form-input" placeholder="deepseek-chat">
+          </div>
+          <div class="form-group">
+            <label for="modelName">显示名称</label>
+            <input type="text" id="modelName" class="form-input" placeholder="DeepSeek 聊天">
+          </div>
+          <div class="form-group">
+            <label for="modelDescription">描述（可选）</label>
+            <input type="text" id="modelDescription" class="form-input" placeholder="模型功能描述">
+          </div>
         </div>
-        <div class="form-group">
-          <label for="modelName">显示名称</label>
-          <input type="text" id="modelName" placeholder="例如：DeepSeek 聊天模型">
-          <small class="help-text">在界面中显示的名称</small>
-        </div>
-        <div class="form-group">
-          <label for="modelDescription">描述</label>
-          <input type="text" id="modelDescription" placeholder="简要描述此模型">
+
+        <!-- 虚拟模型表单 -->
+        <div class="model-form" id="virtualModelForm" style="display:none;">
+          <div class="form-group">
+            <label for="virtualModelName">虚拟模型名称</label>
+            <input type="text" id="virtualModelName" class="form-input" placeholder="超级分析助手">
+          </div>
+          <div class="form-group">
+            <label for="virtualModelFlow">执行流程</label>
+            <div class="flow-selector">
+              <select id="virtualModelFlow" class="form-select">
+                <option value="">选择流程...</option>
+              </select>
+              <button type="button" class="btn btn-secondary" id="designFlowBtn">
+                🎨 设计
+              </button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="virtualModelDescription">描述（可选）</label>
+            <input type="text" id="virtualModelDescription" class="form-input" placeholder="虚拟模型功能描述">
+          </div>
+          <div class="form-group">
+            <label for="virtualModelIcon">图标</label>
+            <input type="text" id="virtualModelIcon" class="form-input" placeholder="🤖" value="🤖" maxlength="2">
+          </div>
         </div>
       </div>
       <div class="modal-footer">

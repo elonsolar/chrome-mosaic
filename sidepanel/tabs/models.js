@@ -24,9 +24,8 @@ class ModelsTab {
       modelsList: document.getElementById('modelsList'),
       newModelBtn: document.getElementById('newModelBtn'),
       modelModal: document.getElementById('modelModal'),
-      modelType: document.getElementById('modelType'),
-      regularModelFields: document.getElementById('regularModelFields'),
-      virtualModelFields: document.getElementById('virtualModelFields')
+      regularModelForm: document.getElementById('regularModelForm'),
+      virtualModelForm: document.getElementById('virtualModelForm')
     };
   }
 
@@ -38,12 +37,12 @@ class ModelsTab {
       });
     }
 
-    // 模型类型切换
-    if (this.elements.modelType) {
-      this.elements.modelType.addEventListener('change', (e) => {
-        this.toggleModelFields(e.target.value);
+    // 模型类型选择
+    document.querySelectorAll('input[name="modelType"]').forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        this.toggleModelForm(e.target.value);
       });
-    }
+    });
 
     // 设计流程按钮
     const designFlowBtn = document.getElementById('designFlowBtn');
@@ -62,10 +61,7 @@ class ModelsTab {
             
             if (result && result.id) {
               await this.loadFlows();
-              const flowSelect = document.getElementById('virtualModelFlow');
-              if (flowSelect) {
-                flowSelect.value = result.id;
-              }
+              document.getElementById('virtualModelFlow').value = result.id;
               return result.id;
             }
             return null;
@@ -146,18 +142,18 @@ class ModelsTab {
     }
   }
 
-  toggleModelFields(type) {
-    if (!this.elements.regularModelFields || !this.elements.virtualModelFields) return;
+  toggleModelForm(type) {
+    if (!this.elements.regularModelForm || !this.elements.virtualModelForm) return;
 
     if (type === 'virtual') {
-      this.elements.regularModelFields.style.display = 'none';
-      this.elements.virtualModelFields.style.display = 'block';
+      this.elements.regularModelForm.classList.remove('active');
+      this.elements.virtualModelForm.classList.add('active');
       
       // 加载流程列表
       this.loadFlowsToSelect();
     } else {
-      this.elements.regularModelFields.style.display = 'block';
-      this.elements.virtualModelFields.style.display = 'none';
+      this.elements.regularModelForm.classList.add('active');
+      this.elements.virtualModelForm.classList.remove('active');
       
       // 初始化提供商列表
       this.initProviderSelect();
@@ -193,23 +189,25 @@ class ModelsTab {
     const modal = this.elements.modelModal;
     const title = document.getElementById('modelModalTitle');
     const confirmBtn = document.getElementById('confirmModelBtn');
-    const modelType = this.elements.modelType;
     
-    if (!modal || !title || !confirmBtn || !modelType) return;
+    if (!modal || !title || !confirmBtn) return;
 
     // 重置表单
-    modelType.value = 'regular';
-    this.toggleModelFields('regular');
+    document.querySelectorAll('input[name="modelType"]').forEach(radio => {
+      radio.checked = radio.value === 'regular';
+    });
+    this.toggleModelForm('regular');
     
     if (modelId) {
       title.textContent = '编辑模型';
       confirmBtn.textContent = '保存';
       
-      // 加载模型数据
       const model = this.state.models.find(m => m.id === modelId);
       if (model) {
-        modelType.value = model.isVirtual ? 'virtual' : 'regular';
-        this.toggleModelFields(modelType.value);
+        const typeRadio = document.querySelector(`input[name="modelType"][value="${model.isVirtual ? 'virtual' : 'regular'}"]`);
+        if (typeRadio) typeRadio.checked = true;
+        
+        this.toggleModelForm(model.isVirtual ? 'virtual' : 'regular');
         
         if (model.isVirtual) {
           document.getElementById('virtualModelName').value = model.name || '';
@@ -217,15 +215,10 @@ class ModelsTab {
           document.getElementById('virtualModelDescription').value = model.description || '';
           document.getElementById('virtualModelIcon').value = model.icon || '🤖';
         } else {
-          const modelProvider = document.getElementById('modelProvider');
-          const modelModel = document.getElementById('modelModel');
-          const modelName = document.getElementById('modelName');
-          const modelDescription = document.getElementById('modelDescription');
-          
-          if (modelProvider) modelProvider.value = model.provider || '';
-          if (modelModel) modelModel.value = model.model || '';
-          if (modelName) modelName.value = model.name || '';
-          if (modelDescription) modelDescription.value = model.description || '';
+          document.getElementById('modelProvider').value = model.provider || '';
+          document.getElementById('modelModel').value = model.model || '';
+          document.getElementById('modelName').value = model.name || '';
+          document.getElementById('modelDescription').value = model.description || '';
         }
       }
     } else {
@@ -238,15 +231,10 @@ class ModelsTab {
       document.getElementById('virtualModelDescription').value = '';
       document.getElementById('virtualModelIcon').value = '🤖';
       
-      const modelProvider = document.getElementById('modelProvider');
-      const modelModel = document.getElementById('modelModel');
-      const modelName = document.getElementById('modelName');
-      const modelDescription = document.getElementById('modelDescription');
-      
-      if (modelProvider) modelProvider.value = '';
-      if (modelModel) modelModel.value = '';
-      if (modelName) modelName.value = '';
-      if (modelDescription) modelDescription.value = '';
+      document.getElementById('modelProvider').value = '';
+      document.getElementById('modelModel').value = '';
+      document.getElementById('modelName').value = '';
+      document.getElementById('modelDescription').value = '';
     }
 
     modal.classList.add('active');
@@ -260,7 +248,7 @@ class ModelsTab {
   }
 
   async saveModel() {
-    const modelType = this.elements.modelType ? this.elements.modelType.value : 'regular';
+    const modelType = document.querySelector('input[name="modelType"]:checked')?.value || 'regular';
     
     try {
       if (modelType === 'virtual') {
