@@ -688,8 +688,15 @@ function switchTab(tabName) {
     content.classList.remove('active');
   });
 
-  document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
-  document.getElementById(`${tabName}-tab`).classList.add('active');
+  const tabButton = document.querySelector(`[data-tab="${tabName}"]`);
+  if (tabButton) {
+    tabButton.classList.add('active');
+  }
+
+  const tabContent = document.getElementById(`${tabName}-tab`);
+  if (tabContent) {
+    tabContent.classList.add('active');
+  }
 }
 
 // 工具函数
