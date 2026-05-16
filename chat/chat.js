@@ -486,7 +486,17 @@ async function sendMessage() {
   try {
     addTempMessage(content, true);
     elements.messageInput.value = '';
-    showThinkingIndicator();
+    
+    // 检查是否有虚拟模型
+    const hasVirtualModels = await checkHasVirtualModels();
+    
+    if (hasVirtualModels) {
+      // 有虚拟模型，显示执行过程
+      showVirtualModelExecution();
+    } else {
+      // 只有普通模型，显示普通思考中
+      showThinkingIndicator();
+    }
 
     const updatedConversation = await sendMessageToBackend(conversationId, content);
 
@@ -514,11 +524,92 @@ async function sendMessage() {
 }
 
 function resetSendButton() {
-  state.isLoading = false;
-  state.isWaitingResponse = false;
-  elements.sendBtn.disabled = false;
-  elements.sendBtn.textContent = '发送';
+    state.isLoading = false;
+    resetSendButton();
+  } catch (error) {
+    console.error('发送消息失败:', error);
+    showError('发送消息失败: ' + error.message);
+    state.isLoading = false;
+    resetSendButton();
+  }
 }
+
+async function checkHasVirtualModels() {
+  if (!state.conversation.modelIds && !state.conversation.roleIds) {
+    return false;
+  }
+  
+  const modelIds = state.conversation.modelIds || state.conversation.roleIds || [];
+  
+  try {
+    const models = await sendMessage({ action: 'getModels' });
+    if (!models) return false;
+    
+    return modelIds.some(id => {
+      const model = models.find(m => m.id === id);
+      return model && model.isVirtual;
+    });
+  } catch (error) {
+    console.error('检查虚拟模型失败:', error);
+    return false;
+  }
+}
+
+function showVirtualModelExecution() {
+  const executionId = 'exec-' + Date.now();
+  
+  const executionHTML = `
+    <div class="message ai-message virtual-model-execution" id="${executionId}">
+      <div class="message-avatar ai-avatar" style="background:linear-gradient(135deg, #8b5cf6, #6366f1);">🤖</div>
+      <div class="message-content">
+        <div class="message-role">虚拟模型执行中</div>
+        <div class="virtual-model-progress">
+          <div class="progress-header">
+            <div class="progress-spinner"></div>
+            <span class="progress-text">正在分析任务并分发给各个Agent...</span>
+          </div>
+          <div class="progress-nodes"></div>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  elements.messagesContainer.insertAdjacentHTML('beforeend', executionHTML);
+  scrollToBottom();
+  
+  return executionId;
+}
+
+function updateVirtualModelProgress(executionId, progress) {
+  const executionElement = document.getElementById(executionId);
+  if (!executionElement) return;
+  
+  const nodesContainer = executionElement.querySelector('.progress-nodes');
+  const progressText = executionElement.querySelector('.progress-text');
+  
+  if (progressText) {
+    progressText.textContent = progress.statusText || '执行中...';
+  }
+  
+  if (nodesContainer && progress.nodes) {
+    nodesContainer.innerHTML = progress.nodes.map(node => `
+      <div class="progress-node ${node.status}">
+        <div class="node-status">
+          ${node.status === 'completed' ? '✅' : 
+            node.status === 'running' ? '⏳' : 
+            node.status === 'error' ? '❌' : '⏸️'}
+        </div>
+        <div class="node-info">
+          <div class="node-name">${escapeHtml(node.name)}</div>
+          ${node.result ? `<div class="node-result">${escapeHtml(node.result.substring(0, 100))}${node.result.length > 100 ? '...' : ''}</div>` : ''}
+        </div>
+      </div>
+    `).join('');
+  }
+  
+  scrollToBottom();
+}
+
 
 function showThinkingIndicator() {
   hideThinkingIndicator();
