@@ -44,32 +44,7 @@ class ModelsTab {
       });
     });
 
-    // 设计流程按钮
-    const designFlowBtn = document.getElementById('designFlowBtn');
-    if (designFlowBtn) {
-      designFlowBtn.addEventListener('click', () => {
-        const currentFlowId = document.getElementById('virtualModelFlow').value || null;
-        
-        const designer = new FlowDesigner({
-          mode: 'virtual-model',
-          flowId: currentFlowId,
-          onSave: async (flowData) => {
-            const result = await sendMessage({
-              action: 'saveFlow',
-              flow: flowData
-            });
-            
-            if (result && result.id) {
-              await this.loadFlows();
-              document.getElementById('virtualModelFlow').value = result.id;
-              return result.id;
-            }
-            return null;
-          }
-        });
-        designer.open();
-      });
-    }
+
 
     // 确认按钮
     const confirmModelBtn = document.getElementById('confirmModelBtn');
@@ -211,14 +186,16 @@ class ModelsTab {
         
         if (model.isVirtual) {
           document.getElementById('virtualModelName').value = model.name || '';
-          document.getElementById('virtualModelFlow').value = model.flowId || '';
           document.getElementById('virtualModelDescription').value = model.description || '';
           document.getElementById('virtualModelIcon').value = model.icon || '🤖';
+          document.getElementById('virtualModelEnabled').checked = model.enabled || false;
         } else {
           document.getElementById('modelProvider').value = model.provider || '';
           document.getElementById('modelModel').value = model.model || '';
           document.getElementById('modelName').value = model.name || '';
           document.getElementById('modelDescription').value = model.description || '';
+          document.getElementById('modelEnabled').checked = model.enabled || false;
+          document.getElementById('modelThinking').checked = model.thinking || false;
         }
       }
     } else {
@@ -227,14 +204,16 @@ class ModelsTab {
       
       // 清空表单
       document.getElementById('virtualModelName').value = '';
-      document.getElementById('virtualModelFlow').value = '';
       document.getElementById('virtualModelDescription').value = '';
       document.getElementById('virtualModelIcon').value = '🤖';
+      document.getElementById('virtualModelEnabled').checked = false;
       
       document.getElementById('modelProvider').value = '';
       document.getElementById('modelModel').value = '';
       document.getElementById('modelName').value = '';
       document.getElementById('modelDescription').value = '';
+      document.getElementById('modelEnabled').checked = false;
+      document.getElementById('modelThinking').checked = false;
     }
 
     modal.classList.add('active');
@@ -266,6 +245,8 @@ class ModelsTab {
     const model = document.getElementById('modelModel')?.value?.trim() || '';
     const name = document.getElementById('modelName')?.value?.trim() || '';
     const description = document.getElementById('modelDescription')?.value?.trim() || '';
+    const enabled = document.getElementById('modelEnabled')?.checked || false;
+    const thinking = document.getElementById('modelThinking')?.checked || false;
 
     if (!provider || !model || !name) {
       alert('请填写必填字段');
@@ -276,7 +257,9 @@ class ModelsTab {
       provider,
       model,
       name,
-      description
+      description,
+      enabled,
+      thinking
     };
 
     if (this.state.editingModelId) {
@@ -296,6 +279,7 @@ class ModelsTab {
     const flowId = document.getElementById('virtualModelFlow')?.value || '';
     const description = document.getElementById('virtualModelDescription')?.value?.trim() || '';
     const icon = document.getElementById('virtualModelIcon')?.value?.trim() || '🤖';
+    const enabled = document.getElementById('virtualModelEnabled')?.checked || false;
 
     if (!name) {
       alert('请输入虚拟模型名称');
@@ -311,7 +295,8 @@ class ModelsTab {
       name,
       flowId,
       description,
-      icon
+      icon,
+      enabled
     };
 
     if (this.state.editingModelId) {
@@ -336,27 +321,49 @@ class ModelsTab {
 
     this.elements.modelsList.innerHTML = this.state.models.map(model => {
       const isVirtual = model.isVirtual;
+      const isEnabled = model.enabled !== false;
       
       return `
-        <div class="model-item" data-id="${model.id}">
-          <div class="model-header">
-            <div class="model-icon ${isVirtual ? 'virtual' : ''}">
-              ${isVirtual ? (model.icon || '🤖') : (model.name.charAt(0) || 'M')}
-            </div>
-            <div class="model-info">
-              <h3>${this.escapeHtml(model.name)}</h3>
-              <div class="model-meta">
-                ${isVirtual 
-                  ? `<span class="model-badge virtual">虚拟模型</span>`
-                  : `<span class="model-badge">${this.escapeHtml(model.provider || '')}</span>`
-                }
-                ${model.description ? `<span class="model-desc">${this.escapeHtml(model.description)}</span>` : ''}
-              </div>
-            </div>
+        <div class="model-item ${!isEnabled ? 'disabled' : ''}" data-id="${model.id}">
+          <div class="model-info">
+            <h3 class="model-name">${this.escapeHtml(model.name)}</h3>
+            <span class="model-type ${isVirtual ? 'virtual' : 'regular'}">
+              ${isVirtual ? '虚拟' : '基础'}
+            </span>
+          </div>
+          <div class="model-status ${isEnabled ? 'enabled' : 'disabled'}">
+            ${isEnabled ? '已启用' : '已禁用'}
           </div>
           <div class="model-actions">
-            <button class="btn-icon edit-btn" data-id="${model.id}" title="编辑">✏️</button>
-            <button class="btn-icon delete-btn" data-id="${model.id}" title="删除">🗑️</button>
+            ${isVirtual ? `<button class="btn-action design-btn" data-id="${model.id}" title="设计流程">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                <path d="M2 17l10 5 10-5"/>
+                <path d="M2 12l10 5 10-5"/>
+              </svg>
+            </button>` : ''}
+            <button class="btn-action toggle-btn" data-id="${model.id}" title="${isEnabled ? '禁用' : '启用'}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                ${isEnabled 
+                  ? '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>'
+                  : '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>'
+                }
+              </svg>
+            </button>
+            <button class="btn-action edit-btn" data-id="${model.id}" title="编辑">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </button>
+            <button class="btn-action delete-btn" data-id="${model.id}" title="删除">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                <line x1="10" y1="11" x2="10" y2="17"/>
+                <line x1="14" y1="11" x2="14" y2="17"/>
+              </svg>
+            </button>
           </div>
         </div>
       `;
@@ -376,6 +383,48 @@ class ModelsTab {
         this.deleteModel(btn.dataset.id);
       });
     });
+
+    // 绑定设计流程按钮事件
+    this.elements.modelsList.querySelectorAll('.design-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.openFlowDesigner(btn.dataset.id);
+      });
+    });
+
+    // 绑定启用/禁用按钮事件
+    this.elements.modelsList.querySelectorAll('.toggle-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleModelEnabled(btn.dataset.id);
+      });
+    });
+  }
+
+  async toggleModelEnabled(modelId) {
+    try {
+      await sendMessage({
+        action: 'toggleModelEnabled',
+        modelId: modelId
+      });
+      await this.loadModels();
+      this.render();
+    } catch (error) {
+      console.error('切换模型状态失败:', error);
+      alert('切换模型状态失败: ' + error.message);
+    }
+  }
+
+  async openFlowDesigner(modelId) {
+    try {
+      await sendMessage({
+        action: 'openFlowDesigner',
+        modelId: modelId
+      });
+    } catch (error) {
+      console.error('打开流程设计器失败:', error);
+      alert('打开流程设计器失败: ' + error.message);
+    }
   }
 
   async deleteModel(modelId) {

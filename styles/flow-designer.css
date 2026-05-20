@@ -1,17 +1,18 @@
 /* 流程设计器组件样式 */
 
 /* 全屏模态框 */
-.flow-designer-modal .modal-content {
-  width: 95vw;
-  height: 95vh;
-  max-width: none;
-  max-height: none;
-  margin: 2.5vh auto;
+.flow-designer-modal.modal.active .modal-content {
+  width: 95vw !important;
+  height: 95vh !important;
+  max-width: 95vw !important;
+  max-height: 95vh !important;
+  margin: 2.5vh auto !important;
+  border-radius: 12px !important;
 }
 
 .flow-designer-modal .modal-body {
-  height: calc(95vh - 120px);
-  padding: 0;
+  height: calc(95vh - 80px) !important;
+  padding: 0 !important;
 }
 
 .flow-designer-modal .modal-body.no-padding {

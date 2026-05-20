@@ -12,8 +12,8 @@
     <!-- 头部 -->
     <div class="models-header">
       <button class="btn btn-primary" id="newModelBtn">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M8 2v12M2 8h12"/>
         </svg>
         新建模型
       </button>
@@ -54,7 +54,7 @@
         </div>
 
         <!-- 普通模型表单 -->
-        <div class="model-form" id="regularModelForm">
+        <div class="model-form active" id="regularModelForm">
           <div class="form-group">
             <label for="modelProvider">提供商</label>
             <select id="modelProvider" class="form-select">
@@ -73,24 +73,26 @@
             <label for="modelDescription">描述（可选）</label>
             <input type="text" id="modelDescription" class="form-input" placeholder="模型功能描述">
           </div>
+          <div class="form-group checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="modelThinking">
+              <span>启用思考功能</span>
+            </label>
+            <small class="checkbox-hint">启用后，模型会在回复前展示思考过程</small>
+          </div>
+          <div class="form-group checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="modelEnabled">
+              <span>启用此模型</span>
+            </label>
+          </div>
         </div>
 
         <!-- 虚拟模型表单 -->
-        <div class="model-form" id="virtualModelForm" style="display:none;">
+        <div class="model-form" id="virtualModelForm">
           <div class="form-group">
             <label for="virtualModelName">虚拟模型名称</label>
             <input type="text" id="virtualModelName" class="form-input" placeholder="超级分析助手">
-          </div>
-          <div class="form-group">
-            <label for="virtualModelFlow">执行流程</label>
-            <div class="flow-selector">
-              <select id="virtualModelFlow" class="form-select">
-                <option value="">选择流程...</option>
-              </select>
-              <button type="button" class="btn btn-secondary" id="designFlowBtn">
-                🎨 设计
-              </button>
-            </div>
           </div>
           <div class="form-group">
             <label for="virtualModelDescription">描述（可选）</label>
@@ -99,6 +101,12 @@
           <div class="form-group">
             <label for="virtualModelIcon">图标</label>
             <input type="text" id="virtualModelIcon" class="form-input" placeholder="🤖" value="🤖" maxlength="2">
+          </div>
+          <div class="form-group checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="virtualModelEnabled">
+              <span>启用此模型</span>
+            </label>
           </div>
         </div>
       </div>

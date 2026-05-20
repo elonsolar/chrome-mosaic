@@ -86,6 +86,16 @@
         "utils/content-script.js"
       ],
       "matches": ["<all_urls>"]
+    },
+    {
+      "resources": [
+        "flow-designer/flow-designer.html",
+        "flow-designer/flow-designer-page.js",
+        "libs/leader-line.min.js",
+        "styles/flow-designer-page.css",
+        "utils/storage.js"
+      ],
+      "matches": ["<all_urls>"]
     }
   ]
 }

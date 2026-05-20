@@ -9,56 +9,15 @@
 </head>
 <body>
   <div class="prompts-container">
-    <!-- 左侧文件夹树 -->
-    <div class="folder-sidebar">
-      <div class="folder-header">
-        <h3>文件夹</h3>
-        <button class="icon-btn" id="newFolderBtn" title="新建文件夹">+</button>
-      </div>
-      <div class="folder-tree" id="folderTree">
-        <div class="empty-state">加载中...</div>
-      </div>
-    </div>
-
-    <!-- 右侧提示词列表 -->
     <div class="prompts-main">
       <div class="prompts-header">
-        <div class="search-box">
-          <input type="text" id="searchInput" placeholder="搜索提示词...">
-        </div>
         <button class="btn btn-primary" id="newPromptBtn">
           <span>+</span> 新建提示词
         </button>
       </div>
 
       <div class="prompts-list" id="promptsList">
-        <div class="empty-state">请选择文件夹</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 新建/编辑文件夹对话框 -->
-  <div class="modal" id="folderModal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2 id="folderModalTitle">新建文件夹</h2>
-        <button class="close-btn">&times;</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label for="folderName">文件夹名称</label>
-          <input type="text" id="folderName" placeholder="输入文件夹名称">
-        </div>
-        <div class="form-group">
-          <label for="parentFolder">父文件夹</label>
-          <select id="parentFolder">
-            <option value="">无（根目录）</option>
-          </select>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" id="cancelFolderBtn">取消</button>
-        <button class="btn btn-primary" id="confirmFolderBtn">创建</button>
+        <div class="empty-state">加载中...</div>
       </div>
     </div>
   </div>
@@ -76,24 +35,14 @@
           <input type="text" id="promptName" placeholder="输入提示词名称">
         </div>
         <div class="form-group">
-          <label for="promptFolder">所属文件夹</label>
-          <select id="promptFolder">
-            <option value="">无（根目录）</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="promptDescription">描述</label>
-          <input type="text" id="promptDescription" placeholder="简要描述此提示词的用途">
-        </div>
-        <div class="form-group">
           <label for="promptContent">提示词内容</label>
           <textarea id="promptContent" rows="10" placeholder="输入提示词内容..."></textarea>
-          <small class="help-text">支持变量：{变量名}</small>
+          <small class="help-text">支持变量：{变量名}，例如：请用{language}写一篇关于{topic}的文章</small>
         </div>
         <div class="form-group">
           <label for="promptVariables">变量列表</label>
           <input type="text" id="promptVariables" placeholder="用逗号分隔，如：{topic},{language}">
-          <small class="help-text">从内容中自动提取的变量</small>
+          <small class="help-text">使用变量：在对话中输入提示词时，会自动提示填写这些变量</small>
         </div>
       </div>
       <div class="modal-footer">

@@ -1482,7 +1482,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     // ========== 新架构：提示词管理 ==========
     case 'getPrompts':
-      promptManager.getPrompts(request.folderId).then(sendResponse);
+      promptManager.getPrompts().then(sendResponse);
       return true;
 
     case 'getPromptById':
@@ -1618,6 +1618,49 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     case 'deleteConnection':
       flowManager.deleteConnection(request.flowId, request.connectionId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'saveFlow':
+      (async () => {
+        try {
+          let result;
+          if (request.flow.id) {
+            result = await flowManager.updateFlow(request.flow.id, request.flow);
+          } else {
+            result = await flowManager.createFlow(request.flow);
+          }
+          sendResponse(result);
+        } catch (error) {
+          sendResponse({ error: error.message });
+        }
+      })();
+      return true;
+
+    case 'getFlow':
+      flowManager.getFlowById(request.flowId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'getModel':
+      modelManager.getModelById(request.modelId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'openFlowDesigner':
+      (async () => {
+        try {
+          const url = request.flowId 
+            ? `flow-designer/flow-designer.html?flowId=${encodeURIComponent(request.flowId)}`
+            : `flow-designer/flow-designer.html?modelId=${encodeURIComponent(request.modelId)}`;
+          
+          const tab = await chrome.tabs.create({
+            url: chrome.runtime.getURL(url),
+            pinned: false
+          });
+          
+          sendResponse({ success: true, tabId: tab.id });
+        } catch (error) {
+          sendResponse({ error: error.message });
+        }
+      })();
       return true;
 
     // ========== 新架构：虚拟模型（统一在ModelManager中） ==========

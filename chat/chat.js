@@ -69,13 +69,17 @@ function initElements() {
 
 async function loadData() {
   try {
-    const [conversation, roles] = await Promise.all([
+    const [conversation, roles, models, prompts] = await Promise.all([
       getConversation(conversationId),
-      getRoles()
+      getRoles(),
+      sendMessage({ action: 'getModels' }),
+      sendMessage({ action: 'getPrompts' })
     ]);
 
     state.conversation = conversation;
     state.roles = roles;
+    state.models = models || [];
+    state.prompts = prompts || [];
 
     if (!conversation) {
       showError('会话不存在');
@@ -724,7 +728,7 @@ async function handleModeCommand() {
 
 function showModeSelector(focusOrder) {
   const currentContextMode = state.conversation.contextMode || 'self';
-  const currentSendMode = state.conversation.sendMode || 'parallel';
+  const currentSendMode = state.conversation.sendMode || (currentContextMode === 'self' ? 'parallel' : 'parallel');
   const currentOrder = state.conversation.roleOrder || state.conversation.roleIds || [];
 
   const contextModeNames = {
@@ -748,7 +752,7 @@ function showModeSelector(focusOrder) {
         ${currentContextMode === 'self' ? `
         <div class="mode-section">
           <div class="mode-info-readonly">
-            <div class="mode-name">${contextModeNames[currentContextMode]}</div>
+            <div class="mode-name">${contextModeNames[currentContextMode]}（并行）</div>
             <div class="mode-desc">每个AI独立对话，互不干扰，使用各自的会话URL</div>
           </div>
         </div>
@@ -761,27 +765,27 @@ function showModeSelector(focusOrder) {
         </div>
 
         <div class="mode-section" id="sendModeSection">
-          <h3>发送模式</h3>
+          <h3>执行策略</h3>
           <div class="mode-options">
             <label class="mode-option">
               <input type="radio" name="sendMode" value="parallel" ${currentSendMode === 'parallel' ? 'checked' : ''}>
               <div class="mode-info">
-                <div class="mode-name">并行模式</div>
+                <div class="mode-name">并行</div>
                 <div class="mode-desc">所有角色同时收到消息并独立响应</div>
               </div>
             </label>
             <label class="mode-option">
               <input type="radio" name="sendMode" value="sequential" ${currentSendMode === 'sequential' ? 'checked' : ''}>
               <div class="mode-info">
-                <div class="mode-name">顺序模式（角色接龙）</div>
+                <div class="mode-name">串行</div>
                 <div class="mode-desc">按角色顺序依次发送，每个角色能看到之前角色的回复</div>
               </div>
             </label>
             <label class="mode-option">
               <input type="radio" name="sendMode" value="random" ${currentSendMode === 'random' ? 'checked' : ''}>
               <div class="mode-info">
-                <div class="mode-name">随机模式（角色接龙）</div>
-                <div class="mode-desc">随机顺序依次发送，每个角色能看到之前角色的回复</div>
+                <div class="mode-name">随机</div>
+                <div class="mode-desc">随机选择一个角色响应</div>
               </div>
             </label>
           </div>
@@ -790,7 +794,7 @@ function showModeSelector(focusOrder) {
         
         <div class="mode-order-section" id="modeOrderSection">
           <h3>角色顺序</h3>
-          <p class="mode-order-hint">拖动角色卡片调整顺序（用于顺序模式）</p>
+          <p class="mode-order-hint">拖动角色卡片调整顺序（用于串行模式）</p>
           <div class="role-order-list" id="modeRoleOrderList">
             ${currentOrder.map((roleId, index) => {
               const role = state.roles.find(r => r.id === roleId);
@@ -1534,40 +1538,78 @@ function showAddRoleModal() {
 
   const availableRoles = allRoles.filter(role => !currentRoleIds.includes(role.id));
 
-  if (availableRoles.length === 0) {
-    alert('没有可添加的角色');
-    return;
-  }
-
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.innerHTML = `
-    <div class="modal-content" style="max-width: 500px;">
+    <div class="modal-content" style="max-width: 600px;">
       <h2>添加角色</h2>
-      <p style="margin-bottom: 16px; color: var(--text-secondary); font-size: 13px;">
-        选择要添加到会话的角色
-      </p>
+      
+      <div class="tab-buttons" style="display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid #e5e7eb;">
+        <button class="tab-btn active" data-tab="existing">选择现有角色</button>
+        <button class="tab-btn" data-tab="new">创建新角色</button>
+      </div>
 
-      <div class="role-selection-list">
-        ${availableRoles.map(role => {
-          const provider = PROVIDERS[role.provider];
-          const color = provider ? provider.color : '#666';
-          return `
-            <label class="role-selection-item">
-              <input type="checkbox" value="${role.id}" />
-              <div class="role-selection-avatar" style="background: linear-gradient(135deg, ${color}, ${color}cc);">
-                ${escapeHtml(role.name.charAt(0))}
-              </div>
-              <div class="role-selection-info">
-                <div class="role-selection-name">${escapeHtml(role.name)}</div>
-                <div class="role-selection-provider">
-                  <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${color};margin-right:4px;"></span>
-                  ${getProviderDisplayName(role.provider)}
+      <div id="existingRoleTab" class="tab-content active">
+        <p style="margin-bottom: 16px; color: var(--text-secondary); font-size: 13px;">
+          选择要添加到会话的角色
+        </p>
+
+        <div class="role-selection-list">
+          ${availableRoles.length > 0 ? availableRoles.map(role => {
+            const provider = PROVIDERS[role.provider];
+            const color = provider ? provider.color : '#666';
+            return `
+              <label class="role-selection-item">
+                <input type="checkbox" value="${role.id}" />
+                <div class="role-selection-avatar" style="background: linear-gradient(135deg, ${color}, ${color}cc);">
+                  ${escapeHtml(role.name.charAt(0))}
                 </div>
-              </div>
-            </label>
-          `;
-        }).join('')}
+                <div class="role-selection-info">
+                  <div class="role-selection-name">${escapeHtml(role.name)}</div>
+                  <div class="role-selection-provider">
+                    <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${color};margin-right:4px;"></span>
+                    ${getProviderDisplayName(role.provider)}
+                  </div>
+                </div>
+              </label>
+            `;
+          }).join('') : '<div class="empty-state">暂无可用角色</div>'}
+        </div>
+      </div>
+
+      <div id="newRoleTab" class="tab-content" style="display: none;">
+        <p style="margin-bottom: 16px; color: var(--text-secondary); font-size: 13px;">
+          创建新角色并添加到会话
+        </p>
+
+        <div class="form-group">
+          <label>角色名称</label>
+          <input type="text" id="newRoleName" class="form-input" placeholder="输入角色名称" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;">
+        </div>
+
+        <div class="form-group">
+          <label>选择模型</label>
+          <select id="newRoleModel" class="form-select" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;">
+            <option value="">请选择模型...</option>
+            ${(state.models || []).map(model => {
+              const provider = PROVIDERS[model.provider];
+              const displayName = provider ? `${provider.name} - ${model.name}` : model.name;
+              return `<option value="${model.id}" ${model.enabled === false ? 'disabled' : ''}>
+                ${displayName} ${model.enabled === false ? '(已禁用)' : ''}
+              </option>`;
+            }).join('')}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>选择提示词（可选）</label>
+          <select id="newRolePrompt" class="form-select" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;">
+            <option value="">无提示词</option>
+            ${(state.prompts || []).map(prompt => {
+              return `<option value="${prompt.id}">${escapeHtml(prompt.name)}</option>`;
+            }).join('')}
+          </select>
+        </div>
       </div>
 
       <div class="modal-actions">
@@ -1579,6 +1621,20 @@ function showAddRoleModal() {
 
   document.body.appendChild(modal);
 
+  // Tab切换
+  const tabButtons = modal.querySelectorAll('.tab-btn');
+  
+  tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tabButtons.forEach(b => b.classList.remove('active'));
+      modal.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      
+      btn.classList.add('active');
+      const tabName = btn.dataset.tab;
+      modal.querySelector(`#${tabName}RoleTab`).classList.add('active');
+    });
+  });
+
   const cancelBtn = document.getElementById('cancelAddBtn');
   const saveBtn = document.getElementById('saveAddBtn');
 
@@ -1587,36 +1643,117 @@ function showAddRoleModal() {
   });
 
   saveBtn.addEventListener('click', async () => {
-    const checkboxes = modal.querySelectorAll('input[type="checkbox"]:checked');
-    const newRoleIds = Array.from(checkboxes).map(cb => cb.value);
+    const activeTab = modal.querySelector('.tab-btn.active').dataset.tab;
 
-    if (newRoleIds.length === 0) {
-      alert('请至少选择一个角色');
-      return;
+    if (activeTab === 'existing') {
+      // 选择现有角色
+      const checkboxes = modal.querySelectorAll('#existingRoleTab input[type="checkbox"]:checked');
+      const newRoleIds = Array.from(checkboxes).map(cb => cb.value);
+
+      if (newRoleIds.length === 0) {
+        alert('请至少选择一个角色');
+        return;
+      }
+
+      try {
+        const updatedRoleIds = [...currentRoleIds, ...newRoleIds];
+        const updates = { roleIds: updatedRoleIds };
+
+        if (state.conversation.sendMode === 'sequential') {
+          updates.roleOrder = updatedRoleIds;
+        }
+
+        const updatedConversation = await chrome.runtime.sendMessage({
+          action: 'updateConversation',
+          conversationId,
+          updates
+        });
+
+        if (updatedConversation) {
+          state.conversation = updatedConversation;
+          render();
+          initPlatformPanel();
+          console.log('[Chat] 角色已添加');
+        }
+
+        document.body.removeChild(modal);
+      } catch (error) {
+        console.error('添加角色失败:', error);
+        alert('添加角色失败：' + error.message);
+      }
+    } else {
+      // 创建新角色
+      const roleName = modal.querySelector('#newRoleName').value.trim();
+      const modelId = modal.querySelector('#newRoleModel').value;
+      const promptId = modal.querySelector('#newRolePrompt').value;
+
+      if (!roleName) {
+        alert('请输入角色名称');
+        return;
+      }
+
+      if (!modelId) {
+        alert('请选择模型');
+        return;
+      }
+
+      try {
+        // 获取模型信息
+        const model = state.models.find(m => m.id === modelId);
+        if (!model) {
+          alert('模型不存在');
+          return;
+        }
+
+        // 获取提示词内容
+        let systemPrompt = '';
+        if (promptId) {
+          const prompt = state.prompts.find(p => p.id === promptId);
+          if (prompt) {
+            systemPrompt = prompt.content || '';
+          }
+        }
+
+        // 创建新角色
+        const newRole = await chrome.runtime.sendMessage({
+          action: 'createRole',
+          name: roleName,
+          provider: model.provider,
+          model: model.model,
+          systemPrompt: systemPrompt
+        });
+
+        if (newRole) {
+          // 添加到会话
+          const updatedRoleIds = [...currentRoleIds, newRole.id];
+          const updates = { roleIds: updatedRoleIds };
+
+          if (state.conversation.sendMode === 'sequential') {
+            updates.roleOrder = updatedRoleIds;
+          }
+
+          const updatedConversation = await chrome.runtime.sendMessage({
+            action: 'updateConversation',
+            conversationId,
+            updates
+          });
+
+          if (updatedConversation) {
+            state.conversation = updatedConversation;
+            state.roles.push(newRole);
+            render();
+            initPlatformPanel();
+            console.log('[Chat] 新角色已创建并添加');
+          }
+
+          document.body.removeChild(modal);
+        }
+      } catch (error) {
+        console.error('创建角色失败:', error);
+        alert('创建角色失败：' + error.message);
+      }
     }
-
-    try {
-      const updatedRoleIds = [...currentRoleIds, ...newRoleIds];
-      const updates = { roleIds: updatedRoleIds };
-
-      if (state.conversation.sendMode === 'sequential') {
-        updates.roleOrder = updatedRoleIds;
-      }
-
-      const updatedConversation = await chrome.runtime.sendMessage({
-        action: 'updateConversation',
-        conversationId,
-        updates
-      });
-
-      if (updatedConversation) {
-        state.conversation = updatedConversation;
-        render();
-        initPlatformPanel();
-        console.log('[Chat] 角色已添加');
-      }
-
-      document.body.removeChild(modal);
+  });
     } catch (error) {
       console.error('[Chat] 添加角色失败:', error);
       alert('添加失败: ' + error.message);

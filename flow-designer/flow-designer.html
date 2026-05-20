@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>流程设计器</title>
+  <link rel="stylesheet" href="../styles/flow-designer-page.css">
+</head>
+<body>
+  <div class="flow-designer-page">
+    <!-- 顶部工具栏 -->
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <h1 class="page-title" id="flowTitle">流程设计</h1>
+        <span class="flow-id" id="flowIdDisplay"></span>
+      </div>
+      <div class="toolbar-right">
+        <button class="btn btn-secondary" id="addNodeBtn">
+          <span class="icon">➕</span> 添加节点
+        </button>
+        <button class="btn btn-primary" id="saveBtn">
+          <span class="icon">💾</span> 保存
+        </button>
+        <button class="btn btn-secondary" id="closeBtn">
+          <span class="icon">✕</span> 关闭
+        </button>
+      </div>
+    </div>
+
+    <!-- 画布区域 -->
+    <div class="canvas-container">
+      <div class="canvas" id="canvas">
+        <!-- 节点将在这里动态生成 -->
+        <div class="empty-state" id="emptyState">
+          <div class="empty-icon">📋</div>
+          <div class="empty-text">暂无节点</div>
+          <div class="empty-hint">点击"添加节点"开始设计流程</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 添加节点对话框 -->
+    <div class="modal" id="addNodeModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>添加节点</h2>
+          <button class="close-btn" id="closeAddNodeModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="nodeName">节点名称</label>
+            <input type="text" id="nodeName" class="form-input" placeholder="节点名称">
+          </div>
+          <div class="form-group">
+            <label for="nodeModel">选择模型</label>
+            <select id="nodeModel" class="form-select">
+              <option value="">选择模型...</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="cancelAddNodeBtn">取消</button>
+          <button class="btn btn-primary" id="confirmAddNodeBtn">添加</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../libs/leader-line.min.js"></script>
+  <script src="../utils/storage.js"></script>
+  <script src="flow-designer-page.js"></script>
+</body>
+</html>

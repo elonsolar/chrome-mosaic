@@ -100,58 +100,53 @@
           </div>
 
            <div class="form-group">
-             <label>选择模型（可多选）</label>
-             <div class="model-selector" id="modelSelector" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 4px;">
+             <label>
+               新增角色
+               <button class="btn-link" id="createRoleInConvBtn" style="float: right; font-size: 12px; padding: 0; border: none; background: none; color: #007aff; cursor: pointer;">
+                 + 创建新角色
+               </button>
+             </label>
+             <div class="role-selector" id="roleSelector" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 4px;">
                <div class="loading">加载中...</div>
              </div>
              <small style="color: #666; font-size: 11px; display: block; margin-top: 4px;">
-               可以同时选择普通模型和虚拟模型
+               选择要添加到会话的角色
              </small>
            </div>
 
            <div class="form-group">
+             <label for="contextMode">上下文模式</label>
+             <select id="contextMode">
+               <option value="self">独享</option>
+               <option value="full">共享</option>
+             </select>
+             <small style="color: #666; font-size: 11px; display: block; margin-top: 4px;">
+               独享：每个AI独立对话，互不干扰，使用各自的会话URL（默认并行）<br>
+               共享：所有对话历史都发送给每个AI，每次打开新会话
+             </small>
+           </div>
+
+           <div class="form-group" id="strategyGroup">
              <label>执行策略</label>
              <div class="execution-strategy">
                <label style="display: block; margin-bottom: 8px;">
                  <input type="radio" name="strategy" value="parallel" checked>
-                 并行执行（所有模型同时处理）
+                 并行（所有角色同时响应）
                </label>
                <label style="display: block; margin-bottom: 8px;">
                  <input type="radio" name="strategy" value="sequential">
-                 串行执行（按顺序传递，上一步的输出作为下一步的输入）
+                 串行（按角色顺序依次响应）
                </label>
                <label style="display: block; margin-bottom: 8px;">
-                 <input type="radio" name="strategy" value="custom">
-                 自定义流程（完全自定义执行顺序）
+                 <input type="radio" name="strategy" value="random">
+                 随机（随机选择一个角色响应）
                </label>
              </div>
-             <button class="btn btn-secondary" id="designConversationFlowBtn" type="button" style="display:none; margin-top: 8px;">
-               🎨 设计自定义流程
-             </button>
-           </div>
-
-           <div class="form-group">
-             <label for="conversationPrompt">提示词（可选，仅普通模型）</label>
-             <select id="conversationPrompt">
-               <option value="">不使用提示词</option>
-             </select>
-             <small style="color: #666; font-size: 11px; display: block; margin-top: 4px;">
-               提示词会应用到所有普通模型（虚拟模型有自己的提示词）
+             <small style="color: #666; font-size: 11px; display: block; margin-top: 4px;" id="strategyHint">
+               共享模式支持三种执行策略
              </small>
            </div>
-
-          <div class="form-group">
-            <label for="contextMode">上下文模式</label>
-            <select id="contextMode">
-              <option value="self">独享</option>
-              <option value="full">共享</option>
-            </select>
-            <small style="color: #666; font-size: 11px; display: block; margin-top: 4px;">
-              独享：每个AI独立对话，互不干扰，使用各自的会话URL<br>
-              共享：所有对话历史都发送给每个AI，每次打开新会话
-            </small>
-          </div>
-        </div>
+         </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="cancelConversationBtn">取消</button>
         <button class="btn btn-primary" id="confirmConversationBtn">创建</button>

@@ -11,7 +11,7 @@ class PromptManager {
    * 创建新提示词
    */
   async createPrompt(data) {
-    const { name, content, folderId, description, variables } = data;
+    const { name, content, variables } = data;
 
     if (!name || !content) {
       throw new Error('提示词名称和内容不能为空');
@@ -22,8 +22,6 @@ class PromptManager {
       id: this.generateId(),
       name,
       content,
-      folderId: folderId || null,
-      description: description || '',
       variables: variables || [],
       createdAt: Date.now(),
       updatedAt: Date.now()
@@ -38,15 +36,9 @@ class PromptManager {
   /**
    * 获取所有提示词
    */
-  async getPrompts(folderId = null) {
+  async getPrompts() {
     const result = await chrome.storage.local.get(this.storageKey);
-    let prompts = result[this.storageKey] || [];
-
-    if (folderId) {
-      prompts = prompts.filter(p => p.folderId === folderId);
-    }
-
-    return prompts;
+    return result[this.storageKey] || [];
   }
 
   /**

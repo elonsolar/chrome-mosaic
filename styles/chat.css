@@ -815,8 +815,49 @@ body {
 .modal-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-color);
+}
+
+/* TabæŒ‰é’®æ ·å¼ */
+.tab-buttons {
+  display: flex;
   gap: 8px;
-  margin-top: 20px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.tab-btn {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s ease;
+  margin-bottom: -1px;
+}
+
+.tab-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
+.tab-btn.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block !important;
 }
 
 .btn-secondary {
@@ -2073,7 +2114,7 @@ body {
   color: var(--text-secondary);
 }
 
-/* ĞéÄâÄ£ĞÍÖ´ĞĞ¹ı³ÌÑùÊ½ */
+/* ï¿½ï¿½ï¿½ï¿½Ä£ï¿½ï¿½Ö´ï¿½Ğ¹ï¿½ï¿½ï¿½ï¿½ï¿½Ê½ */
 .virtual-model-execution {
   border-left: 4px solid #8b5cf6 !important;
 }

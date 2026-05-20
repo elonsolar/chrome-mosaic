@@ -102,6 +102,20 @@ function bindEvents() {
     cancelConversationBtn.addEventListener('click', hideNewConversationModal);
   }
 
+  // 上下文模式切换
+  const contextModeSelect = document.getElementById('contextMode');
+  if (contextModeSelect) {
+    contextModeSelect.addEventListener('change', updateStrategyOptions);
+  }
+
+  // 在新建会话中创建新角色
+  const createRoleInConvBtn = document.getElementById('createRoleInConvBtn');
+  if (createRoleInConvBtn) {
+    createRoleInConvBtn.addEventListener('click', () => {
+      showCreateRoleInConvModal();
+    });
+  }
+
   // 新建角色
   const newRoleBtn = document.getElementById('newRoleBtn');
   if (newRoleBtn) {
@@ -319,24 +333,32 @@ function renderRoles() {
 // 会话操作
 async function createConversation() {
   const name = document.getElementById('conversationName').value.trim();
-  const selectedModelIds = Array.from(document.querySelectorAll('#modelSelector input:checked'))
+  const selectedRoleIds = Array.from(document.querySelectorAll('#roleSelector input:checked'))
     .map(cb => cb.value);
-  const promptId = document.getElementById('conversationPrompt').value || null;
   const contextMode = document.getElementById('contextMode').value;
+  
+  // 获取执行策略
+  let sendMode = 'parallel'; // 默认并行
+  if (contextMode === 'full') {
+    const strategyRadio = document.querySelector('input[name="strategy"]:checked');
+    if (strategyRadio) {
+      sendMode = strategyRadio.value;
+    }
+  }
 
   if (!name) {
     alert('请输入会话名称');
     return;
   }
 
-  if (selectedModelIds.length === 0) {
-    alert('请至少选择一个模型');
+  if (selectedRoleIds.length === 0) {
+    alert('请至少选择一个角色');
     return;
   }
 
   if (state.editingConversationId) {
     // 编辑模式
-    const updates = { name, modelIds: selectedModelIds, promptId };
+    const updates = { name, roleIds: selectedRoleIds, sendMode };
     await sendMessage({
       action: 'updateConversation',
       conversationId: state.editingConversationId,
@@ -354,9 +376,9 @@ async function createConversation() {
     const conversation = await sendMessage({
       action: 'createConversation',
       name,
-      modelIds: selectedModelIds,
-      promptId,
-      contextMode
+      roleIds: selectedRoleIds,
+      contextMode,
+      sendMode
     });
 
     if (conversation) {
@@ -521,59 +543,185 @@ function showNewConversationModal() {
   document.getElementById('confirmConversationBtn').textContent = '创建';
   document.getElementById('contextMode').disabled = false;
 
-  // 渲染模型选择器
-  const modelSelector = document.getElementById('modelSelector');
-  if (state.models.length === 0) {
-    modelSelector.innerHTML = '<div class="empty-state">暂无可用模型，请先在"模型"标签页创建模型</div>';
+  // 渲染角色选择器
+  const roleSelector = document.getElementById('roleSelector');
+  if (state.roles.length === 0) {
+    roleSelector.innerHTML = '<div class="empty-state">暂无可用角色</div>';
   } else {
-    // 分组显示：虚拟模型一组，普通模型按提供商分组
-    const virtualModels = state.models.filter(m => m.isVirtual && m.enabled);
-    const regularModels = state.models.filter(m => !m.isVirtual && m.enabled);
-
-    let html = '';
-
-    // 虚拟模型组
-    if (virtualModels.length > 0) {
-      html += '<div style="margin-bottom: 12px;"><strong style="color: #8b5cf6; font-size: 12px;">🤖 虚拟模型</strong></div>';
-      html += virtualModels.map(model => `
-        <label class="model-checkbox" style="display: block; padding: 6px 8px; margin: 4px 0; background: #f9f9f9; border-radius: 4px; cursor: pointer;">
-          <input type="checkbox" value="${model.id}" data-model-id="${model.id}">
-          <span style="margin-left: 8px;">${model.icon || '🤖'} ${escapeHtml(model.name)}</span>
+    roleSelector.innerHTML = state.roles.map(role => {
+      const provider = PROVIDERS[role.provider];
+      const color = provider ? provider.color : '#666';
+      return `
+        <label class="role-checkbox" style="display: block; padding: 8px 10px; margin: 4px 0; background: #f9f9f9; border-radius: 4px; cursor: pointer; border: 1px solid #e5e7eb;">
+          <input type="checkbox" value="${role.id}" data-role-id="${role.id}">
+          <span style="margin-left: 8px; display: inline-flex; align-items: center; gap: 6px;">
+            <span style="display: inline-block; width: 20px; height: 20px; border-radius: 50%; background: linear-gradient(135deg, ${color}, ${color}cc); color: white; font-size: 11px; text-align: center; line-height: 20px;">${escapeHtml(role.name.charAt(0))}</span>
+            ${escapeHtml(role.name)}
+          </span>
         </label>
-      `).join('');
-    }
-
-    // 普通模型按提供商分组
-    const grouped = {};
-    regularModels.forEach(model => {
-      if (!grouped[model.provider]) {
-        grouped[model.provider] = [];
-      }
-      grouped[model.provider].push(model);
-    });
-
-    for (const [provider, models] of Object.entries(grouped)) {
-      const providerInfo = PROVIDERS[provider];
-      html += `<div style="margin-top: 12px; margin-bottom: 8px;"><strong style="color: ${providerInfo?.color || '#666'}; font-size: 12px;">${providerInfo?.name || provider}</strong></div>`;
-      html += models.map(model => `
-        <label class="model-checkbox" style="display: block; padding: 6px 8px; margin: 4px 0; background: #f9f9f9; border-radius: 4px; cursor: pointer;">
-          <input type="checkbox" value="${model.id}" data-model-id="${model.id}">
-          <span style="margin-left: 8px;">${escapeHtml(model.name)}</span>
-        </label>
-      `).join('');
-    }
-
-    modelSelector.innerHTML = html;
+      `;
+    }).join('');
   }
 
-  // 渲染提示词选择器
-  const promptSelect = document.getElementById('conversationPrompt');
-  promptSelect.innerHTML = '<option value="">不使用提示词</option>' +
-    state.prompts.map(prompt =>
-      `<option value="${prompt.id}">${escapeHtml(prompt.name)}</option>`
-    ).join('');
+  // 初始化执行策略
+  updateStrategyOptions();
 
   elements.newConversationModal.classList.add('active');
+}
+
+// 根据上下文模式更新执行策略选项
+function updateStrategyOptions() {
+  const contextMode = document.getElementById('contextMode').value;
+  const strategyGroup = document.getElementById('strategyGroup');
+  const strategyRadios = document.querySelectorAll('input[name="strategy"]');
+  const strategyHint = document.getElementById('strategyHint');
+
+  if (contextMode === 'self') {
+    // 独享模式：隐藏执行策略选项，默认并行
+    strategyGroup.style.display = 'none';
+  } else {
+    // 共享模式：显示执行策略选项
+    strategyGroup.style.display = 'block';
+    strategyHint.textContent = '共享模式支持三种执行策略';
+  }
+}
+
+// 在新建会话中创建新角色
+async function showCreateRoleInConvModal() {
+  const [models, prompts] = await Promise.all([
+    sendMessage({ action: 'getModels' }),
+    sendMessage({ action: 'getPrompts' })
+  ]);
+
+  const availableModels = (models || []).filter(m => m.enabled !== false);
+  const availablePrompts = prompts || [];
+
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width: 500px;">
+      <h2>创建新角色</h2>
+      
+      <div class="form-group" style="margin-bottom: 16px;">
+        <label>角色名称</label>
+        <input type="text" id="newRoleInConvName" class="form-input" placeholder="输入角色名称" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;">
+      </div>
+
+      <div class="form-group" style="margin-bottom: 16px;">
+        <label>选择模型</label>
+        <select id="newRoleInConvModel" class="form-select" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;">
+          <option value="">请选择模型...</option>
+          ${availableModels.map(model => {
+            const provider = PROVIDERS[model.provider];
+            const displayName = provider ? `${provider.name} - ${model.name}` : model.name;
+            return `<option value="${model.id}">${displayName}</option>`;
+          }).join('')}
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 16px;">
+        <label>选择提示词（可选）</label>
+        <select id="newRoleInConvPrompt" class="form-select" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;">
+          <option value="">无提示词</option>
+          ${availablePrompts.map(prompt => {
+            return `<option value="${prompt.id}">${escapeHtml(prompt.name)}</option>`;
+          }).join('')}
+        </select>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="cancelRoleInConvBtn">取消</button>
+        <button class="btn btn-primary" id="saveRoleInConvBtn">创建并添加</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  const cancelBtn = document.getElementById('cancelRoleInConvBtn');
+  const saveBtn = document.getElementById('saveRoleInConvBtn');
+
+  cancelBtn.addEventListener('click', () => {
+    document.body.removeChild(modal);
+  });
+
+  saveBtn.addEventListener('click', async () => {
+    const roleName = modal.querySelector('#newRoleInConvName').value.trim();
+    const modelId = modal.querySelector('#newRoleInConvModel').value;
+    const promptId = modal.querySelector('#newRoleInConvPrompt').value;
+
+    if (!roleName) {
+      alert('请输入角色名称');
+      return;
+    }
+
+    if (!modelId) {
+      alert('请选择模型');
+      return;
+    }
+
+    try {
+      // 获取模型信息
+      const model = availableModels.find(m => m.id === modelId);
+      if (!model) {
+        alert('模型不存在');
+        return;
+      }
+
+      // 获取提示词内容
+      let systemPrompt = '';
+      if (promptId) {
+        const prompt = availablePrompts.find(p => p.id === promptId);
+        if (prompt) {
+          systemPrompt = prompt.content || '';
+        }
+      }
+
+      // 创建新角色
+      const newRole = await sendMessage({
+        action: 'createRole',
+        name: roleName,
+        provider: model.provider,
+        model: model.model,
+        systemPrompt: systemPrompt
+      });
+
+      if (newRole) {
+        // 添加到state.roles
+        state.roles.push(newRole);
+        
+        // 刷新角色选择器
+        const roleSelector = document.getElementById('roleSelector');
+        if (roleSelector) {
+          const provider = PROVIDERS[newRole.provider];
+          const color = provider ? provider.color : '#666';
+          const roleHtml = `
+            <label class="role-checkbox" style="display: block; padding: 8px 10px; margin: 4px 0; background: #f9f9f9; border-radius: 4px; cursor: pointer; border: 1px solid #e5e7eb;">
+              <input type="checkbox" value="${newRole.id}" data-role-id="${newRole.id}" checked>
+              <span style="margin-left: 8px; display: inline-flex; align-items: center; gap: 6px;">
+                <span style="display: inline-block; width: 20px; height: 20px; border-radius: 50%; background: linear-gradient(135deg, ${color}, ${color}cc); color: white; font-size: 11px; text-align: center; line-height: 20px;">${escapeHtml(newRole.name.charAt(0))}</span>
+                ${escapeHtml(newRole.name)}
+              </span>
+            </label>
+          `;
+          roleSelector.insertAdjacentHTML('beforeend', roleHtml);
+        }
+
+        document.body.removeChild(modal);
+        console.log('[Sidepanel] 新角色已创建并添加到会话');
+      }
+    } catch (error) {
+      console.error('创建角色失败:', error);
+      alert('创建角色失败：' + error.message);
+    }
+  });
+
+  // 点击外部关闭
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      document.body.removeChild(modal);
+    }
+  });
 }
 
 function updateRoleSettings() {
