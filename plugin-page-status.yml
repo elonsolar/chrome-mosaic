@@ -1,0 +1,93 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - img [ref=e7]
+        - generic [ref=e10] [cursor=pointer]: Free AI
+      - generic [ref=e11]:
+        - button "搜索会话" [ref=e12] [cursor=pointer]:
+          - img [ref=e13]
+        - button "收起侧边栏" [ref=e16] [cursor=pointer]:
+          - img [ref=e17]
+    - button "开启新对话 Ctrl+J" [ref=e20] [cursor=pointer]:
+      - img [ref=e21]
+      - generic [ref=e23]: 开启新对话
+      - generic [ref=e24]: Ctrl+J
+    - generic [ref=e25]:
+      - generic [ref=e91]:
+        - generic [ref=e92]: 今天
+        - generic "doubao" [ref=e93] [cursor=pointer]:
+          - generic [ref=e94]: 💡
+          - generic [ref=e95]: doubao
+      - generic [ref=e96]:
+        - generic [ref=e97]: 昨天
+        - generic "deepseek" [ref=e98] [cursor=pointer]:
+          - generic [ref=e99]: 💡
+          - generic [ref=e100]: deepseek
+        - generic "3" [ref=e101] [cursor=pointer]:
+          - generic [ref=e102]: 💡
+          - generic [ref=e103]: "3"
+        - generic "1" [ref=e104] [cursor=pointer]:
+          - generic [ref=e105]: 💡
+          - generic [ref=e106]: "1"
+        - generic "11" [ref=e107] [cursor=pointer]:
+          - generic [ref=e108]: 💡
+          - generic [ref=e109]: "11"
+      - generic [ref=e110]:
+        - generic [ref=e111]: 最近7天
+        - generic "33" [ref=e112] [cursor=pointer]:
+          - generic [ref=e113]: 🪑
+          - generic [ref=e114]: "33"
+        - generic "1" [ref=e115] [cursor=pointer]:
+          - generic [ref=e116]: 💡
+          - generic [ref=e117]: "1"
+        - generic "test" [ref=e118] [cursor=pointer]:
+          - generic [ref=e119]: 💡
+          - generic [ref=e120]: test
+    - button "设置" [ref=e57] [cursor=pointer]:
+      - img [ref=e59]
+      - generic [ref=e62]: 设置
+      - img [ref=e63]
+  - generic [ref=e65]:
+    - generic [ref=e66]:
+      - generic [ref=e67]:
+        - heading "doubao" [level=1] [ref=e68] [cursor=pointer]
+        - generic "独享上下文 · 并行回复 点击查看详情" [ref=e69] [cursor=pointer]: 头脑风暴
+      - generic [ref=e71]:
+        - generic [ref=e73]: "1"
+        - button "+" [ref=e75] [cursor=pointer]
+    - generic [ref=e121]:
+      - generic [ref=e122]: 我
+      - generic [ref=e123]:
+        - generic [ref=e124]: hello,给出复杂格式
+        - generic [ref=e125]: 01:17
+        - button "复制" [ref=e127] [cursor=pointer]:
+          - img [ref=e128]
+          - generic [ref=e131]: 复制
+    - generic [ref=e81]:
+      - textbox "输入消息..." [active] [ref=e82]
+      - button "发送中…" [ref=e132] [cursor=pointer]:
+        - generic [ref=e133]: 发送中…
+  - generic [ref=e88]:
+    - button "▶" [ref=e89] [cursor=pointer]:
+      - generic [ref=e90]: ▶
+    - generic:
+      - generic:
+        - generic "点击展开/收起":
+          - generic:
+            - generic: "1"
+            - generic: 豆包
+          - generic:
+            - button "🔗"
+        - generic:
+          - generic:
+            - generic:
+              - generic "点击展开/收起":
+                - generic: 我
+                - generic: 01:17
+                - generic: ▼
+              - generic:
+                - paragraph: hello,给出复杂格式
+              - generic: 展开 ↓
+          - strong
+        - strong

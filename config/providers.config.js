@@ -30,6 +30,30 @@ const PROVIDERS = {
     domain: 'moonshot.cn',
     defaultModel: 'kimi-chat',
     color: '#6366f1'
+  },
+  openai: {
+    id: 'openai',
+    name: 'OpenAI',
+    baseUrl: 'https://chat.openai.com/',
+    domain: 'openai.com',
+    defaultModel: 'gpt-4',
+    color: '#10a37f'
+  },
+  anthropic: {
+    id: 'anthropic',
+    name: 'Anthropic',
+    baseUrl: 'https://claude.ai/',
+    domain: 'anthropic.com',
+    defaultModel: 'claude-3-opus',
+    color: '#d97706'
+  },
+  zhipu: {
+    id: 'zhipu',
+    name: '智谱',
+    baseUrl: 'https://chatglm.cn/',
+    domain: 'zhipu.ai',
+    defaultModel: 'glm-4',
+    color: '#2563eb'
   }
 };
 

@@ -192,7 +192,7 @@ class QianwenAdapter extends BasePlatformAdapter {
       };
 
       const checkNewMessage = (mutations) => {
-        console.log(`[${this.platform}] MutationObserver 触发`);
+        console.log(`[${this.platform}] [${new Date().toLocaleTimeString()}] MutationObserver 触发`);
         const messageContainer = document.querySelector('.message-list-content-container');
         if (!messageContainer) return null;
 
@@ -330,8 +330,6 @@ class QianwenAdapter extends BasePlatformAdapter {
         };
 
         let rawText = extractTextWithNewlines(clone).trim();
-
-        if (!rawText || rawText.length < 10) return null;
 
         return rawText;
       };

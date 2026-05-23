@@ -3,71 +3,246 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>流程设计器</title>
-  <link rel="stylesheet" href="../styles/flow-designer-page.css">
+  <title>Flow Designer</title>
+  <link rel="icon" type="image/svg+xml" href="../icons/icon.svg">
+  <link rel="stylesheet" href="../styles/flow-designer.css">
 </head>
 <body>
-  <div class="flow-designer-page">
-    <!-- 顶部工具栏 -->
-    <div class="toolbar">
-      <div class="toolbar-left">
-        <h1 class="page-title" id="flowTitle">流程设计</h1>
-        <span class="flow-id" id="flowIdDisplay"></span>
-      </div>
-      <div class="toolbar-right">
-        <button class="btn btn-secondary" id="addNodeBtn">
-          <span class="icon">➕</span> 添加节点
-        </button>
-        <button class="btn btn-primary" id="saveBtn">
-          <span class="icon">💾</span> 保存
-        </button>
-        <button class="btn btn-secondary" id="closeBtn">
-          <span class="icon">✕</span> 关闭
-        </button>
-      </div>
-    </div>
-
-    <!-- 画布区域 -->
-    <div class="canvas-container">
-      <div class="canvas" id="canvas">
-        <!-- 节点将在这里动态生成 -->
-        <div class="empty-state" id="emptyState">
-          <div class="empty-icon">📋</div>
-          <div class="empty-text">暂无节点</div>
-          <div class="empty-hint">点击"添加节点"开始设计流程</div>
+  <div class="app-container">
+    <div class="app-main">
+      <!-- Center Canvas -->
+      <main class="canvas-wrapper">
+        <div class="canvas-container" id="canvas-container">
+          <div id="flow-canvas"></div>
         </div>
-      </div>
-    </div>
-
-    <!-- 添加节点对话框 -->
-    <div class="modal" id="addNodeModal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2>添加节点</h2>
-          <button class="close-btn" id="closeAddNodeModal">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div class="form-group">
-            <label for="nodeName">节点名称</label>
-            <input type="text" id="nodeName" class="form-input" placeholder="节点名称">
+        <!-- Bottom Toolbar -->
+        <div class="canvas-bottom-bar">
+          <div class="bottom-bar-left">
+            <button class="icon-btn-sm" id="btn-minimap" title="小地图">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="1.5" y="1.5" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.2"/>
+                <line x1="8" y1="1.5" x2="8" y2="14.5" stroke="currentColor" stroke-width="1.2"/>
+                <line x1="1.5" y1="8" x2="14.5" y2="8" stroke="currentColor" stroke-width="1.2"/>
+              </svg>
+            </button>
+            <button class="icon-btn-sm" id="btn-autolayout" title="自动布局">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/>
+                <rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/>
+                <rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/>
+                <rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/>
+                <line x1="7" y1="4.5" x2="9" y2="4.5" stroke="currentColor" stroke-width="1.2"/>
+                <line x1="4.5" y1="7" x2="4.5" y2="9" stroke="currentColor" stroke-width="1.2"/>
+                <line x1="11.5" y1="7" x2="11.5" y2="9" stroke="currentColor" stroke-width="1.2"/>
+                <line x1="7" y1="11.5" x2="9" y2="11.5" stroke="currentColor" stroke-width="1.2"/>
+              </svg>
+            </button>
+            <span class="zoom-text" id="zoom-text">64%</span>
           </div>
-          <div class="form-group">
-            <label for="nodeModel">选择模型</label>
-            <select id="nodeModel" class="form-select">
-              <option value="">选择模型...</option>
-            </select>
+          <div class="bottom-bar-center">
+            <span class="select-count" id="select-count">已选中 0 个节点</span>
+          </div>
+          <div class="bottom-bar-right">
+            <button class="icon-btn-sm" id="btn-layout" title="布局">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="1.5" y="1.5" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.2"/>
+                <rect x="8.5" y="1.5" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.2"/>
+                <rect x="1.5" y="8.5" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.2"/>
+                <rect x="8.5" y="8.5" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.2"/>
+              </svg>
+            </button>
+            <button class="btn-add-node" id="btn-add-node">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.3"/>
+                <line x1="8" y1="4.5" x2="8" y2="11.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+                <line x1="4.5" y1="8" x2="11.5" y2="8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              </svg>
+              添加节点
+            </button>
+            <button class="btn-test-run" id="btn-test-run">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M4 3L13 8L4 13V3Z" fill="currentColor"/>
+              </svg>
+              试运行
+            </button>
           </div>
         </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" id="cancelAddNodeBtn">取消</button>
-          <button class="btn btn-primary" id="confirmAddNodeBtn">添加</button>
+      </main>
+
+      <!-- Right Config Panel -->
+      <aside id="config-panel" class="config-panel" style="display:none;">
+        <div class="config-panel-header" id="panel-header">
+          <div id="panel-node-icon" class="config-panel-node-icon"></div>
+          <input type="text" class="config-panel-node-name" id="panel-node-name" placeholder="节点名称" />
+          <button class="icon-btn-sm panel-close" id="btn-close-panel">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <line x1="3" y1="3" x2="13" y2="13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="13" y1="3" x2="3" y2="13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+        <div class="config-panel-body" id="panel-body">
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- ===== Add Node Dialog ===== -->
+  <div id="add-node-dialog" class="dialog-overlay" style="display:none;">
+    <div class="dialog">
+      <div class="dialog-header">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <circle cx="9" cy="9" r="7.5" stroke="currentColor" stroke-width="1.3"/>
+          <line x1="9" y1="5" x2="9" y2="13" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+          <line x1="5" y1="9" x2="13" y2="9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        </svg>
+        <input type="text" class="dialog-search" id="node-search" placeholder="搜索节点、插件、工作流" />
+        <button class="icon-btn-sm" id="btn-close-dialog">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <line x1="3" y1="3" x2="13" y2="13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <line x1="13" y1="3" x2="3" y2="13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="dialog-body" id="dialog-body">
+        <div class="node-group">
+          <div class="node-group-title">快捷添加</div>
+          <div class="node-group-items">
+            <div class="node-option" data-type="llm">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <circle cx="9" cy="9" r="8" fill="#EBF5FF"/>
+                <path d="M9 4C9 4 10 9 13.5 10C10 11 9 16 9 16C9 16 8 11 4.5 10C8 9 9 4 9 4Z" fill="#3B82F6"/>
+              </svg>
+              <span>大模型</span>
+            </div>
+            <div class="node-option" data-type="plugin">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <rect x="3.5" y="2.5" width="11" height="11" rx="2" fill="#F3E8FF"/>
+                <rect x="3.5" y="2.5" width="11" height="11" rx="2" stroke="#9333EA" stroke-width="1.2"/>
+                <path d="M9 2.5V9" stroke="#9333EA" stroke-width="1.2"/>
+                <path d="M3.5 5.5H14.5" stroke="#9333EA" stroke-width="1.2"/>
+              </svg>
+              <span>插件</span>
+            </div>
+            <div class="node-option disabled" data-type="subflow">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <rect x="2" y="2" width="14" height="14" rx="3" fill="#FFF7ED"/>
+                <rect x="2" y="2" width="14" height="14" rx="3" stroke="#F97316" stroke-width="1.2"/>
+                <path d="M6 6L12 6" stroke="#F97316" stroke-width="1.2" stroke-linecap="round"/>
+                <path d="M6 9H10" stroke="#F97316" stroke-width="1.2" stroke-linecap="round"/>
+                <path d="M6 12H8" stroke="#F97316" stroke-width="1.2" stroke-linecap="round"/>
+              </svg>
+              <span>工作流</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="node-group">
+          <div class="node-group-title">业务逻辑</div>
+          <div class="node-group-items">
+            <div class="node-option disabled" data-type="code">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <rect x="2" y="2.5" width="14" height="13" rx="2" fill="#FEF9C3"/>
+                <rect x="2" y="2.5" width="14" height="13" rx="2" stroke="#CA8A04" stroke-width="1.2"/>
+                <path d="M6 6L8 8L6 10" stroke="#CA8A04" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M10 10L12 8L10 6" stroke="#CA8A04" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span>代码</span>
+            </div>
+            <div class="node-option disabled" data-type="selector">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <rect x="2" y="2.5" width="14" height="13" rx="2" fill="#F3E8FF"/>
+                <rect x="2" y="2.5" width="14" height="13" rx="2" stroke="#9333EA" stroke-width="1.2"/>
+                <path d="M5 8L9 12L13 8" stroke="#9333EA" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span>选择器</span>
+            </div>
+            <div class="node-option disabled" data-type="intent">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <rect x="2" y="2.5" width="14" height="13" rx="2" fill="#E0F2FE"/>
+                <rect x="2" y="2.5" width="14" height="13" rx="2" stroke="#0284C7" stroke-width="1.2"/>
+                <circle cx="9" cy="8" r="3" stroke="#0284C7" stroke-width="1.2"/>
+                <path d="M9 11V13" stroke="#0284C7" stroke-width="1.2" stroke-linecap="round"/>
+              </svg>
+              <span>意图识别</span>
+            </div>
+            <div class="node-option disabled" data-type="loop">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <rect x="2" y="2.5" width="14" height="13" rx="2" fill="#FFE4E6"/>
+                <rect x="2" y="2.5" width="14" height="13" rx="2" stroke="#E11D48" stroke-width="1.2"/>
+                <path d="M5 8L9 5V11L5 8Z" fill="#E11D48"/>
+                <path d="M13 8L9 5V11L13 8Z" fill="#E11D48"/>
+              </svg>
+              <span>循环</span>
+            </div>
+            <div class="node-option disabled" data-type="batch">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <rect x="2" y="2.5" width="14" height="13" rx="2" fill="#F3E8FF"/>
+                <rect x="2" y="2.5" width="14" height="13" rx="2" stroke="#9333EA" stroke-width="1.2"/>
+                <rect x="5" y="6" width="3" height="2" rx="0.5" fill="#9333EA"/>
+                <rect x="10" y="6" width="3" height="2" rx="0.5" fill="#9333EA"/>
+                <rect x="5" y="10" width="3" height="2" rx="0.5" fill="#9333EA"/>
+                <rect x="10" y="10" width="3" height="2" rx="0.5" fill="#9333EA"/>
+              </svg>
+              <span>批处理</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="node-group">
+          <div class="node-group-title">输入&amp;输出</div>
+          <div class="node-group-items">
+            <div class="node-option disabled" data-type="input">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <rect x="2.5" y="3" width="13" height="12" rx="2" fill="#F0FDF4"/>
+                <rect x="2.5" y="3" width="13" height="12" rx="2" stroke="#16A34A" stroke-width="1.2"/>
+                <path d="M9 6V12" stroke="#16A34A" stroke-width="1.2" stroke-linecap="round"/>
+                <path d="M6 9H12" stroke="#16A34A" stroke-width="1.2" stroke-linecap="round"/>
+              </svg>
+              <span>输入</span>
+            </div>
+            <div class="node-option disabled" data-type="output">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <rect x="2.5" y="3" width="13" height="12" rx="2" fill="#FEF2F2"/>
+                <rect x="2.5" y="3" width="13" height="12" rx="2" stroke="#DC2626" stroke-width="1.2"/>
+                <path d="M6 9H12" stroke="#DC2626" stroke-width="1.2" stroke-linecap="round"/>
+              </svg>
+              <span>输出</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
-  <script src="../libs/leader-line.min.js"></script>
-  <script src="../utils/storage.js"></script>
-  <script src="flow-designer-page.js"></script>
+  <!-- ===== Variable Picker Dialog ===== -->
+  <div id="variable-picker-dialog" class="dialog-overlay" style="display:none;">
+    <div class="dialog var-picker-dialog">
+      <div class="dialog-header">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <rect x="2" y="2" width="14" height="14" rx="2" stroke="currentColor" stroke-width="1.2"/>
+          <line x1="2" y1="6" x2="16" y2="6" stroke="currentColor" stroke-width="1.2"/>
+          <rect x="5" y="9" width="3" height="2" rx="0.5" fill="currentColor"/>
+          <rect x="10" y="9" width="3" height="2" rx="0.5" fill="currentColor"/>
+        </svg>
+        <span>选择变量</span>
+        <button class="icon-btn-sm" id="btn-close-var-picker">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <line x1="3" y1="3" x2="13" y2="13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <line x1="13" y1="3" x2="3" y2="13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="dialog-body" id="var-picker-body">
+      </div>
+    </div>
+  </div>
+
+  <script src="flow-types.js"></script>
+  <script src="flow-connections.js"></script>
+  <script src="flow-runner.js"></script>
+  <script src="flow-canvas-controller.js"></script>
+  <script src="flow-app.js"></script>
+  <script src="flow-designer-init.js"></script>
 </body>
 </html>

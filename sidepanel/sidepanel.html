@@ -5,190 +5,177 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Free AI</title>
   <link rel="stylesheet" href="../styles/sidepanel.css">
+  <link rel="stylesheet" href="../styles/sidepanel-settings.css">
 </head>
 <body>
   <div class="container">
     <!-- 侧边栏头部 -->
     <div class="header">
-      <h1>Free AI</h1>
-      <div class="tabs">
-        <button class="tab active" data-tab="conversations">会话</button>
-        <button class="tab" data-tab="prompts">提示词</button>
-        <button class="tab" data-tab="models">模型</button>
-        <button class="tab" data-tab="settings">设置</button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="22" height="22" rx="6" fill="#3964FE"/>
+          <path d="M11 5C11 5 12 10 15.5 11C12 12 11 17 11 17C11 17 10 12 6.5 11C10 10 11 5 11 5Z" fill="white"/>
+        </svg>
+        <h1 style="margin:0">Free AI</h1>
       </div>
+      <p class="subtitle">AI 对话助手</p>
     </div>
 
-    <!-- 会话列表 -->
-    <div class="tab-content active" id="conversations-tab">
-      <div class="actions">
-        <button class="btn btn-primary" id="newConversationBtn">
-          <span>+</span> 新建会话
-        </button>
+    <!-- 快速设置 -->
+    <div class="settings-section">
+      <h2>快速设置</h2>
+      <div class="setting-item">
+        <div class="setting-info">
+          <div class="setting-label">WebSocket连接</div>
+          <div class="setting-desc" id="wsStatusText">未连接</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="wsEnabledCheckbox">
+          <span class="toggle-slider"></span>
+        </label>
       </div>
-      <div class="conversation-list" id="conversationList"></div>
-    </div>
-
-    <!-- 提示词管理 -->
-    <div class="tab-content" id="prompts-tab">
-      <iframe src="tabs/prompts.html" class="tab-iframe"></iframe>
-    </div>
-
-    <!-- 模型管理 -->
-    <div class="tab-content" id="models-tab">
-      <iframe src="tabs/models.html" class="tab-iframe"></iframe>
-    </div>
-
-    <!-- 设置 -->
-    <div class="tab-content" id="settings-tab">
-      <div class="settings-info">
-        <h3>消息设置</h3>
-
-        <div class="setting-item">
-          <div class="setting-toggle">
-            <input type="checkbox" id="floatWindowCheck" checked>
-            <label for="floatWindowCheck">使用浮动窗口显示回复</label>
-          </div>
-          <p class="setting-desc">
-            在当前页面显示AI回复，不切换标签页
-          </p>
+      <div class="setting-item">
+        <div class="setting-info">
+          <div class="setting-label">浮动窗口</div>
+          <div class="setting-desc">使用浮动窗口显示AI回复</div>
         </div>
-
-        <div class="warning-box">
-          ⚠️ <strong>重要提示：</strong>
-          <ul>
-            <li>使用前请先在浏览器中登录对应的AI网站</li>
-            <li>插件会在后台打开AI网站标签页进行操作</li>
-            <li>请勿关闭AI网站标签页，否则无法发送消息</li>
-            <li>插件仅限体验模型，更多功能请去官方网站体验</li>
-          </ul>
-
-        <div class="platform-list">
-          <div class="platform-item">
-            <strong>DeepSeek</strong>
-            <a href="https://chat.deepseek.com" target="_blank">访问网站 →</a>
-          </div>
-          <div class="platform-item">
-            <strong>豆包</strong>
-            <a href="https://www.doubao.com/chat/" target="_blank">访问网站 →</a>
-          </div>
-          <div class="platform-item">
-            <strong>千问</strong>
-            <a href="https://tongyi.aliyun.com" target="_blank">访问网站 →</a>
-          </div>
-          <div class="platform-item">
-            <strong>Kimi</strong>
-            <a href="https://kimi.moonshot.cn" target="_blank">访问网站 →</a>
-          </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="floatWindowCheck" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="setting-item">
+        <div class="setting-info">
+          <div class="setting-label">辅助模型</div>
+          <div class="setting-desc">用于会话标题生成、提示词优化等系统辅助功能</div>
         </div>
-        </div>
+        <select id="helperModelSelect" class="helper-model-select">
+          <option value="">请选择模型</option>
+        </select>
       </div>
     </div>
   </div>
 
-  <!-- 新建会话对话框 -->
+  <!-- 新建会话模态框 -->
   <div class="modal" id="newConversationModal">
     <div class="modal-content">
       <div class="modal-header">
         <h2 id="conversationModalTitle">新建会话</h2>
         <button class="close-btn">&times;</button>
       </div>
-       <div class="modal-body">
-          <div class="form-group">
-            <label for="conversationName">会话名称</label>
-            <input type="text" id="conversationName" placeholder="输入会话名称">
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="conversationName">会话名称</label>
+          <input type="text" id="conversationName" placeholder="输入会话名称">
+        </div>
+
+        <div class="form-group">
+          <label for="teamSelect">选择团队（可选）</label>
+          <select id="teamSelect" class="form-select">
+            <option value="">不选择团队，手动添加成员</option>
+          </select>
+          <small class="form-hint">选择团队后，将自动加载该团队的成员</small>
+        </div>
+
+        <div class="form-group">
+          <div class="member-actions-header">
+            <label>会话成员</label>
+            <button class="btn-link" id="createMemberInConvBtn">
+              <span class="btn-icon">+</span>
+              <span class="btn-text">创建新成员</span>
+            </button>
+          </div>
+          <div class="member-selector" id="memberSelector" style="max-height: 300px; overflow-y: auto;">
+            <div class="loading">加载中...</div>
           </div>
 
-           <div class="form-group">
-             <label>
-               新增角色
-               <button class="btn-link" id="createRoleInConvBtn" style="float: right; font-size: 12px; padding: 0; border: none; background: none; color: #007aff; cursor: pointer;">
-                 + 创建新角色
-               </button>
-             </label>
-             <div class="role-selector" id="roleSelector" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 4px;">
-               <div class="loading">加载中...</div>
-             </div>
-             <small style="color: #666; font-size: 11px; display: block; margin-top: 4px;">
-               选择要添加到会话的角色
-             </small>
-           </div>
+          <!-- 内联表单块 -->
+          <div class="inline-form-container" id="inlineMemberFormContainer" style="display: none;">
+            <div class="inline-form-body" id="inlineMemberFormBody">
+              <div class="form-group">
+                <label for="newMemberInConvName">
+                  成员名称 <span class="required">*</span>
+                </label>
+                <input type="text" id="newMemberInConvName" class="form-input"
+                       placeholder="例如：Python 专家助手" autocomplete="off">
+                <small class="form-hint">为成员设置一个易于识别的名称</small>
+              </div>
 
-           <div class="form-group">
-             <label for="contextMode">上下文模式</label>
-             <select id="contextMode">
-               <option value="self">独享</option>
-               <option value="full">共享</option>
-             </select>
-             <small style="color: #666; font-size: 11px; display: block; margin-top: 4px;">
-               独享：每个AI独立对话，互不干扰，使用各自的会话URL（默认并行）<br>
-               共享：所有对话历史都发送给每个AI，每次打开新会话
-             </small>
-           </div>
+              <div class="form-group">
+                <label for="newMemberInConvModel">
+                  选择模型 <span class="required">*</span>
+                </label>
+                <select id="newMemberInConvModel" class="form-select">
+                  <option value="">请选择模型...</option>
+                </select>
+                <small class="form-hint">选择此成员使用的 AI 模型</small>
+              </div>
 
-           <div class="form-group" id="strategyGroup">
-             <label>执行策略</label>
-             <div class="execution-strategy">
-               <label style="display: block; margin-bottom: 8px;">
-                 <input type="radio" name="strategy" value="parallel" checked>
-                 并行（所有角色同时响应）
-               </label>
-               <label style="display: block; margin-bottom: 8px;">
-                 <input type="radio" name="strategy" value="sequential">
-                 串行（按角色顺序依次响应）
-               </label>
-               <label style="display: block; margin-bottom: 8px;">
-                 <input type="radio" name="strategy" value="random">
-                 随机（随机选择一个角色响应）
-               </label>
-             </div>
-             <small style="color: #666; font-size: 11px; display: block; margin-top: 4px;" id="strategyHint">
-               共享模式支持三种执行策略
-             </small>
-           </div>
-         </div>
+              <div class="form-group">
+                <label for="newMemberInConvPrompt">
+                  选择提示词 <span class="optional">（可选）</span>
+                </label>
+                <select id="newMemberInConvPrompt" class="form-select">
+                  <option value="">无提示词</option>
+                </select>
+                <small class="form-hint">为成员预定义系统提示词</small>
+              </div>
+
+              <div class="inline-form-actions">
+                <button class="btn btn-secondary" id="cancelInlineMemberBtn">取消</button>
+                <button class="btn btn-primary" id="saveInlineMemberBtn">
+                  <span>✨</span> 创建并添加
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>对话模式</label>
+          <div class="mode-selector">
+            <label class="mode-option">
+              <input type="radio" name="convMode" value="brainstorming" checked>
+              <div class="mode-card">
+                <div class="mode-icon">💡</div>
+                <div class="mode-title">头脑风暴</div>
+                <div class="mode-desc">独享上下文 · 并行回复</div>
+              </div>
+            </label>
+            <label class="mode-option">
+              <input type="radio" name="convMode" value="discussion">
+              <div class="mode-card">
+                <div class="mode-icon">🪑</div>
+                <div class="mode-title">圆桌讨论</div>
+                <div class="mode-desc">共享上下文 · 依次发言</div>
+              </div>
+            </label>
+            <label class="mode-option">
+              <input type="radio" name="convMode" value="expertqa">
+              <div class="mode-card">
+                <div class="mode-icon">🎓</div>
+                <div class="mode-title">专家问答</div>
+                <div class="mode-desc">多AI协作 · 迭代求解</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group" id="expertFlowGroup" style="display:none;">
+          <label for="expertFlowSelect">选择协作方案</label>
+          <select id="expertFlowSelect" class="form-select">
+            <option value="">请选择方案...</option>
+          </select>
+        </div>
+
+        <div class="form-group" id="memberOrderGroup" style="display:none;">
+          <label>发言顺序 <small class="form-hint">（拖拽调整）</small></label>
+          <div id="memberOrderContainer" class="member-order-container"></div>
+        </div>
+      </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="cancelConversationBtn">取消</button>
         <button class="btn btn-primary" id="confirmConversationBtn">创建</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 新建角色对话框 -->
-  <div class="modal" id="newRoleModal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2>新建角色</h2>
-        <button class="close-btn">&times;</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label for="roleName">角色名称</label>
-          <input type="text" id="roleName" placeholder="输入角色名称">
-        </div>
-        <div class="form-group">
-          <label for="provider">服务提供商</label>
-          <select id="provider">
-          </select>
-          <small style="color: #666; font-size: 11px; display: block; margin-top: 4px;">
-            选择提供商后，模型会自动填充
-          </small>
-        </div>
-        <div class="form-group">
-          <label for="model">模型 <span style="color: #999; font-weight: normal;">(可选，会自动填充)</span></label>
-          <input type="text" id="model" placeholder="自动填充或手动输入">
-          <small style="color: #666; font-size: 11px; display: block; margin-top: 4px;">
-            常用模型：DeepSeek(deepseek-chat) | 豆包(doubao-pro) | 千问(qwen-plus) | ChatGPT(gpt-4)
-          </small>
-        </div>
-        <div class="form-group">
-          <label for="systemPrompt">系统提示词 <span style="color: #999; font-weight: normal;">(可选)</span></label>
-          <textarea id="systemPrompt" rows="4" placeholder="例如：你是一个友好的助手，擅长回答问题"></textarea>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" id="cancelRoleBtn">取消</button>
-        <button class="btn btn-primary" id="confirmRoleBtn">创建</button>
       </div>
     </div>
   </div>
@@ -199,12 +186,301 @@
   <script src="../components/flow-designer.js"></script>
   <script src="../sidepanel/sidepanel.js"></script>
   <style>
-    .tab-iframe {
-      width: 100%;
-      height: calc(100vh - 120px);
-      border: none;
-      background: #fff;
+    /* 极简版Side Panel特有样式 */
+
+    .subtitle {
+      font-size: 12px;
+      color: #86868b;
+      margin-top: 4px;
     }
+
+    .quick-actions {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .action-card {
+      background: #fff;
+      border: 1px solid #e8e8ed;
+      border-radius: 12px;
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .action-card:hover {
+      border-color: #007aff;
+      box-shadow: 0 4px 12px rgba(0, 122, 255, 0.15);
+      transform: translateY(-1px);
+    }
+
+    .action-card-primary {
+      background: linear-gradient(135deg, #007aff, #0056d6);
+      border-color: transparent;
+    }
+
+    .action-card-primary:hover {
+      background: linear-gradient(135deg, #0056d6, #0045a8);
+      box-shadow: 0 4px 12px rgba(0, 122, 255, 0.35);
+    }
+
+    .action-icon {
+      font-size: 24px;
+      flex-shrink: 0;
+    }
+
+    .action-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1d1d1f;
+    }
+
+    .action-card-primary .action-title {
+      color: #fff;
+    }
+
+    .action-desc {
+      font-size: 12px;
+      color: #86868b;
+    }
+
+    .action-card-primary .action-desc {
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    .recent-section {
+      border-top: 1px solid #e8e8ed;
+      padding: 16px;
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .section-header h2 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1d1d1f;
+    }
+
+    .settings-section {
+      border-top: 1px solid #e8e8ed;
+      padding: 16px;
+    }
+
+    .settings-section h2 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1d1d1f;
+      margin-bottom: 12px;
+    }
+
+    .setting-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid #f5f5f7;
+    }
+
+    .setting-item:last-child {
+      border-bottom: none;
+    }
+
+    .setting-info {
+      flex: 1;
+    }
+
+    .setting-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: #1d1d1f;
+    }
+
+    .setting-desc {
+      font-size: 11px;
+      color: #86868b;
+      margin-top: 2px;
+    }
+
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #e8e8ed;
+      transition: .3s;
+      border-radius: 24px;
+    }
+
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 20px;
+      width: 20px;
+      left: 2px;
+      bottom: 2px;
+      background-color: white;
+      transition: .3s;
+      border-radius: 50%;
+    }
+
+    input:checked + .toggle-slider {
+      background-color: #34c759;
+    }
+
+    input:checked + .toggle-slider:before {
+      transform: translateX(20px);
+    }
+
+    .helper-model-select {
+      padding: 6px 10px;
+      border: 1px solid #e8e8ed;
+      border-radius: 8px;
+      font-size: 13px;
+      background: #fff;
+      color: #1d1d1f;
+      min-width: 150px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .helper-model-select:hover {
+      border-color: #007aff;
+    }
+
+    .helper-model-select:focus {
+      outline: none;
+      border-color: #007aff;
+      box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+    }
+
+    .loading {
+      text-align: center;
+      color: #86868b;
+      padding: 20px;
+      font-size: 13px;
+    }
+
+    .empty-state {
+      text-align: center;
+      color: #86868b;
+      padding: 20px;
+      font-size: 13px;
+    }
+
+    .mode-selector {
+      display: flex;
+      gap: 8px;
+    }
+
+    .mode-option {
+      flex: 1;
+      cursor: pointer;
+    }
+
+    .mode-option input[type="radio"] {
+      display: none;
+    }
+
+    .mode-card {
+      padding: 12px 8px;
+      border: 2px solid #e8e8ed;
+      border-radius: 10px;
+      text-align: center;
+      transition: all 0.2s ease;
+    }
+
+    .mode-option input:checked + .mode-card {
+      border-color: #007aff;
+      background: rgba(0, 122, 255, 0.05);
+    }
+
+    .mode-icon {
+      font-size: 20px;
+      margin-bottom: 4px;
+    }
+
+    .mode-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1d1d1f;
+      margin-bottom: 2px;
+    }
+
+    .mode-desc {
+      font-size: 10px;
+      color: #86868b;
+    }
+
+    .member-order-container {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .discussion-order-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      background: #f9f9f9;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      cursor: grab;
+      font-size: 13px;
+      user-select: none;
+    }
+
+    .discussion-order-item:active {
+      cursor: grabbing;
+      border-color: #007aff;
+      background: rgba(0, 122, 255, 0.05);
+    }
+
+    .discussion-order-item .drag-handle {
+      color: #86868b;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .discussion-order-item .order-number {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #007aff;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
   </style>
 </body>
 </html>

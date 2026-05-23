@@ -3,53 +3,65 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>流程设计器</title>
+  <title>专家方案</title>
   <link rel="stylesheet" href="../../styles/sidepanel.css">
   <link rel="stylesheet" href="../../styles/flows.css">
 </head>
 <body>
   <div class="flows-container">
-    <!-- 左侧工具栏 -->
-    <div class="flows-sidebar">
-      <div class="sidebar-header">
-        <h3>流程列表</h3>
-        <button class="icon-btn" id="newFlowBtn" title="新建流程">+</button>
-      </div>
+    <div class="flows-main">
+
+
+      <!-- 方案列表 -->
       <div class="flows-list" id="flowsList">
         <div class="empty-state">加载中...</div>
       </div>
     </div>
-
-    <!-- 右侧Canvas区域 -->
-    <div class="flows-main">
-      <div class="flows-toolbar">
-        <button class="btn btn-secondary" id="addNodeBtn">+ 添加节点</button>
-        <button class="btn btn-primary" id="saveFlowBtn">💾 保存</button>
-      </div>
-
-      <div class="flows-canvas-container">
-        <div class="flows-canvas" id="flowsCanvas">
-          <div class="empty-state">请选择或创建流程</div>
-        </div>
-      </div>
-    </div>
   </div>
 
-  <!-- 新建流程对话框 -->
+  <!-- 新建/编辑方案对话框 -->
   <div class="modal" id="flowModal">
-    <div class="modal-content">
+    <div class="modal-content modal-large">
       <div class="modal-header">
-        <h2 id="flowModalTitle">新建流程</h2>
+        <h2 id="flowModalTitle">新建方案</h2>
         <button class="close-btn">&times;</button>
       </div>
       <div class="modal-body">
         <div class="form-group">
-          <label for="flowName">流程名称</label>
-          <input type="text" id="flowName" placeholder="输入流程名称">
+          <label for="flowName">方案名称 <span class="required">*</span></label>
+          <input type="text" id="flowName" class="form-input" placeholder="输入方案名称" required>
         </div>
+
         <div class="form-group">
-          <label for="flowDescription">描述</label>
-          <input type="text" id="flowDescription" placeholder="简要描述此流程">
+          <label for="flowCategory">分类</label>
+          <select id="flowCategory" class="form-select">
+            <option value="simple">简单方案</option>
+            <option value="complex">复杂方案</option>
+            <option value="ai">AI流程</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="flowDescription">描述（可选）</label>
+          <textarea id="flowDescription" class="form-textarea" rows="3" placeholder="描述此流程的用途"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="flowIcon">图标（Emoji）</label>
+          <input type="text" id="flowIcon" class="form-input" placeholder="⚙️" value="" maxlength="2">
+        </div>
+
+        <div class="form-group">
+          <label>流程节点</label>
+          <div class="flow-nodes-container" id="flowNodesContainer">
+            <!-- 动态添加节点 -->
+          </div>
+          <button type="button" class="btn btn-secondary" id="addNodeBtn" style="margin-top: 8px;">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M8 2v12M2 8h12"/>
+            </svg>
+            添加节点
+          </button>
         </div>
       </div>
       <div class="modal-footer">
@@ -59,39 +71,58 @@
     </div>
   </div>
 
-  <!-- 添加节点对话框 -->
-  <div class="modal" id="nodeModal">
+  <!-- 流程设计器模态框（全屏嵌入） -->
+  <div class="modal" id="flowDesignerModal">
+    <div class="modal-content modal-fullscreen">
+      <iframe id="flowDesignerIframe" class="modal-iframe"></iframe>
+    </div>
+  </div>
+
+  <!-- 虚拟模型创建对话框 -->
+  <div class="modal" id="virtualModelModal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>添加节点</h2>
+        <h2>创建虚拟模型</h2>
         <button class="close-btn">&times;</button>
       </div>
       <div class="modal-body">
         <div class="form-group">
-          <label for="nodeName">节点名称</label>
-          <input type="text" id="nodeName" placeholder="例如：分析专家">
+          <label for="virtualModelName">虚拟模型名称 <span class="required">*</span></label>
+          <input type="text" id="virtualModelName" class="form-input" placeholder="超级分析助手" required>
         </div>
         <div class="form-group">
-          <label for="nodeModel">使用模型</label>
-          <select id="nodeModel">
+          <label for="virtualModelFlow">选择流程 <span class="required">*</span></label>
+          <select id="virtualModelFlow" class="form-select" required>
+            <option value="">请选择流程...</option>
           </select>
+          <small class="form-hint">虚拟模型需要基于一个执行流程</small>
         </div>
         <div class="form-group">
-          <label for="nodePrompt">使用提示词</label>
-          <select id="nodePrompt">
-          </select>
+          <label for="virtualModelDescription">描述（可选）</label>
+          <input type="text" id="virtualModelDescription" class="form-input" placeholder="虚拟模型功能描述">
+        </div>
+        <div class="form-group">
+          <label for="virtualModelIcon">图标</label>
+          <input type="text" id="virtualModelIcon" class="form-input" placeholder="🤖" value="🤖" maxlength="2">
+        </div>
+        <div class="form-group checkbox-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="virtualModelEnabled">
+            <span>启用此模型</span>
+          </label>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" id="cancelNodeBtn">取消</button>
-        <button class="btn btn-primary" id="confirmNodeBtn">添加</button>
+        <button class="btn btn-secondary" id="cancelVirtualModelBtn">取消</button>
+        <button class="btn btn-primary" id="confirmVirtualModelBtn">创建</button>
       </div>
     </div>
   </div>
 
   <script src="../../config/providers.config.js"></script>
   <script src="../../utils/storage.js"></script>
-  <script src="../../../libs/leader-line.min.js"></script>
+  <script src="../../libs/leader-line.min.js"></script>
+  <script src="../components/flow-designer.js"></script>
   <script src="flows.js"></script>
 </body>
 </html>

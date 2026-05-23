@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Free AI</title>
+  <link rel="stylesheet" href="../styles/sidepanel.css">
+  <link rel="stylesheet" href="../styles/sidepanel-settings.css">
+</head>
+<body>
+  <div class="container">
+    <!-- 侧边栏头部 -->
+    <div class="header">
+      <div style="display:flex;align-items:center;gap:8px">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="22" height="22" rx="6" fill="#3964FE"/>
+          <path d="M11 5C11 5 12 10 15.5 11C12 12 11 17 11 17C11 17 10 12 6.5 11C10 10 11 5 11 5Z" fill="white"/>
+        </svg>
+        <h1 style="margin:0">Free AI</h1>
+      </div>
+      <p class="subtitle">快速操作面板</p>
+    </div>
+
+    <!-- 快速操作 -->
+    <div class="quick-actions">
+      <button class="action-card action-card-primary" id="newConversationBtn">
+        <div class="action-icon">💬</div>
+        <div class="action-title">新建会话</div>
+        <div class="action-desc">创建新的AI对话</div>
+      </button>
+
+      <button class="action-card" id="openDashboardBtn">
+        <div class="action-icon">📊</div>
+        <div class="action-title">管理面板</div>
+        <div class="action-desc">团队、会话、模型管理</div>
+      </button>
+    </div>
+
+    <!-- 最近会话 -->
+    <div class="recent-section">
+      <div class="section-header">
+        <h2>最近会话</h2>
+      </div>
+      <div class="conversation-list" id="conversationList">
+        <div class="loading">加载中...</div>
+      </div>
+    </div>
+
+    <!-- 快速设置 -->
+    <div class="settings-section">
+      <h2>快速设置</h2>
+      <div class="setting-item">
+        <div class="setting-info">
+          <div class="setting-label">WebSocket连接</div>
+          <div class="setting-desc" id="wsStatusText">未连接</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="wsEnabledCheckbox">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="setting-item">
+        <div class="setting-info">
+          <div class="setting-label">浮动窗口</div>
+          <div class="setting-desc">使用浮动窗口显示AI回复</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="floatWindowCheck" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- 新建会话模态框 -->
+  <div class="modal" id="newConversationModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="conversationModalTitle">新建会话</h2>
+        <button class="close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="conversationName">会话名称</label>
+          <input type="text" id="conversationName" placeholder="输入会话名称">
+        </div>
+
+        <div class="form-group">
+          <label for="teamSelect">选择团队（可选）</label>
+          <select id="teamSelect" class="form-select">
+            <option value="">不选择团队，手动添加成员</option>
+          </select>
+          <small class="form-hint">选择团队后，将自动加载该团队的成员</small>
+        </div>
+
+        <div class="form-group">
+          <div class="member-actions-header">
+            <label>会话成员</label>
+            <button class="btn-link" id="createMemberInConvBtn">
+              <span class="btn-icon">+</span>
+              <span class="btn-text">创建新成员</span>
+            </button>
+          </div>
+          <div class="member-selector" id="memberSelector" style="max-height: 300px; overflow-y: auto;">
+            <div class="loading">加载中...</div>
+          </div>
+
+          <!-- 内联表单块 -->
+          <div class="inline-form-container" id="inlineMemberFormContainer" style="display: none;">
+            <div class="inline-form-body" id="inlineMemberFormBody">
+              <div class="form-group">
+                <label for="newMemberInConvName">
+                  成员名称 <span class="required">*</span>
+                </label>
+                <input type="text" id="newMemberInConvName" class="form-input"
+                       placeholder="例如：Python 专家助手" autocomplete="off">
+                <small class="form-hint">为成员设置一个易于识别的名称</small>
+              </div>
+
+              <div class="form-group">
+                <label for="newMemberInConvModel">
+                  选择模型 <span class="required">*</span>
+                </label>
+                <select id="newMemberInConvModel" class="form-select">
+                  <option value="">请选择模型...</option>
+                </select>
+                <small class="form-hint">选择此成员使用的 AI 模型</small>
+              </div>
+
+              <div class="form-group">
+                <label for="newMemberInConvPrompt">
+                  选择提示词 <span class="optional">（可选）</span>
+                </label>
+                <select id="newMemberInConvPrompt" class="form-select">
+                  <option value="">无提示词</option>
+                </select>
+                <small class="form-hint">为成员预定义系统提示词</small>
+              </div>
+
+              <div class="inline-form-actions">
+                <button class="btn btn-secondary" id="cancelInlineMemberBtn">取消</button>
+                <button class="btn btn-primary" id="saveInlineMemberBtn">
+                  <span>✨</span> 创建并添加
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="contextMode">上下文模式</label>
+          <select id="contextMode">
+            <option value="self">独享</option>
+            <option value="full">共享</option>
+          </select>
+          <small class="form-hint">
+            独享：每个AI独立对话，互不干扰<br>
+            共享：所有对话历史都发送给每个AI
+          </small>
+        </div>
+
+        <div class="form-group" id="strategyGroup">
+          <label>执行策略</label>
+          <div class="execution-strategy">
+            <label class="radio-label">
+              <input type="radio" name="strategy" value="parallel" checked>
+              并行（所有成员同时响应）
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="strategy" value="sequential">
+              串行（按成员顺序依次响应）
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="strategy" value="random">
+              随机（随机选择一个成员响应）
+            </label>
+          </div>
+          <small class="form-hint" id="strategyHint">
+            共享模式支持三种执行策略
+          </small>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancelConversationBtn">取消</button>
+        <button class="btn btn-primary" id="confirmConversationBtn">创建</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../config/providers.config.js"></script>
+  <script src="../utils/storage.js"></script>
+  <script src="../libs/leader-line.min.js"></script>
+  <script src="../components/flow-designer.js"></script>
+  <script src="../sidepanel/sidepanel.js"></script>
+  <style>
+    /* 极简版Side Panel特有样式 */
+
+    .subtitle {
+      font-size: 12px;
+      color: #86868b;
+      margin-top: 4px;
+    }
+
+    .quick-actions {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .action-card {
+      background: #fff;
+      border: 1px solid #e8e8ed;
+      border-radius: 12px;
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .action-card:hover {
+      border-color: #007aff;
+      box-shadow: 0 4px 12px rgba(0, 122, 255, 0.15);
+      transform: translateY(-1px);
+    }
+
+    .action-card-primary {
+      background: linear-gradient(135deg, #007aff, #0056d6);
+      border-color: transparent;
+    }
+
+    .action-card-primary:hover {
+      background: linear-gradient(135deg, #0056d6, #0045a8);
+      box-shadow: 0 4px 12px rgba(0, 122, 255, 0.35);
+    }
+
+    .action-icon {
+      font-size: 24px;
+      flex-shrink: 0;
+    }
+
+    .action-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1d1d1f;
+    }
+
+    .action-card-primary .action-title {
+      color: #fff;
+    }
+
+    .action-desc {
+      font-size: 12px;
+      color: #86868b;
+    }
+
+    .action-card-primary .action-desc {
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    .recent-section {
+      border-top: 1px solid #e8e8ed;
+      padding: 16px;
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .section-header h2 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1d1d1f;
+    }
+
+    .settings-section {
+      border-top: 1px solid #e8e8ed;
+      padding: 16px;
+    }
+
+    .settings-section h2 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1d1d1f;
+      margin-bottom: 12px;
+    }
+
+    .setting-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid #f5f5f7;
+    }
+
+    .setting-item:last-child {
+      border-bottom: none;
+    }
+
+    .setting-info {
+      flex: 1;
+    }
+
+    .setting-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: #1d1d1f;
+    }
+
+    .setting-desc {
+      font-size: 11px;
+      color: #86868b;
+      margin-top: 2px;
+    }
+
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #e8e8ed;
+      transition: .3s;
+      border-radius: 24px;
+    }
+
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 20px;
+      width: 20px;
+      left: 2px;
+      bottom: 2px;
+      background-color: white;
+      transition: .3s;
+      border-radius: 50%;
+    }
+
+    input:checked + .toggle-slider {
+      background-color: #34c759;
+    }
+
+    input:checked + .toggle-slider:before {
+      transform: translateX(20px);
+    }
+
+    .loading {
+      text-align: center;
+      color: #86868b;
+      padding: 20px;
+      font-size: 13px;
+    }
+
+    .empty-state {
+      text-align: center;
+      color: #86868b;
+      padding: 20px;
+      font-size: 13px;
+    }
+  </style>
+</body>
+</html>

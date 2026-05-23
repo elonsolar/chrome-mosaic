@@ -468,7 +468,7 @@ MIT License
     "conversationId": "xxx",
     "message": {
       "id": "xxx",
-      "roleId": "xxx",
+      "memberId": "xxx",
       "content": "消息内容",
       "isUser": false,
       "timestamp": 1234567890

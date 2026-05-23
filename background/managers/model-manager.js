@@ -92,7 +92,7 @@ class ModelManager {
    * 创建自定义模型
    */
   async createModel(data) {
-    const { provider, model, name, description, isVirtual, flowId, icon } = data;
+    const { provider, model, name, description, isVirtual, flowId, icon, accessMethod, baseUrl, apiKey, thinking } = data;
 
     if (isVirtual) {
       // 创建虚拟模型
@@ -130,6 +130,10 @@ class ModelManager {
         model,
         name: name || `${provider}-${model}`,
         description: description || '',
+        accessMethod: data.accessMethod || 'web',
+        baseUrl: data.baseUrl || '',
+        apiKey: data.apiKey || '',
+        thinking: data.thinking || false,
         isVirtual: false,
         isDefault: false,
         enabled: true,

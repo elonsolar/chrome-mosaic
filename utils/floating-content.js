@@ -63,7 +63,7 @@
         if (request.messages && Array.isArray(request.messages)) {
           request.messages.forEach(msg => {
             floatingWindow.addMessage(
-              msg.roleName || 'AI',
+              msg.memberName || msg.roleName || 'AI',
               msg.content,
               msg.isUser,
               msg.isError

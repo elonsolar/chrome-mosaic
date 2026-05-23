@@ -4,6 +4,14 @@ importScripts('./managers/prompt-folder-manager.js');
 importScripts('./managers/model-manager.js');
 importScripts('./managers/flow-manager.js');
 importScripts('./managers/flow-executor.js');
+importScripts('./managers/temporary-session-pool.js');
+importScripts('./managers/team-manager.js');
+importScripts('./managers/expert-manager.js');
+importScripts('./senders/abstract-message-sender.js');
+importScripts('./senders/web-message-sender.js');
+importScripts('./senders/api-message-sender.js');
+importScripts('./senders/sender-factory.js');
+importScripts('./flow-test-runner.js');
 
 /**
  * 检测浏览器信息
@@ -316,10 +324,10 @@ class WebSocketManager {
         throw new Error(`会话不存在: ${model}。请先在插件中创建名为 "${model}" 的会话。`);
       }
 
-      console.log('[WS] 找到会话:', conversation.id, '角色:', conversation.roleIds);
+      console.log('[WS] 找到会话:', conversation.id, '成员:', conversation.memberIds);
 
-      if (!conversation.roleIds || conversation.roleIds.length === 0) {
-        throw new Error(`会话 "${model}" 没有配置角色。请在插件中为该会话添加角色。`);
+      if (!conversation.memberIds || conversation.memberIds.length === 0) {
+        throw new Error(`会话 "${model}" 没有配置成员。请在插件中为该会话添加成员。`);
       }
 
       const conversationId = conversation.id;
@@ -368,6 +376,14 @@ class WebSocketManager {
       });
     }
   }
+}
+
+class AIMessageManager {
+  constructor(tabManager, conversationManager, senderFactory) {
+    this.tabManager = tabManager;
+    this.conversationManager = conversationManager;
+    this.senderFactory = senderFactory;
+  }
 
   async combineResponses(responses) {
     if (!responses || responses.length === 0) {
@@ -378,446 +394,23 @@ class WebSocketManager {
       return responses[0].content;
     }
 
-    const roles = await StorageManager.getRoles();
+    const members = await StorageManager.getMembers();
     return responses.map((r, index) => {
-      const role = roles.find(role => role.id === r.roleId);
-      const roleName = role ? role.name : `角色 ${index + 1}`;
-      return `[${roleName}] ${r.content}`;
+      const member = members.find(m => m.id === r.memberId);
+      const memberName = member ? member.name : `成员 ${index + 1}`;
+      return `[${memberName}] ${r.content}`;
     }).join('\n\n');
-  }
-
-  updateStatus(connected, status) {
-    // 通知所有监听器状态变化
-    chrome.runtime.sendMessage({
-      type: 'wsStatusChanged',
-      connected: connected,
-      status: status
-    }).catch(() => {
-      // 忽略错误（可能没有监听器）
-    });
-  }
-
-  getStatus() {
-    return {
-      connected: this.connected,
-      readyState: this.ws ? this.ws.readyState : WebSocket.CLOSED,
-      shouldReconnect: this.shouldReconnect,
-      reconnectAttempts: this.reconnectAttempts,
-      reconnectDelay: this.currentReconnectDelay,
-      isReconnecting: this.reconnectTimeoutId !== null
-    };
-  }
-}
-
-class StorageManager {
-  static async getConversations() {
-    const result = await chrome.storage.local.get('conversations');
-    return result.conversations || [];
-  }
-
-  static async saveConversations(conversations) {
-    await chrome.storage.local.set({ conversations });
-  }
-
-  static async getRoles() {
-    const result = await chrome.storage.local.get('roles');
-    return result.roles || [];
-  }
-
-  static async saveRoles(roles) {
-    await chrome.storage.local.set({ roles });
-  }
-
-  static async getSettings() {
-    const result = await chrome.storage.local.get('settings');
-    return result.settings || {
-      wsUrl: 'ws://localhost:8080',
-      wsEnabled: false,
-      contextMode: 'self',
-      floatWindow: true
-    };
-  }
-
-  static async saveSettings(settings) {
-    await chrome.storage.local.set({ settings });
-  }
-}
-
-class TabManager {
-  constructor() {
-  }
-
-  async openPlatformTab(url) {
-    const existingTab = await this.findTabByUrl(url);
-    if (existingTab) {
-      console.log(`[TabManager] 复用已存在的标签页, URL: ${existingTab.url}`);
-      return existingTab;
-    }
-
-    console.log(`[TabManager] 创建新标签页 -> ${url}`);
-    const tab = await chrome.tabs.create({
-      url,
-      active: false
-    });
-
-    await this.waitForTabReady(tab.id);
-
-    await chrome.tabs.update(tab.id, { active: false });
-
-    return tab;
-  }
-
-  async findTabByUrl(targetUrl) {
-    const normalizedUrl = targetUrl.replace(/\/$/, '');
-    const allTabs = await chrome.tabs.query({});
-    return allTabs.find(tab => {
-      if (!tab.url || tab.pendingUrl) return false;
-      return tab.url.replace(/\/$/, '') === normalizedUrl;
-    }) || null;
-  }
-
-  async waitForTabReady(tabId, timeout = 30000) {
-    const startTime = Date.now();
-
-    return new Promise((resolve, reject) => {
-      const checkReady = async () => {
-        try {
-          const tab = await chrome.tabs.get(tabId);
-
-          if (tab.status === 'complete') {
-            resolve(tab);
-            return;
-          }
-
-          if (Date.now() - startTime > timeout) {
-            reject(new Error(`标签页 ${tabId} 加载超时`));
-            return;
-          }
-
-          setTimeout(checkReady, 500);
-        } catch (error) {
-          reject(error);
-        }
-      };
-
-      checkReady();
-    });
-  }
-
-  async sendToPlatform(platform, data = {}, targetUrl = null, conversation = null, roleId = null) {
-    const provider = PROVIDERS[platform];
-    if (!provider) {
-      throw new Error(`不支持的平台: ${platform}`);
-    }
-    const url = targetUrl || provider.baseUrl;
-    const tab = await this.openPlatformTab(url);
-
-    if (conversation && roleId) {
-      if (!conversation.roleTabIds) conversation.roleTabIds = {};
-      conversation.roleTabIds[roleId] = tab.id;
-
-      const convId = data.conversationId;
-      if (convId) {
-        const convs = await StorageManager.getConversations();
-        const conv = convs.find(c => c.id === convId);
-        if (conv) {
-          if (!conv.roleTabIds) conv.roleTabIds = {};
-          conv.roleTabIds[roleId] = tab.id;
-          await StorageManager.saveConversations(convs);
-        }
-      }
-    }
-
-    try {
-      await chrome.tabs.update(tab.id, { active: false });
-    } catch (e) {}
-
-    await this.sleep(3000);
-
-    let pingSuccess = false;
-    for (let i = 0; i < 5; i++) {
-      try {
-        const pingResponse = await chrome.tabs.sendMessage(tab.id, { type: 'ping' });
-        if (pingResponse && pingResponse.status === 'ok') {
-          pingSuccess = true;
-          break;
-        }
-      } catch (pingError) {
-        await this.sleep(2000);
-      }
-    }
-
-    if (!pingSuccess) {
-      throw new Error('Content Script未就绪，请刷新AI网站页面');
-    }
-
-    await this.sleep(2000);
-
-    const messageId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${platform}`;
-    const conversationId = data.conversationId || null;
-
-    const responsePromise = new Promise((resolve, reject) => {
-      pendingResponses.set(messageId, { resolve, reject, conversationId });
-
-      setTimeout(() => {
-        if (pendingResponses.has(messageId)) {
-          pendingResponses.delete(messageId);
-          reject(new Error('等待AI回复超时（300秒）'));
-        }
-      }, 300000);
-    });
-
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    try {
-      await chrome.tabs.sendMessage(tab.id, {
-        type: 'sendMessage',
-        ...data,
-        messageId,
-        conversationId
-      });
-
-      try {
-        await chrome.tabs.update(tab.id, { active: false });
-      } catch (e) {}
-    } catch (sendError) {
-      pendingResponses.delete(messageId);
-      throw sendError;
-    }
-
-    return await responsePromise;
-  }
-
-  async sendMessage(platform, content, targetUrl = null, conversationId = null, conversation = null, roleId = null) {
-    const response = await this.sendToPlatform(platform, { content, conversationId }, targetUrl, conversation, roleId);
-    return {
-      success: true,
-      content: response.content || response,
-      conversationUrl: response.conversationUrl
-    };
-  }
-
-  async activatePlatformTab(platform, targetUrl = null) {
-    const provider = PROVIDERS[platform];
-    if (!provider) return false;
-
-    const url = targetUrl || provider.baseUrl;
-    const existingTab = await this.findTabByUrl(url);
-
-    if (existingTab) {
-      await chrome.tabs.update(existingTab.id, { active: true });
-      return true;
-    }
-
-    const tab = await this.openPlatformTab(url);
-    await chrome.tabs.update(tab.id, { active: true });
-    return true;
-  }
-
-  async openPlatformConversation(platform, targetUrl = null) {
-    const provider = PROVIDERS[platform];
-    if (!provider) return { success: false, error: `不支持的平台: ${platform}` };
-
-    const url = targetUrl || provider.baseUrl;
-    const existingTab = await this.findTabByUrl(url);
-
-    if (existingTab) {
-      await chrome.tabs.update(existingTab.id, { active: true });
-      return { success: true, tabId: existingTab.id };
-    }
-
-    const tab = await this.openPlatformTab(url);
-    await chrome.tabs.update(tab.id, { active: true });
-    return { success: true, tabId: tab.id };
-  }
-
-  sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-}
-
-class ConversationManager {
-  constructor(tabManager) {
-    this.tabManager = tabManager;
-    this.messageQueues = new Map();
-  }
-
-  async createConversation(name, modelIds, contextMode, promptId = null, roleSettings = {}) {
-    const conversations = await StorageManager.getConversations();
-
-    // 支持新的modelIds和旧的roleIds
-    const finalModelIds = modelIds || [];
-
-    const newConversation = {
-      id: this.generateId(),
-      name: name || `会话 ${conversations.length + 1}`,
-      modelIds: finalModelIds,          // 新字段
-      roleIds: finalModelIds,            // 兼容旧字段
-      promptId: promptId,                // 新字段：全局提示词
-      contextMode: contextMode || 'self',
-      sendMode: 'parallel',
-      roleSettings: roleSettings || {},
-      roleUrls: {},
-      roleTabIds: {},
-      roleLastMessageIds: {},
-      messages: [],
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    };
-
-    conversations.push(newConversation);
-    await StorageManager.saveConversations(conversations);
-
-    return newConversation;
-  }
-
-  async deleteConversation(conversationId) {
-    let conversations = await StorageManager.getConversations();
-    conversations = conversations.filter(c => c.id !== conversationId);
-    await StorageManager.saveConversations(conversations);
-  }
-
-  async updateConversation(conversationId, updates) {
-    const conversations = await StorageManager.getConversations();
-    const conversation = conversations.find(c => c.id === conversationId);
-
-    if (conversation) {
-      if (updates.contextMode && updates.contextMode !== conversation.contextMode) {
-        throw new Error('会话模式不可修改');
-      }
-      Object.assign(conversation, updates, { updatedAt: Date.now() });
-      await StorageManager.saveConversations(conversations);
-      return conversation;
-    }
-
-    return null;
-  }
-
-  async clearConversationMessages(conversationId) {
-    const conversations = await StorageManager.getConversations();
-    const conversation = conversations.find(c => c.id === conversationId);
-
-    if (conversation) {
-      conversation.messages = [];
-      conversation.roleUrls = {};
-      conversation.roleTabIds = {};
-      conversation.roleLastMessageIds = {};
-      conversation.updatedAt = Date.now();
-      await StorageManager.saveConversations(conversations);
-      return conversation;
-    }
-
-    return null;
-  }
-
-  async addMessage(conversationId, roleId, content, isUser = false) {
-    const queueKey = conversationId;
-
-    if (!this.messageQueues.has(queueKey)) {
-      this.messageQueues.set(queueKey, Promise.resolve());
-    }
-
-    const queue = this.messageQueues.get(queueKey);
-
-    const newQueue = queue.then(async () => {
-      const conversations = await StorageManager.getConversations();
-      const conversation = conversations.find(c => c.id === conversationId);
-
-      if (conversation) {
-        const message = {
-          id: this.generateId(),
-          roleId,
-          content,
-          isUser,
-          timestamp: Date.now()
-        };
-
-        conversation.messages.push(message);
-        conversation.updatedAt = Date.now();
-
-        await StorageManager.saveConversations(conversations);
-        return message;
-      }
-
-      return null;
-    });
-
-    this.messageQueues.set(queueKey, newQueue);
-
-    return newQueue;
-  }
-
-  async getConversation(conversationId) {
-    const conversations = await StorageManager.getConversations();
-    return conversations.find(c => c.id === conversationId) || null;
-  }
-
-  generateId() {
-    return Date.now().toString(36) + Math.random().toString(36).substr(2);
-  }
-}
-
-class RoleManager {
-  constructor(tabManager) {
-    this.tabManager = tabManager;
-  }
-
-  async createRole(name, provider, model, systemPrompt) {
-    const roles = await StorageManager.getRoles();
-
-    const newRole = {
-      id: this.generateId(),
-      name,
-      provider,
-      model,
-      systemPrompt,
-      conversationUrl: null,
-      createdAt: Date.now()
-    };
-
-    roles.push(newRole);
-    await StorageManager.saveRoles(roles);
-
-    return newRole;
-  }
-
-  async updateRole(roleId, updates) {
-    const roles = await StorageManager.getRoles();
-    const role = roles.find(r => r.id === roleId);
-
-    if (role) {
-      Object.assign(role, updates);
-      await StorageManager.saveRoles(roles);
-    }
-  }
-
-  async deleteRole(roleId) {
-    let roles = await StorageManager.getRoles();
-    roles = roles.filter(r => r.id !== roleId);
-    await StorageManager.saveRoles(roles);
-  }
-
-  generateId() {
-    return Date.now().toString(36) + Math.random().toString(36).substr(2);
-  }
-}
-
-class AIMessageManager {
-  constructor(tabManager, conversationManager) {
-    this.tabManager = tabManager;
-    this.conversationManager = conversationManager;
   }
 
   async processUserMessage(conversationId, userMessage) {
     let conversation = await this.conversationManager.getConversation(conversationId);
-    if (!conversation || !conversation.roleIds || conversation.roleIds.length === 0) {
-      throw new Error('会话没有关联的角色');
+    if (!conversation) {
+      throw new Error('会话不存在');
     }
 
     const settings = await StorageManager.getSettings();
     const contextMode = conversation.contextMode || settings.contextMode || 'self';
     const useFloatWindow = settings.floatWindow !== false;
-    const sendMode = conversation.sendMode || 'parallel';
 
     if (useFloatWindow) {
       await this.sendToFloatWindow('addMessage', {
@@ -828,54 +421,295 @@ class AIMessageManager {
       });
     }
 
-    const roles = await StorageManager.getRoles();
-
     await this.conversationManager.addMessage(conversationId, null, userMessage, true);
 
     conversation = await this.conversationManager.getConversation(conversationId);
 
+    if (conversation.flowId) {
+      console.log('[AIMessageManager] 会话使用流程执行模式, flowId:', conversation.flowId);
+      
+      const flow = await flowManager.getFlowById(conversation.flowId);
+      if (!flow) {
+        throw new Error('流程不存在');
+      }
+
+      try {
+        const result = await flowExecutor.executeFlow(flow, userMessage, {
+          maxIterations: 3,
+          onProgress: async (progress) => {
+            console.log('[AIMessageManager] 流程执行进度:', progress);
+            
+            if (useFloatWindow) {
+              await this.sendToFloatWindow('addMessage', {
+                role: '系统',
+                content: `执行进度：第${progress.iteration}/${progress.maxIterations}轮`,
+                isUser: false,
+                isError: false
+              });
+            }
+            
+            const tabs = await chrome.tabs.query({});
+            for (const tab of tabs) {
+              if (tab.url && tab.url.includes('chat/chat.html')) {
+                chrome.tabs.sendMessage(tab.id, {
+                  type: 'flowExecutionProgress',
+                  progress: progress
+                }).catch(() => {});
+              }
+            }
+          }
+        });
+
+        if (!result || !result.content) {
+          console.error('[AIMessageManager] 流程返回无效结果:', result);
+          throw new Error('流程执行返回无效结果');
+        }
+
+        const finalContent = result.content;
+        
+        await this.conversationManager.addMessage(conversationId, null, finalContent, false);
+
+        if (useFloatWindow) {
+          await this.sendToFloatWindow('addMessage', {
+            role: 'AI',
+            content: finalContent,
+            isUser: false,
+            isError: false
+          });
+        }
+
+        const tabs = await chrome.tabs.query({});
+        for (const tab of tabs) {
+          if (tab.url && tab.url.includes('chat/chat.html')) {
+            chrome.tabs.sendMessage(tab.id, {
+              type: 'flowExecutionComplete',
+              result: finalContent,
+              conversationId: conversationId
+            }).catch(() => {});
+          }
+        }
+
+        return await this.conversationManager.getConversation(conversationId);
+      } catch (error) {
+        console.error('[AIMessageManager] 流程执行失败:', error);
+        
+        const errorMessage = `流程执行失败: ${error.message}`;
+        await this.conversationManager.addMessage(conversationId, null, errorMessage, false);
+        
+        if (useFloatWindow) {
+          await this.sendToFloatWindow('addMessage', {
+            role: '系统',
+            content: errorMessage,
+            isUser: false,
+            isError: true
+          });
+        }
+        
+        const tabs = await chrome.tabs.query({});
+        for (const tab of tabs) {
+          if (tab.url && tab.url.includes('chat/chat.html')) {
+            chrome.tabs.sendMessage(tab.id, {
+              type: 'flowExecutionError',
+              error: error.message
+            }).catch(() => {});
+          }
+        }
+        
+        return await this.conversationManager.getConversation(conversationId);
+      }
+    }
+
+    if (!conversation.memberIds || conversation.memberIds.length === 0) {
+      throw new Error('会话没有关联的成员');
+    }
+
+    const sendMode = conversation.sendMode || 'parallel';
+    const members = await StorageManager.getMembers();
+
     (async () => {
       try {
-        console.log('[AIMessageManager] IIFE 开始发送消息, 会话:', conversationId, '角色数:', conversation.roleIds.length);
+        console.log('[AIMessageManager] IIFE 开始发送消息, 会话:', conversationId, '成员数:', conversation.memberIds.length);
         if (sendMode === 'sequential') {
-          await this.sendToRolesSequential(conversation, roles, contextMode, useFloatWindow, conversationId);
+          await this.sendToMembersSequential(conversation, members, contextMode, useFloatWindow, conversationId);
         } else if (sendMode === 'random') {
-          await this.sendToRolesRandom(conversation, roles, contextMode, useFloatWindow, conversationId);
+          await this.sendToMembersRandom(conversation, members, contextMode, useFloatWindow, conversationId);
         } else {
-          const sendPromises = conversation.roleIds.map(async (roleId) => {
-            return await this.sendMessageToRole(roleId, roles, conversation, contextMode, useFloatWindow, conversationId);
+          const sendPromises = conversation.memberIds.map(async (memberId) => {
+            return await this.sendMessageToMember(memberId, members, conversation, contextMode, useFloatWindow, conversationId);
           });
           await Promise.allSettled(sendPromises);
         }
         console.log('[AIMessageManager] IIFE 所有消息发送完成');
       } catch (error) {
-        console.error('[AIMessageManager] 发送消息到角色时出错:', error);
+        console.error('[AIMessageManager] 发送消息到成员时出错:', error);
       }
     })();
 
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    setTimeout(() => {
-      console.log(`[AIMessageManager] 启动轮询监控: ${conversationId}`);
-      startPolling(conversationId);
-    }, 2500);
+    const models = await modelManager.getModels();
+    const hasWebRole = conversation.memberIds.some(memberId => {
+      const member = members.find(r => r.id === memberId);
+      if (!member) return false;
+      const modelConfig = models.find(m => m.provider === member.provider && m.model === member.model);
+      return (modelConfig?.accessMethod || 'web') === 'web';
+    });
+
+    if (hasWebRole) {
+      setTimeout(() => {
+        console.log(`[AIMessageManager] 启动轮询监控: ${conversationId}`);
+        startPolling(conversationId);
+      }, 2500);
+    } else {
+      console.log(`[AIMessageManager] 所有成员均为 API 模式，跳过轮询: ${conversationId}`);
+    }
 
     return await this.conversationManager.getConversation(conversationId);
   }
 
-  async sendMessageToRole(roleId, roles, conversation, contextMode, useFloatWindow, conversationId) {
-    const role = roles.find(r => r.id === roleId);
-    if (!role) return null;
+  async executeDiscussionLoop(conversationId, question, rounds, contextMode, useFloatWindow) {
+    const conversation = await this.conversationManager.getConversation(conversationId);
+    const members = await StorageManager.getMembers();
+    const order = conversation.memberOrder || conversation.memberIds;
 
-    const roleSetting = conversation.roleSettings?.[roleId] || {};
-    const nickname = roleSetting.nickname || role.name;
+    if (useFloatWindow) {
+      await this.sendToFloatWindow('addMessage', {
+        role: '用户',
+        content: `/loop ${question} ${rounds}`,
+        isUser: true,
+        isError: false
+      });
+    }
+
+    await this.conversationManager.addMessage(conversationId, null, question, true);
+
+    let currentConv = await this.conversationManager.getConversation(conversationId);
+
+    for (let round = 0; round < rounds; round++) {
+      console.log(`[DiscussionLoop] 第${round + 1}/${rounds}轮`);
+
+      if (useFloatWindow) {
+        await this.sendToFloatWindow('addMessage', {
+          role: '系统',
+          content: `── 第${round + 1}轮讨论 ──`,
+          isUser: false,
+          isError: false
+        });
+      }
+
+      for (const memberId of order) {
+        currentConv = await this.conversationManager.getConversation(conversationId);
+        await this.sendMessageToMember(memberId, members, currentConv, contextMode, useFloatWindow, conversationId);
+      }
+
+      await this.conversationManager.updateConversation(conversationId, {
+        discussionRounds: (currentConv.discussionRounds || 0) + 1
+      });
+    }
+
+    if (useFloatWindow) {
+      await this.sendToFloatWindow('addMessage', {
+        role: '系统',
+        content: `讨论结束（${rounds}轮完成）`,
+        isUser: false,
+        isError: false
+      });
+    }
+
+    return await this.conversationManager.getConversation(conversationId);
+  }
+
+  async executeExpertQA(conversation, userMessage, useFloatWindow) {
+    let flow = null;
+
+    if (conversation.expertId) {
+      const expert = await expertManager.getExpertById(conversation.expertId);
+      if (!expert) {
+        await this.sendToFloatWindow('addMessage', {
+          role: '系统',
+          content: '错误：专家不存在',
+          isUser: false,
+          isError: true
+        });
+        return;
+      }
+
+      flow = {
+        nodes: expert.nodes || [],
+        connections: expert.connections || []
+      };
+    } else if (conversation.flowId) {
+      flow = await flowManager.getFlowById(conversation.flowId);
+    }
+
+    if (!flow) {
+      await this.sendToFloatWindow('addMessage', {
+        role: '系统',
+        content: '错误：未配置协作方案',
+        isUser: false,
+        isError: true
+      });
+      return;
+    }
+
+    if (useFloatWindow) {
+      await this.sendToFloatWindow('addMessage', {
+        role: '系统',
+        content: '【专家问答】开始执行...',
+        isUser: false,
+        isError: false
+      });
+    }
+
+    const result = await flowExecutor.executeFlow(flow, userMessage, {
+      maxIterations: 3,
+      onProgress: async (progress) => {
+        if (useFloatWindow) {
+          await this.sendToFloatWindow('addMessage', {
+            role: '系统',
+            content: `【专家问答】第${progress.iteration}/${progress.maxIterations}轮执行中...`,
+            isUser: false,
+            isError: false
+          });
+        }
+      }
+    });
+
+    const finalContent = result.content || '未能获取答案';
+
+    if (useFloatWindow) {
+      await this.sendToFloatWindow('addMessage', {
+        role: '专家问答',
+        content: `【${result.metadata?.iterations || 1}轮迭代完成】\n\n${finalContent}`,
+        isUser: false,
+        isError: false
+      });
+    }
+
+    conversation.flowHistory.push({
+      timestamp: Date.now(),
+      question: userMessage,
+      result: result
+    });
+
+    await this.conversationManager.updateConversation(conversation.id, {
+      flowHistory: conversation.flowHistory
+    });
+  }
+
+  async sendMessageToMember(memberId, members, conversation, contextMode, useFloatWindow, conversationId) {
+    const member = members.find(r => r.id === memberId);
+    if (!member) return null;
+
+    const roleSetting = conversation.memberSettings?.[memberId] || {};
+    const nickname = roleSetting.nickname || member.name;
     const additionalPrompt = roleSetting.additionalPrompt || '';
 
     try {
       let messageToSend = '';
 
       if (contextMode === 'self') {
-        const lastMessageId = conversation.roleLastMessageIds?.[roleId];
+        const lastMessageId = conversation.memberLastMessageIds?.[memberId];
         const messagesToSend = this.getMessagesToSend(conversation, lastMessageId, false);
 
         if (messagesToSend.length === 0) {
@@ -884,7 +718,7 @@ class AIMessageManager {
 
         messageToSend = messagesToSend.map(msg => msg.content).join('\n\n');
 
-        let fullPrompt = role.systemPrompt || '';
+        let fullPrompt = member.systemPrompt || '';
         if (additionalPrompt) {
           fullPrompt = fullPrompt ? `${fullPrompt}\n\n${additionalPrompt}` : additionalPrompt;
         }
@@ -895,7 +729,7 @@ class AIMessageManager {
 
         messageToSend += '\n\n**严格遵守**：在你的回复最后必须添加 [[<<>>]] 标记，表示回复结束。';
       } else {
-        const lastMessageId = conversation.roleLastMessageIds?.[roleId];
+        const lastMessageId = conversation.memberLastMessageIds?.[memberId];
         const messagesToSend = this.getMessagesToSend(conversation, lastMessageId, true);
 
         if (messagesToSend.length === 0) {
@@ -904,27 +738,27 @@ class AIMessageManager {
 
         const isFirstTime = !lastMessageId;
         const nicknameMap = {};
-        roles.forEach(r => {
-          const setting = conversation.roleSettings?.[r.id] || {};
+        members.forEach(r => {
+          const setting = conversation.memberSettings?.[r.id] || {};
           nicknameMap[r.id] = setting.nickname || r.name;
         });
 
         if (isFirstTime) {
-          const nicknames = (conversation.roleIds || [])
+          const nicknames = (conversation.memberIds || [])
             .map(id => nicknameMap[id])
             .filter(Boolean);
           messageToSend += `当前我们在一个会话里，会话里有成员 user、${nicknames.join('、')}\n`;
           messageToSend += `你的当前会话名称是：${nickname}\n`;
 
-          let fullPrompt = role.systemPrompt || '';
+          let fullPrompt = member.systemPrompt || '';
           if (additionalPrompt) {
             fullPrompt = fullPrompt ? `${fullPrompt}\n\n${additionalPrompt}` : additionalPrompt;
           }
 
           if (fullPrompt) {
-            messageToSend += `你的角色设定：${fullPrompt}\n`;
+            messageToSend += `你的成员设定：${fullPrompt}\n`;
           }
-          messageToSend += `\n请注意：你只能扮演${nickname}，不可以扮演其他角色。\n\n`;
+          messageToSend += `\n请注意：你只能扮演${nickname}，不可以扮演其他成员。\n\n`;
           messageToSend += '下面是当前会话的历史内容：\n\n';
         }
 
@@ -932,68 +766,76 @@ class AIMessageManager {
           if (msg.isUser) {
             messageToSend += `User: ${msg.content}\n\n`;
           } else {
-            messageToSend += `${nicknameMap[msg.roleId] || 'Assistant'}: ${msg.content}\n\n`;
+            messageToSend += `${nicknameMap[msg.memberId] || 'Assistant'}: ${msg.content}\n\n`;
           }
         });
 
         messageToSend = messageToSend.trim() + '\n\n重要：请在你的回复最后必须添加 [[<<>>]] 标记，表示回复结束。';
       }
 
-      const conversationUrl = conversation.roleUrls?.[roleId];
-      console.log(`[AIMessageManager] 开始发送消息到角色 ${role.name} (${role.provider}), 会话URL: ${conversationUrl}`);
-      const response = await this.tabManager.sendMessage(role.provider, messageToSend, conversationUrl, conversationId, conversation, roleId);
-      console.log(`[AIMessageManager] 角色 ${role.name} 响应: ${response?.success ? '成功' : '失败'}`);
+      const conversationUrl = conversation.memberUrls?.[memberId];
 
-      if (response && response.success) {
-          let content = response.content || '';
+      const models = await modelManager.getModels();
+      const modelConfig = models.find(m => m.provider === member.provider && m.model === member.model);
+      const accessMethod = modelConfig?.accessMethod || 'web';
+      const baseUrl = modelConfig?.baseUrl || '';
+      const apiKey = modelConfig?.apiKey || '';
 
-          const endMarker = '[[<<>>]]';
-          if (content.endsWith(endMarker)) {
-            content = content.slice(0, -endMarker.length).trim();
-          } else {
-            console.warn(`[AIMessageManager] ${role.name} 的回复可能不完整，缺少结束标记`);
-          }
-          if (response.conversationUrl) {
-            if (!conversation.roleUrls) {
-              conversation.roleUrls = {};
-            }
+      const sender = this.senderFactory.getSender(accessMethod);
 
-            if (conversation.roleUrls[roleId] !== response.conversationUrl) {
-              conversation.roleUrls[roleId] = response.conversationUrl;
-            }
-          }
+        console.log(`[AIMessageManager] 开始发送消息到成员 ${member.name} (${member.provider}), accessMethod: ${accessMethod}, 会话URL: ${conversationUrl}`);
+      const response = await sender.send(messageToSend, {
+        provider: member.provider,
+        model: member.model,
+        conversationUrl,
+        conversationId,
+        conversation,
+        memberId,
+        baseUrl,
+        apiKey
+      });
+      console.log(`[AIMessageManager] 成员 ${member.name} 响应成功`);
 
-          const savedMessage = await this.conversationManager.addMessage(conversationId, roleId, content, false);
+      const content = response.content || '';
 
-          if (savedMessage) {
-            if (!conversation.roleLastMessageIds) {
-              conversation.roleLastMessageIds = {};
-            }
-            conversation.roleLastMessageIds[roleId] = savedMessage.id;
-          }
-
-          await this.conversationManager.updateConversation(conversationId, {
-            roleUrls: conversation.roleUrls,
-            roleTabIds: conversation.roleTabIds,
-            roleLastMessageIds: conversation.roleLastMessageIds
-          });
-
-          if (useFloatWindow) {
-            await this.sendToFloatWindow('addMessage', {
-              role: nickname,
-              content: content,
-              isUser: false,
-              isError: false,
-              provider: role.provider
-            });
-          }
-
-          return true;
-        } else {
-          throw new Error('发送消息失败');
+      if (response.conversationUrl) {
+        if (!conversation.memberUrls) {
+          conversation.memberUrls = {};
         }
+
+        if (conversation.memberUrls[memberId] !== response.conversationUrl) {
+          conversation.memberUrls[memberId] = response.conversationUrl;
+        }
+      }
+
+      const savedMessage = await this.conversationManager.addMessage(conversationId, memberId, content, false);
+
+      if (savedMessage) {
+        if (!conversation.memberLastMessageIds) {
+          conversation.memberLastMessageIds = {};
+        }
+        conversation.memberLastMessageIds[memberId] = savedMessage.id;
+      }
+
+      await this.conversationManager.updateConversation(conversationId, {
+        memberUrls: conversation.memberUrls,
+        memberTabIds: conversation.memberTabIds,
+        memberLastMessageIds: conversation.memberLastMessageIds
+      });
+
+      if (useFloatWindow) {
+        await this.sendToFloatWindow('addMessage', {
+          role: nickname,
+          content: content,
+          isUser: false,
+          isError: false,
+          provider: member.provider
+        });
+      }
+
+      return true;
     } catch (error) {
-      console.error(`发送到 ${role.provider} 失败:`, error);
+      console.error(`发送到 ${member.provider} 失败:`, error);
     }
 
     return false;
@@ -1014,21 +856,21 @@ class AIMessageManager {
     return includeUserMessages ? conversation.messages : conversation.messages.filter(m => m.isUser);
   }
 
-  async sendToRolesSequential(conversation, roles, contextMode, useFloatWindow, conversationId) {
-    const roleOrder = conversation.roleOrder || conversation.roleIds;
-    for (let i = 0; i < roleOrder.length; i++) {
-      const roleId = roleOrder[i];
-      await this.sendMessageToRole(roleId, roles, conversation, contextMode, useFloatWindow, conversationId);
+  async sendToMembersSequential(conversation, members, contextMode, useFloatWindow, conversationId) {
+    const memberOrder = conversation.memberOrder || conversation.memberIds;
+    for (let i = 0; i < memberOrder.length; i++) {
+      const memberId = memberOrder[i];
+      await this.sendMessageToMember(memberId, members, conversation, contextMode, useFloatWindow, conversationId);
       conversation = await this.conversationManager.getConversation(conversationId);
     }
   }
 
-  async sendToRolesRandom(conversation, roles, contextMode, useFloatWindow, conversationId) {
-    const shuffledRoleIds = [...conversation.roleIds].sort(() => Math.random() - 0.5);
+  async sendToMembersRandom(conversation, members, contextMode, useFloatWindow, conversationId) {
+    const shuffledMemberIds = [...conversation.memberIds].sort(() => Math.random() - 0.5);
 
-    for (let i = 0; i < shuffledRoleIds.length; i++) {
-      const roleId = shuffledRoleIds[i];
-      await this.sendMessageToRole(roleId, roles, conversation, contextMode, useFloatWindow, conversationId);
+    for (let i = 0; i < shuffledMemberIds.length; i++) {
+      const memberId = shuffledMemberIds[i];
+      await this.sendMessageToMember(memberId, members, conversation, contextMode, useFloatWindow, conversationId);
       conversation = await this.conversationManager.getConversation(conversationId);
     }
   }
@@ -1075,28 +917,28 @@ class AIMessageManager {
       throw new Error('会话不存在');
     }
 
-      // 先删除各个平台的会话
-      const deletedConversations = [];
-      if (conversation.roleUrls && Object.keys(conversation.roleUrls).length > 0) {
-        const roles = await StorageManager.getRoles();
-        console.log(`[AIMessageManager] 准备删除平台会话，共 ${Object.keys(conversation.roleUrls).length} 个`);
+    // 先删除各个平台的会话
+    const deletedConversations = [];
+    if (conversation.memberUrls && Object.keys(conversation.memberUrls).length > 0) {
+      const members = await StorageManager.getMembers();
+      console.log(`[AIMessageManager] 准备删除平台会话，共 ${Object.keys(conversation.memberUrls).length} 个`);
 
-        for (const [roleId, conversationUrl] of Object.entries(conversation.roleUrls)) {
-        const role = roles.find(r => r.id === roleId);
-        if (!role || !conversationUrl) continue;
+      for (const [memberId, conversationUrl] of Object.entries(conversation.memberUrls)) {
+        const member = members.find(r => r.id === memberId);
+        if (!member || !conversationUrl) continue;
 
         try {
-          console.log(`[AIMessageManager] 开始删除 ${role.provider} 平台的会话: ${conversationUrl}`);
-          await this.deletePlatformConversation(role.provider, conversationUrl);
-          deletedConversations.push({ provider: role.provider, url: conversationUrl });
-          console.log(`[AIMessageManager] ✓ ${role.provider} 平台会话删除成功`);
+          console.log(`[AIMessageManager] 开始删除 ${member.provider} 平台的会话: ${conversationUrl}`);
+          await this.deletePlatformConversation(member.provider, conversationUrl);
+          deletedConversations.push({ provider: member.provider, url: conversationUrl });
+          console.log(`[AIMessageManager] ✓ ${member.provider} 平台会话删除成功`);
         } catch (error) {
-          console.error(`[AIMessageManager] ❌ ${role.provider} 平台会话删除失败:`, error.message);
+          console.error(`[AIMessageManager] ❌ ${member.provider} 平台会话删除失败:`, error.message);
         }
       }
-
-      console.log(`[AIMessageManager] 平台会话删除完成，成功删除 ${deletedConversations.length} 个`);
     }
+
+    console.log(`[AIMessageManager] 平台会话删除完成，成功删除 ${deletedConversations.length} 个`);
 
     // 然后清除本地数据
     const result = await this.conversationManager.clearConversationMessages(conversationId);
@@ -1145,10 +987,390 @@ class AIMessageManager {
   }
 }
 
+class StorageManager {
+  static async getConversations() {
+    const result = await chrome.storage.local.get('conversations');
+    return result.conversations || [];
+  }
+
+  static async saveConversations(conversations) {
+    await chrome.storage.local.set({ conversations });
+  }
+
+  static async getMembers() {
+    const result = await chrome.storage.local.get('members');
+    return result.members || [];
+  }
+
+  static async saveMembers(members) {
+    await chrome.storage.local.set({ members });
+  }
+
+  static async getSettings() {
+    const result = await chrome.storage.local.get('settings');
+    return result.settings || {
+      wsUrl: 'ws://localhost:8080',
+      wsEnabled: false,
+      contextMode: 'self',
+      floatWindow: true
+    };
+  }
+
+  static async saveSettings(settings) {
+    await chrome.storage.local.set({ settings });
+  }
+}
+
+class TabManager {
+  constructor() {
+    this.tabs = new Map();
+  }
+
+  async openPlatformTab(platform, forceNew = false, targetUrl = null) {
+    const provider = PROVIDERS[platform];
+    if (!provider) {
+      throw new Error(`不支持的平台: ${platform}`);
+    }
+
+    const url = provider.baseUrl;
+
+    if (!forceNew) {
+      if (targetUrl) {
+        const exactTab = await this.findTabByUrl(targetUrl);
+        if (exactTab) {
+          console.log(`[TabManager] 复用已存在的标签页(URL匹配): ${platform}`);
+          await chrome.tabs.update(exactTab.id, { active: false });
+          await this.sleep(1000);
+          return exactTab;
+        }
+      } else {
+        const existingTab = await this.findPlatformTab(platform);
+        if (existingTab) {
+          console.log(`[TabManager] 复用已存在的标签页: ${platform}`);
+          await chrome.tabs.update(existingTab.id, { active: false });
+          await this.sleep(2000);
+          return existingTab;
+        }
+      }
+    }
+
+    const openUrl = targetUrl || url;
+    console.log(`[TabManager] 创建新标签页: ${platform} -> ${openUrl}`);
+    const tab = await chrome.tabs.create({
+      url: openUrl,
+      active: false
+    });
+
+    this.tabs.set(platform, tab.id);
+    await this.waitForTabReady(tab.id);
+
+    await chrome.tabs.update(tab.id, { active: false });
+
+    return tab;
+  }
+
+  async findPlatformTab(platform) {
+    const provider = PROVIDERS[platform];
+    if (!provider) return null;
+
+    const domain = provider.domain;
+
+    const tabId = this.tabs.get(platform);
+    if (tabId) {
+      try {
+        const tab = await chrome.tabs.get(tabId);
+        if (tab.url && tab.url.includes(domain)) {
+          return tab;
+        } else {
+          this.tabs.delete(platform);
+        }
+      } catch (e) {
+        this.tabs.delete(platform);
+      }
+    }
+
+    const allTabs = await chrome.tabs.query({});
+    const platformTab = allTabs.find(tab =>
+      tab.url && tab.url.includes(domain) && !tab.pendingUrl
+    );
+
+    if (platformTab) {
+      this.tabs.set(platform, platformTab.id);
+      return platformTab;
+    }
+
+    return null;
+  }
+
+  async findTabByUrl(targetUrl) {
+    const allTabs = await chrome.tabs.query({});
+    return allTabs.find(tab => tab.url === targetUrl && !tab.pendingUrl) || null;
+  }
+
+  async waitForTabReady(tabId, timeout = 30000) {
+    const startTime = Date.now();
+
+    return new Promise((resolve, reject) => {
+      const checkReady = async () => {
+        try {
+          const tab = await chrome.tabs.get(tabId);
+
+          if (tab.status === 'complete') {
+            resolve(tab);
+            return;
+          }
+
+          if (Date.now() - startTime > timeout) {
+            reject(new Error(`标签页${tabId} 加载超时`));
+            return;
+          }
+
+          setTimeout(checkReady, 500);
+        } catch (error) {
+          reject(error);
+        }
+      };
+
+      checkReady();
+    });
+  }
+
+  async closePlatformTab(platform) {
+    const tabId = this.tabs.get(platform);
+    if (tabId) {
+      await chrome.tabs.remove(tabId);
+      this.tabs.delete(platform);
+    }
+  }
+
+  async closeTabByUrl(url) {
+    const tab = await this.findTabByUrl(url);
+    if (!tab) return;
+    for (const [platform, tabId] of this.tabs) {
+      if (tabId === tab.id) {
+        this.tabs.delete(platform);
+        break;
+      }
+    }
+    await chrome.tabs.remove(tab.id);
+  }
+
+  async activatePlatformTab(platform) {
+    const existingTab = await this.findPlatformTab(platform);
+
+    if (existingTab) {
+      await chrome.tabs.update(existingTab.id, { active: true });
+      return true;
+    } else {
+      const tab = await this.openPlatformTab(platform, true);
+      await chrome.tabs.update(tab.id, { active: true });
+      return true;
+    }
+  }
+
+  async openPlatformConversation(platform) {
+    const existingTab = await this.findPlatformTab(platform);
+
+    if (existingTab) {
+      await chrome.tabs.update(existingTab.id, { active: true });
+      return { success: true, tabId: existingTab.id };
+    } else {
+      const tab = await this.openPlatformTab(platform, true);
+      await chrome.tabs.update(tab.id, { active: true });
+      return { success: true, tabId: tab.id };
+    }
+  }
+
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+}
+
+class ConversationManager {
+  constructor(tabManager) {
+    this.tabManager = tabManager;
+    this.messageQueues = new Map();
+  }
+
+  async createConversation(name, memberIds, mode, options = {}) {
+    console.log('[Background] createConversation - mode:', mode, 'options:', options);
+    const conversations = await StorageManager.getConversations();
+
+    const modeToContextMode = {
+      brainstorming: 'self',
+      discussion: 'full',
+      expertqa: 'self'
+    };
+
+    const contextMode = modeToContextMode[mode] || (mode === 'self' || mode === 'full' ? mode : 'self');
+    const sendMode = mode === 'discussion' ? 'sequential' : 'parallel';
+
+    const newConversation = {
+      id: this.generateId(),
+      name: name || `会话 ${conversations.length + 1}`,
+      mode: mode || 'brainstorming',
+      contextMode,
+      sendMode,
+      memberIds: memberIds || [],
+      memberSettings: options.memberSettings || {},
+      memberOrder: options.memberOrder || null,
+      expertId: options.expertId || null,
+      memberUrls: {},
+      memberLastMessageIds: {},
+      messages: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+
+    conversations.push(newConversation);
+    await StorageManager.saveConversations(conversations);
+
+    return newConversation;
+  }
+
+  async deleteConversation(conversationId) {
+    let conversations = await StorageManager.getConversations();
+    conversations = conversations.filter(c => c.id !== conversationId);
+    await StorageManager.saveConversations(conversations);
+  }
+
+  async updateConversation(conversationId, updates) {
+    const conversations = await StorageManager.getConversations();
+    const conversation = conversations.find(c => c.id === conversationId);
+
+    if (conversation) {
+      if (updates.mode) {
+        const modeToContextMode = {
+          brainstorming: 'self',
+          discussion: 'full',
+          expertqa: 'self'
+        };
+        updates.contextMode = modeToContextMode[updates.mode] || 'self';
+        updates.sendMode = updates.mode === 'discussion' ? 'sequential' : 'parallel';
+      } else if (updates.contextMode && updates.contextMode !== conversation.contextMode && !updates.mode) {
+        throw new Error('会话模式不可修改');
+      }
+      Object.assign(conversation, updates, { updatedAt: Date.now() });
+      await StorageManager.saveConversations(conversations);
+      return conversation;
+    }
+
+    return null;
+  }
+
+  async clearConversationMessages(conversationId) {
+    const conversations = await StorageManager.getConversations();
+    const conversation = conversations.find(c => c.id === conversationId);
+
+    if (conversation) {
+      conversation.messages = [];
+      conversation.memberUrls = {};
+      conversation.memberLastMessageIds = {};
+      conversation.updatedAt = Date.now();
+      await StorageManager.saveConversations(conversations);
+      return conversation;
+    }
+
+    return null;
+  }
+
+  async addMessage(conversationId, memberId, content, isUser = false) {
+    const queueKey = conversationId;
+
+    if (!this.messageQueues.has(queueKey)) {
+      this.messageQueues.set(queueKey, Promise.resolve());
+    }
+
+    const queue = this.messageQueues.get(queueKey);
+
+    const newQueue = queue.then(async () => {
+      const conversations = await StorageManager.getConversations();
+      const conversation = conversations.find(c => c.id === conversationId);
+
+      if (conversation) {
+        const message = {
+          id: this.generateId(),
+          memberId,
+          content,
+          isUser,
+          timestamp: Date.now()
+        };
+
+        conversation.messages.push(message);
+        conversation.updatedAt = Date.now();
+
+        await StorageManager.saveConversations(conversations);
+        return message;
+      }
+
+      return null;
+    });
+
+    this.messageQueues.set(queueKey, newQueue);
+
+    return newQueue;
+  }
+
+  async getConversation(conversationId) {
+    const conversations = await StorageManager.getConversations();
+    return conversations.find(c => c.id === conversationId) || null;
+  }
+
+  generateId() {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+  }
+}
+
+class MemberManager {
+  constructor(tabManager) {
+    this.tabManager = tabManager;
+  }
+
+  async createMember(name, provider, model, systemPrompt) {
+    const members = await StorageManager.getMembers();
+
+    const newMember = {
+      id: this.generateId(),
+      name,
+      provider,
+      model,
+      systemPrompt,
+      conversationUrl: null,
+      createdAt: Date.now()
+    };
+
+    members.push(newMember);
+    await StorageManager.saveMembers(members);
+
+    return newMember;
+  }
+
+  async updateMember(memberId, updates) {
+    const members = await StorageManager.getMembers();
+    const member = members.find(m => m.id === memberId);
+
+    if (member) {
+      Object.assign(member, updates);
+      await StorageManager.saveMembers(members);
+    }
+  }
+
+  async deleteMember(memberId) {
+    let members = await StorageManager.getMembers();
+    members = members.filter(m => m.id !== memberId);
+    await StorageManager.saveMembers(members);
+  }
+
+  generateId() {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+  }
+}
+
 let tabManager;
 let conversationManager;
-let roleManager;
+let memberManager;
 let aiMessageManager;
+let senderFactory;
 const pendingResponses = new Map();
 const pollingIntervals = new Map();
 let wsManager = null;
@@ -1157,12 +1379,18 @@ let wsManager = null;
 let promptManager;
 let promptFolderManager;
 let modelManager;
+let expertManager;
+let flowManager;
+let flowExecutor;
+let flowTestRunner;
+let teamManager;
 
 async function init() {
   tabManager = new TabManager();
   conversationManager = new ConversationManager(tabManager);
-  roleManager = new RoleManager(tabManager);
-  aiMessageManager = new AIMessageManager(tabManager, conversationManager);
+  memberManager = new MemberManager(tabManager);
+  senderFactory = new SenderFactory(tabManager, pendingResponses);
+  aiMessageManager = new AIMessageManager(tabManager, conversationManager, senderFactory);
   wsManager = new WebSocketManager(tabManager, pendingResponses);
 
   // 初始化新架构管理器
@@ -1170,17 +1398,132 @@ async function init() {
   promptFolderManager = new PromptFolderManager();
   modelManager = new ModelManager();
   flowManager = new FlowManager();
-  flowExecutor = new FlowExecutor(tabManager, conversationManager);
+  flowExecutor = new FlowExecutor(tabManager, conversationManager, senderFactory);
+  teamManager = new TeamManager();
+  expertManager = new ExpertManager();
+  flowTestRunner = new FlowTestRunner(conversationManager, senderFactory);
 
   // 确保模型已导入
   const models = await modelManager.getModels();
   console.log('[Init] 已加载', models.length, '个模型');
+
 
   // 加载设置并连接 WebSocket
   const settings = await StorageManager.getSettings();
   if (settings.wsEnabled && settings.wsUrl) {
     wsManager.connect(settings.wsUrl);
   }
+
+  // 迁移 storage key 'roles' → 'members'
+  try {
+    const oldData = await chrome.storage.local.get('roles');
+    if (oldData.roles) {
+      await chrome.storage.local.set({ members: oldData.roles });
+      await chrome.storage.local.remove('roles');
+      console.log('[Init] 已迁移 storage key: roles → members');
+    }
+  } catch (e) {
+    console.warn('[Init] 迁移 roles → members 失败:', e);
+  }
+
+  // 迁移 conversation 字段 role* → member*
+  try {
+    const result = await chrome.storage.local.get('conversations');
+    const conversations = result.conversations || [];
+    let migrated = false;
+    for (const conv of conversations) {
+      const oldNames = ['roleIds', 'roleSettings', 'roleUrls', 'roleLastMessageIds', 'roleTabIds', 'roleOrder', 'discussionOrder'];
+      const newNames = ['memberIds', 'memberSettings', 'memberUrls', 'memberLastMessageIds', 'memberTabIds', 'memberOrder', 'memberOrder'];
+      for (let i = 0; i < oldNames.length; i++) {
+        if (conv[oldNames[i]] !== undefined) {
+          conv[newNames[i]] = conv[oldNames[i]];
+          delete conv[oldNames[i]];
+          migrated = true;
+        }
+      }
+      // Also migrate message-level roleId → memberId
+      if (conv.messages) {
+        for (const msg of conv.messages) {
+          if (msg.roleId !== undefined) {
+            msg.memberId = msg.roleId;
+            delete msg.roleId;
+            migrated = true;
+          }
+        }
+      }
+    }
+    if (migrated) {
+      await chrome.storage.local.set({ conversations });
+      console.log('[Init] 已迁移 conversation 字段: role* → member*');
+    }
+  } catch (e) {
+    console.warn('[Init] 迁移 conversation 字段失败:', e);
+  }
+
+  // 迁移 prompts: 移除 category 字段，语义融入 tags
+  try {
+    const promptsResult = await chrome.storage.local.get('prompts');
+    const prompts = promptsResult.prompts || [];
+    let promptsMigrated = false;
+    const categoryToTag = {
+      'code': '编程',
+      'writing': '写作',
+      'translation': '翻译',
+      'analysis': '分析',
+      'creative': '创意'
+    };
+    for (const prompt of prompts) {
+      if (prompt.category !== undefined) {
+        const extraTag = categoryToTag[prompt.category];
+        if (extraTag && !(prompt.tags || []).includes(extraTag)) {
+          prompt.tags = [...(prompt.tags || []), extraTag];
+        }
+        delete prompt.category;
+        promptsMigrated = true;
+      }
+    }
+    if (promptsMigrated) {
+      await chrome.storage.local.set({ prompts });
+      console.log('[Init] 已迁移 prompts: 移除 category 字段');
+    }
+    await chrome.storage.local.remove('customCategories');
+  } catch (e) {
+    console.warn('[Init] 迁移 prompts category 失败:', e);
+  }
+}
+
+async function conversationOneShot(modelId, content, systemPrompt) {
+  const model = await modelManager.getModelById(modelId);
+  if (!model) throw new Error('模型不存在');
+
+  const accessMethod = model.accessMethod || 'web';
+  const sender = senderFactory.getSender(accessMethod);
+
+  let response;
+  if (accessMethod === 'api') {
+    const messages = [];
+    if (systemPrompt) {
+      messages.push({ role: 'system', content: systemPrompt });
+    }
+    messages.push({ role: 'user', content });
+    response = await sender.send(messages, {
+      provider: model.provider,
+      model: model.model,
+      baseUrl: model.baseUrl,
+      apiKey: model.apiKey
+    });
+  } else {
+    response = await sender.send(content, {
+      provider: model.provider
+    });
+  }
+
+  return {
+    success: true,
+    content: response.content,
+    model: model.name,
+    timestamp: Date.now()
+  };
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -1243,20 +1586,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const responses = conversation.messages
           .filter((msg, index) => !msg.isUser && index > lastUserMessageIndex)
           .map(msg => ({
-            roleId: msg.roleId,
+            memberId: msg.memberId,
             content: msg.content
           }));
 
-        console.log('[WS] 当前已响应角色数:', responses.length, '/', conversation.roleIds.length);
+        console.log('[WS] 当前已响应成员数:', responses.length, '/', conversation.memberIds.length);
 
-        const allResponded = conversation.roleIds.every(roleId =>
+        const allResponded = conversation.memberIds.every(memberId =>
           conversation.messages.some((msg, index) =>
-            !msg.isUser && msg.roleId === roleId && index > lastUserMessageIndex
+            !msg.isUser && msg.memberId === memberId && index > lastUserMessageIndex
           )
         );
 
         if (allResponded && responses.length > 0) {
-          console.log('[WS] 所有角色已响应，发送响应给客户端');
+          console.log('[WS] 所有成员已响应，发送响应给客户端');
 
           clearTimeout(wsRequest.timeout);
           wsManager.wsRequestQueue.delete(conversationId);
@@ -1275,7 +1618,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
           console.log('[WS] 响应已发送');
         } else {
-          console.log('[WS] 还有角色未响应，继续等待');
+          console.log('[WS] 还有成员未响应，继续等待');
         }
       } catch (error) {
         console.error('[WS] 处理 aiResponse 时出错:', error);
@@ -1331,7 +1674,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   switch (request.action) {
     case 'createConversation':
-      conversationManager.createConversation(request.name, request.modelIds || request.roleIds, request.contextMode, request.promptId, request.roleSettings)
+      console.log('[Background] 收到createConversation请求 - request.mode:', request.mode);
+      conversationManager.createConversation(
+        request.name,
+        request.modelIds || request.memberIds,
+        request.mode || 'brainstorming',
+        {
+          promptId: request.promptId,
+          memberSettings: request.memberSettings,
+          memberOrder: request.memberOrder,
+          expertId: request.expertId,
+          flowId: request.flowId
+        }
+      )
         .then(sendResponse);
       return true;
 
@@ -1344,9 +1699,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       (async () => {
         try {
           const { conversationId, updates } = request;
-          // 支持modelIds，同时更新roleIds以保持兼容
+          // 支持modelIds，同时更新memberIds以保持兼容
           if (updates.modelIds) {
-            updates.roleIds = updates.modelIds;
+            updates.memberIds = updates.modelIds;
           }
           const conversation = await conversationManager.updateConversation(conversationId, updates);
           sendResponse(conversation);
@@ -1375,10 +1730,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       (async () => {
         try {
           const conversation = await aiMessageManager.conversationManager.getConversation(request.conversationId);
-          const savedRoleUrls = conversation?.roleUrls ? { ...conversation.roleUrls } : {};
+          const savedMemberUrls = conversation?.memberUrls ? { ...conversation.memberUrls } : {};
 
           const result = await aiMessageManager.conversationManager.clearConversationMessages(request.conversationId);
-          sendResponse({ success: true, conversation: result, roleUrls: savedRoleUrls });
+          sendResponse({ success: true, conversation: result, memberUrls: savedMemberUrls });
         } catch (error) {
           sendResponse({ error: error.message });
         }
@@ -1388,19 +1743,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case 'clearConversationPlatform':
       (async () => {
         try {
-          const roleUrls = request.roleUrls || {};
+          const memberUrls = request.memberUrls || {};
           const deletedConversations = [];
 
-          if (Object.keys(roleUrls).length > 0) {
-            const roles = await StorageManager.getRoles();
-            for (const [roleId, conversationUrl] of Object.entries(roleUrls)) {
-              const role = roles.find(r => r.id === roleId);
-              if (!role || !conversationUrl) continue;
+          if (Object.keys(memberUrls).length > 0) {
+            const members = await StorageManager.getMembers();
+            for (const [memberId, conversationUrl] of Object.entries(memberUrls)) {
+              const member = members.find(r => r.id === memberId);
+              if (!member || !conversationUrl) continue;
               try {
-                await aiMessageManager.deletePlatformConversation(role.provider, conversationUrl);
-                deletedConversations.push({ provider: role.provider, url: conversationUrl });
+                await aiMessageManager.deletePlatformConversation(member.provider, conversationUrl);
+                deletedConversations.push({ provider: member.provider, url: conversationUrl });
               } catch (error) {
-                console.error(`[AIMessageManager] ❌ ${role.provider} 平台会话删除失败:`, error.message);
+                console.error(`[AIMessageManager] ❌ ${member.provider} 平台会话删除失败:`, error.message);
               }
             }
           }
@@ -1442,8 +1797,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         .then(sendResponse);
       return true;
 
-    case 'createRole':
-      roleManager.createRole(
+    case 'createMember':
+      memberManager.createMember(
         request.name,
         request.provider,
         request.model,
@@ -1451,18 +1806,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       ).then(sendResponse);
       return true;
 
-    case 'updateRole':
-      roleManager.updateRole(request.roleId, request.updates)
+    case 'updateMember':
+      memberManager.updateMember(request.memberId, request.updates)
         .then(() => sendResponse({ success: true }));
       return true;
 
-    case 'deleteRole':
-      roleManager.deleteRole(request.roleId)
+    case 'deleteMember':
+      memberManager.deleteMember(request.memberId)
         .then(() => sendResponse({ success: true }));
       return true;
 
-    case 'getRoles':
-      StorageManager.getRoles().then(sendResponse);
+    case 'getMembers':
+      StorageManager.getMembers().then(sendResponse);
       return true;
 
     case 'updateSettings':
@@ -1640,6 +1995,35 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       flowManager.getFlowById(request.flowId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
       return true;
 
+    // ========== 新架构：团队管理 ==========
+    case 'getTeams':
+      teamManager.getTeams().then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'getTeam':
+      teamManager.getTeam(request.teamId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'getTeamWithMembers':
+      teamManager.getTeamWithMembers(request.teamId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'createTeam':
+      teamManager.createTeam(request.data).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'updateTeam':
+      teamManager.updateTeam(request.teamId, request.data).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'deleteTeam':
+      teamManager.deleteTeam(request.teamId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'searchTeams':
+      teamManager.searchTeams(request.keyword).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
     case 'getModel':
       modelManager.getModelById(request.modelId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
       return true;
@@ -1757,38 +2141,52 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         try {
           const { modelIds, userInput, context } = request;
 
-          // 并行执行所有模型
-          const results = await Promise.all(
+          const results = await Promise.allSettled(
             modelIds.map(async (modelId) => {
               const model = await modelManager.getModelById(modelId);
               if (!model) {
-                throw new Error(`模型不存在: ${modelId}`);
+                return { modelId, modelName: '未知', isVirtual: false, success: false, error: '模型不存在' };
               }
 
               if (model.isVirtual) {
-                // 执行虚拟模型
-                const flow = await flowManager.getFlowById(model.flowId);
-                const result = await flowExecutor.executeFlow(flow, userInput, context);
-                return {
-                  modelId: model.id,
-                  modelName: model.name,
-                  isVirtual: true,
-                  result
-                };
+                try {
+                  const flow = await flowManager.getFlowById(model.flowId);
+                  const result = await flowExecutor.executeFlow(flow, userInput, context);
+                  return {
+                    modelId: model.id,
+                    modelName: model.name,
+                    isVirtual: true,
+                    success: true,
+                    result
+                  };
+                } catch (error) {
+                  return { modelId: model.id, modelName: model.name, isVirtual: true, success: false, error: error.message };
+                }
               } else {
-                // 执行普通模型
-                const result = await tabManager.sendMessage(model.provider, userInput);
-                return {
-                  modelId: model.id,
-                  modelName: model.name,
-                  isVirtual: false,
-                  result
-                };
+                try {
+                  const accessMethod = model.accessMethod || 'web';
+                  const sender = senderFactory.getSender(accessMethod);
+                  const response = await sender.send(userInput, {
+                    provider: model.provider,
+                    model: model.model,
+                    baseUrl: model.baseUrl || '',
+                    apiKey: model.apiKey || ''
+                  });
+                  return {
+                    modelId: model.id,
+                    modelName: model.name,
+                    isVirtual: false,
+                    success: true,
+                    result: { success: true, content: response.content, conversationUrl: response.conversationUrl }
+                  };
+                } catch (error) {
+                  return { modelId: model.id, modelName: model.name, isVirtual: false, success: false, error: error.message };
+                }
               }
             })
           );
 
-          sendResponse({ success: true, results });
+          sendResponse({ success: true, results: results.map(r => r.value || r.reason) });
         } catch (error) {
           sendResponse({ success: false, error: error.message });
         }
@@ -1807,6 +2205,55 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       })();
       return true;
 
+    // ========== 新架构：专家管理 ==========
+    case 'getExperts':
+      expertManager.getExperts().then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'getExpertById':
+      expertManager.getExpertById(request.expertId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'createExpert':
+      expertManager.createExpert(request.data).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'updateExpert':
+      expertManager.updateExpert(request.expertId, request.data).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'deleteExpert':
+      expertManager.deleteExpert(request.expertId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'duplicateExpert':
+      expertManager.duplicateExpert(request.expertId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'searchExperts':
+      expertManager.searchExperts(request.keyword).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'expertAddNode':
+      expertManager.addNode(request.expertId, request.data).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'expertUpdateNode':
+      expertManager.updateNode(request.expertId, request.nodeId, request.data).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'expertDeleteNode':
+      expertManager.deleteNode(request.expertId, request.nodeId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'expertAddConnection':
+      expertManager.addConnection(request.expertId, request.data).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'expertDeleteConnection':
+      expertManager.deleteConnection(request.expertId, request.connectionId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
     case 'disconnectWebSocket':
       if (wsManager) {
         wsManager.disconnect();
@@ -1823,39 +2270,65 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
 
     case 'testPlatform':
-      tabManager.sendMessage(request.platform, '测试连接')
-        .then(response => {
-          if (response && response.success) {
-            sendResponse({
-              success: true,
-              info: {
-                platform: request.platform,
-                response: response.content,
-                length: response.content ? response.content.length : 0
-              }
-            });
-          } else {
-            sendResponse({
-              success: false,
-              error: response?.error || '未收到有效回复'
-            });
-          }
-        })
-        .catch(error => sendResponse({ success: false, error: error.message }));
+      (async () => {
+        try {
+          const sender = senderFactory.getSender('web');
+          const response = await sender.send('测试连接', {
+            provider: request.platform
+          });
+          sendResponse({
+            success: true,
+            info: {
+              platform: request.platform,
+              response: response.content,
+              length: response.content ? response.content.length : 0
+            }
+          });
+        } catch (error) {
+          sendResponse({ success: false, error: error.message });
+        }
+      })();
       return true;
 
     case 'openPlatformConversation':
       (async () => {
         try {
           let targetUrl = request.targetUrl || null;
-          if (!targetUrl && request.conversationId && request.roleId) {
+          if (!targetUrl && request.conversationId && request.memberId) {
             const conversation = await conversationManager.getConversation(request.conversationId);
-            targetUrl = conversation?.roleUrls?.[request.roleId] || null;
+            targetUrl = conversation?.memberUrls?.[request.memberId] || null;
           }
           const result = await tabManager.openPlatformConversation(request.provider, targetUrl);
           sendResponse(result);
         } catch (error) {
           sendResponse({ error: error.message });
+        }
+      })();
+      return true;
+
+    case 'conversationOneShot':
+      conversationOneShot(request.modelId, request.content, request.systemPrompt)
+        .then(sendResponse)
+        .catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'testRunFlow':
+      (async () => {
+        try {
+          const { flowData, startNodeInputs } = request;
+          
+          const onProgress = (progress) => {
+            chrome.tabs.sendMessage(sender.tab.id, {
+              type: 'flowTestProgress',
+              progress
+            }).catch(() => {});
+          };
+
+          const result = await flowTestRunner.testRunFlow(flowData, startNodeInputs, onProgress);
+          sendResponse({ success: true, result });
+        } catch (error) {
+          console.error('[Background] testRunFlow 失败:', error);
+          sendResponse({ success: false, error: error.message });
         }
       })();
       return true;
@@ -1879,9 +2352,9 @@ function startPolling(conversationId) {
         return;
       }
 
-      const roles = await StorageManager.getRoles();
+      const members = await StorageManager.getMembers();
       const sendMode = conversation.sendMode || 'parallel';
-      let pendingRoleIds = [];
+      let pendingMemberIds = [];
 
       if (sendMode === 'parallel' || sendMode === 'random') {
         const lastUserMessage = [...conversation.messages].reverse().find(m => m.isUser);
@@ -1893,14 +2366,14 @@ function startPolling(conversationId) {
 
         const lastUserMessageIndex = conversation.messages.findIndex(m => m.id === lastUserMessage.id);
 
-        conversation.roleIds.forEach(roleId => {
+        conversation.memberIds.forEach(memberId => {
           const hasResponse = conversation.messages.some((msg, index) =>
             !msg.isUser &&
-            msg.roleId === roleId &&
+            msg.memberId === memberId &&
             index > lastUserMessageIndex
           );
           if (!hasResponse) {
-            pendingRoleIds.push(roleId);
+            pendingMemberIds.push(memberId);
           }
         });
       } else if (sendMode === 'sequential') {
@@ -1913,48 +2386,62 @@ function startPolling(conversationId) {
 
         const lastUserMessageIndex = conversation.messages.findIndex(m => m.id === lastUserMessage.id);
 
-        const roleOrder = conversation.roleOrder || conversation.roleIds;
-        for (const roleId of roleOrder) {
+        const memberOrder = conversation.memberOrder || conversation.memberIds;
+        for (const memberId of memberOrder) {
           const hasResponse = conversation.messages.some((msg, index) =>
             !msg.isUser &&
-            msg.roleId === roleId &&
+            msg.memberId === memberId &&
             index > lastUserMessageIndex
           );
 
           if (!hasResponse) {
-            pendingRoleIds = roleOrder.slice(roleOrder.indexOf(roleId));
+            pendingMemberIds = memberOrder.slice(memberOrder.indexOf(memberId));
             break;
           }
         }
       }
 
-      if (pendingRoleIds.length === 0) {
-        console.log('[Background] 所有角色已响应完成，停止轮询');
+      if (pendingMemberIds.length === 0) {
+        console.log('[Background] 所有成员已响应完成，停止轮询');
         stopPolling(conversationId);
         return;
       }
 
-      console.log(`[Background] 检测到 ${pendingRoleIds.length} 个未响应角色`);
+      const models = await modelManager.getModels();
+      const webPendingMemberIds = pendingMemberIds.filter(memberId => {
+        const member = members.find(r => r.id === memberId);
+        if (!member) return false;
+        const modelConfig = models.find(m => m.provider === member.provider && m.model === member.model);
+        return (modelConfig?.accessMethod || 'web') === 'web';
+      });
+
+      if (webPendingMemberIds.length === 0) {
+        console.log('[Background] 剩余未响应成员均为 API 模式，停止轮询');
+        stopPolling(conversationId);
+        return;
+      }
+
+      console.log(`[Background] 检测到 ${webPendingMemberIds.length} 个未响应 Web 成员`);
 
       const browserInfo = await getBrowserInfo();
-      console.log(`[Background] 浏览器: ${browserInfo.name}, 待处理角色: ${pendingRoleIds.map(id => roles.find(r => r.id === id)?.name).join(', ')}`);
+      console.log(`[Background] 浏览器: ${browserInfo.name}, 待处理成员: ${webPendingMemberIds.map(id => members.find(r => r.id === id)?.name).join(', ')}`);
 
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
       const originalActiveTab = tabs[0];
 
-      for (const roleId of pendingRoleIds) {
-        const role = roles.find(r => r.id === roleId);
-        if (!role) continue;
-        const provider = PROVIDERS[role.provider];
-        const roleUrl = conversation.roleUrls?.[roleId];
-        const isBaseUrl = !roleUrl || roleUrl === provider?.baseUrl;
+      for (const memberId of webPendingMemberIds) {
+        const member = members.find(r => r.id === memberId);
+        if (!member) continue;
+        const provider = PROVIDERS[member.provider];
+        const memberUrl = conversation.memberUrls?.[memberId];
+        const isBaseUrl = !memberUrl || memberUrl === provider?.baseUrl;
 
         try {
-          console.log(`[Background] 激活角色 ${role.name} (${role.provider}) 标签页`);
+          console.log(`[Background] 激活成员 ${member.name} (${member.provider}) 标签页`);
           let targetTab = null;
 
           if (isBaseUrl) {
-            const tabId = conversation.roleTabIds?.[roleId];
+            const tabId = conversation.memberTabIds?.[memberId];
             if (tabId) {
               try {
                 await chrome.tabs.get(tabId);
@@ -1964,19 +2451,17 @@ function startPolling(conversationId) {
               }
             }
           } else {
-            targetTab = await tabManager.findTabByUrl(roleUrl);
+            targetTab = await tabManager.findTabByUrl(memberUrl);
           }
 
           if (!targetTab) {
-            console.log(`[Background] 未找到标签页: role: ${role.name}, url=${roleUrl}, provider: ${role.provider}`);
+            console.log(`[Background] 未找到标签页: member: ${member.name}, url=${memberUrl}, provider: ${member.provider}`);
             continue;
           }
 
           await chrome.tabs.update(targetTab.id, { active: true });
-          //await new Promise(resolve => setTimeout(resolve, 100));
-          //await new Promise(resolve => setTimeout(resolve, 300));
         } catch (error) {
-          console.error(`[Background] 激活 ${role.name} 标签页失败`, error);
+          console.error(`[Background] 激活 ${member.name} 标签页失败`, error);
         }
       }
 
@@ -2012,9 +2497,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 if (typeof chrome !== 'undefined' && chrome.action && chrome.action.onClicked) {
   chrome.action.onClicked.addListener(async (tab) => {
-    if (tab.windowId) {
-      await chrome.sidePanel.open({ windowId: tab.windowId });
-    }
+    await chrome.tabs.create({
+      url: chrome.runtime.getURL('chat/chat.html')
+    });
   });
 }
 
@@ -2023,10 +2508,10 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
     const conversations = await StorageManager.getConversations();
     let changed = false;
     for (const conv of conversations) {
-      if (conv.roleTabIds) {
-        for (const [rid, tid] of Object.entries(conv.roleTabIds)) {
+      if (conv.memberTabIds) {
+        for (const [rid, tid] of Object.entries(conv.memberTabIds)) {
           if (tid === tabId) {
-            delete conv.roleTabIds[rid];
+            delete conv.memberTabIds[rid];
             changed = true;
           }
         }
@@ -2036,7 +2521,7 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
       await StorageManager.saveConversations(conversations);
     }
   } catch (error) {
-    console.error('[Background] 清理 roleTabIds 失败:', error);
+    console.error('[Background] 清理 memberTabIds 失败:', error);
   }
 });
 

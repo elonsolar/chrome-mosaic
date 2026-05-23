@@ -247,7 +247,7 @@ class KimiAdapter extends BasePlatformAdapter {
       };
 
       const checkNewMessage = (mutations) => {
-        console.log(`[${this.platform}] MutationObserver 触发`);
+        console.log(`[${this.platform}] [${new Date().toLocaleTimeString()}] MutationObserver 触发`);
         const messages = document.querySelectorAll('div.chat-content-item-assistant');
         if (messages.length === 0) return null;
 
@@ -275,8 +275,6 @@ class KimiAdapter extends BasePlatformAdapter {
         });
 
         let rawText = extractTextWithNewlines(clonedContent).trim();
-
-        if (!rawText || rawText.length < 10) return null;
 
         const thinkKeywords = ['思考中', 'Thinking', '正在思考', '思考内容', '搜索中'];
         const hasThinkKeyword = thinkKeywords.some(keyword => rawText.includes(keyword));

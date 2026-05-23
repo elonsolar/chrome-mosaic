@@ -183,6 +183,23 @@ class DoubaoAdapter extends BasePlatformAdapter {
       return table + '\n';
     };
 
+    const extractList = (listNode, isOrdered) => {
+      const items = listNode.querySelectorAll('li');
+      if (items.length === 0) return '';
+
+      let list = '\n';
+      items.forEach(item => {
+        const text = item.textContent.trim();
+        if (isOrdered) {
+          list += `1. ${text}\n`;
+        } else {
+          list += `- ${text}\n`;
+        }
+      });
+
+      return list + '\n';
+    };
+
     const walk = (node, inBlock) => {
       if (node.nodeType === Node.TEXT_NODE) {
         result += node.textContent;
@@ -190,8 +207,26 @@ class DoubaoAdapter extends BasePlatformAdapter {
         const isBlock = blockTags.has(node.tagName);
         const isHeading = headingTags[node.tagName];
 
+        // 处理分隔线
+        if (node.tagName === 'HR') {
+          result += '\n---\n\n';
+          return;
+        }
+
+        // 处理列表
+        if (node.tagName === 'UL' || node.tagName === 'OL') {
+          if (result.length > 0 && !result.endsWith('\n')) {
+            result += '\n';
+          }
+          result += extractList(node, node.tagName === 'OL');
+          return;
+        }
+
         if (node.tagName === 'BR') {
-          result += '\n';
+          // 忽略连续的BR（布局用），只保留单个换行
+          if (!result.endsWith('\n')) {
+            result += '\n';
+          }
         } else if (node.tagName === 'TABLE') {
           result += extractTable(node);
         } else if (isHeading) {
@@ -200,11 +235,28 @@ class DoubaoAdapter extends BasePlatformAdapter {
           }
           result += isHeading;
           for (let child of node.childNodes) {
-            walk(child, true);
+            walk(child, false);
           }
           if (!result.endsWith('\n')) {
             result += '\n';
           }
+        } else if (node.tagName === 'STRONG' || node.tagName === 'B') {
+          // 保留文本强调
+          result += '**';
+          for (let child of node.childNodes) {
+            walk(child, false);
+          }
+          result += '**';
+        } else if (node.tagName === 'BLOCKQUOTE') {
+          // 保留引用
+          if (result.length > 0 && !result.endsWith('\n')) {
+            result += '\n';
+          }
+          result += '> ';
+          for (let child of node.childNodes) {
+            walk(child, false);
+          }
+          result += '\n\n';
         } else {
           if (isBlock && inBlock && result.length > 0 && !result.endsWith('\n')) {
             result += '\n';
@@ -214,7 +266,14 @@ class DoubaoAdapter extends BasePlatformAdapter {
             walk(child, isBlock || inBlock);
           }
 
-          if (isBlock && !result.endsWith('\n')) {
+          // 跳过空DIV和布局用DIV（不添加换行符）
+          const isLayoutDiv = node.tagName === 'DIV' && (
+            !node.textContent.trim() ||
+            node.className.includes('container-') ||
+            node.className.includes('wrapper-') ||
+            node.className.includes('md-box-line-break')
+          );
+          if (isBlock && !isLayoutDiv && !result.endsWith('\n')) {
             result += '\n';
           }
         }
@@ -286,6 +345,10 @@ class DoubaoAdapter extends BasePlatformAdapter {
         // 移除用户输入部分（通常包含输入提示）
         const userInputElements = clonedMessage.querySelectorAll('[class*="whitespace-pre-wrap"], [class*="user-input"]');
         userInputElements.forEach(el => el.remove());
+
+        // 移除 select-none class 的元素
+        const selectNoneElements = clonedMessage.querySelectorAll('.select-none');
+        selectNoneElements.forEach(el => el.remove());
 
         const formattedElement = this.formatCodeBlocks(clonedMessage);
 

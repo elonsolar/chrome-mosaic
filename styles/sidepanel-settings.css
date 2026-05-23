@@ -1,0 +1,915 @@
+/* 设置页面样式 - 现代化重构 */
+/* 所有样式限定在 #settings-tab 内，避免影响其他标签页 */
+
+#settings-tab {
+  /* CSS 变量系统 - 与项目整体设计保持一致 */
+  --settings-primary: #667eea;
+  --settings-primary-dark: #5568d3;
+
+  /* 背景色 */
+  --settings-bg: #f5f7fa;
+  --settings-card-bg: #ffffff;
+
+  /* 边框和分割线 */
+  --settings-border: #e8e8ed;
+
+  /* 文本颜色 */
+  --settings-text-primary: #1a1a1a;
+  --settings-text-secondary: #6b7280;
+  --settings-text-hint: #9ca3af;
+
+  /* 状态颜色 */
+  --settings-success-bg: #d1fae5;
+  --settings-success-text: #059669;
+  --settings-error-bg: #fee2e2;
+  --settings-error-text: #dc2626;
+  --settings-warning-bg: #fef3c7;
+  --settings-warning-text: #d97706;
+
+  /* 阴影 */
+  --settings-shadow-sm: none;
+  --settings-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.04);
+  --settings-shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --settings-shadow-hover: 0 4px 16px rgba(0, 0, 0, 0.08);
+
+  /* 间距系统 */
+  --settings-spacing-xs: 5px;
+  --settings-spacing-sm: 10px;
+  --settings-spacing-md: 16px;
+  --settings-spacing-lg: 21px;
+  --settings-spacing-xl: 31px;
+  --settings-spacing-2xl: 42px;
+
+  /* 圆角 */
+  --settings-radius-sm: 8px;
+  --settings-radius-md: 8px;
+  --settings-radius-lg: 12px;
+  --settings-radius-xl: 12px;
+
+  /* 动画时长 */
+  --settings-duration-fast: 150ms;
+  --settings-duration-normal: 250ms;
+  --settings-duration-slow: 350ms;
+}
+
+/* ============================================================
+   设置页面容器
+   ============================================================ */
+
+#settings-tab .settings-section {
+  padding: var(--settings-spacing-lg);
+}
+
+/* ============================================================
+   设置区块标题
+   ============================================================ */
+
+#settings-tab .settings-section__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--settings-text-primary);
+  margin-top: var(--settings-spacing-xl);
+  margin-bottom: var(--settings-spacing-md);
+  letter-spacing: -0.01em;
+}
+
+#settings-tab .settings-section__title:first-child {
+  margin-top: 0;
+}
+
+/* ============================================================
+   设置卡片
+   ============================================================ */
+
+#settings-tab .setting-card {
+  background: var(--settings-card-bg);
+  border: 1px solid var(--settings-border);
+  border-radius: var(--settings-radius-lg);
+  padding: var(--settings-spacing-lg);
+  margin-bottom: var(--settings-spacing-lg);
+  transition: all var(--settings-duration-normal) cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--settings-shadow-sm);
+}
+
+#settings-tab .setting-card:hover {
+  border-color: var(--settings-primary);
+  box-shadow: var(--settings-shadow-md);
+  transform: translateY(-2px);
+}
+
+/* ============================================================
+   表单标签
+   ============================================================ */
+
+#settings-tab .setting-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--settings-text-secondary);
+  margin-bottom: var(--settings-spacing-sm);
+  display: block;
+}
+
+/* ============================================================
+   表单输入框
+   ============================================================ */
+
+#settings-tab .setting-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--settings-border);
+  border-radius: var(--settings-radius-md);
+  font-size: 14px;
+  font-family: inherit;
+  transition: all var(--settings-duration-fast) ease;
+  background: #fafafa;
+}
+
+#settings-tab .setting-input:focus {
+  outline: none;
+  border-color: var(--settings-primary);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+#settings-tab .setting-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#settings-tab .setting-input::placeholder {
+  color: var(--settings-text-hint);
+}
+
+/* ============================================================
+   表单描述文本
+   ============================================================ */
+
+#settings-tab .setting-hint {
+  font-size: 11px;
+  color: var(--settings-text-hint);
+  margin-top: var(--settings-spacing-sm);
+  display: block;
+  line-height: 1.4;
+}
+
+#settings-tab .setting-desc {
+  font-size: 11px;
+  color: var(--settings-text-hint);
+  margin: var(--settings-spacing-sm) 0 0;
+  line-height: 1.4;
+}
+
+/* ============================================================
+   复选框包装器
+   ============================================================ */
+
+#settings-tab .setting-checkbox-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--settings-spacing-sm);
+}
+
+#settings-tab .setting-checkbox-wrapper .setting-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--settings-primary);
+}
+
+/* ============================================================
+   开关切换器
+   ============================================================ */
+
+#settings-tab .setting-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--settings-spacing-sm);
+}
+
+#settings-tab .setting-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--settings-primary);
+}
+
+#settings-tab .setting-toggle label {
+  font-size: 13px;
+  color: var(--settings-text-primary);
+  cursor: pointer;
+  user-select: none;
+  font-weight: 500;
+}
+
+/* ============================================================
+   WebSocket 状态指示器
+   ============================================================ */
+
+#settings-tab .ws-status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--settings-spacing-sm);
+  padding: var(--settings-spacing-sm) var(--settings-spacing-lg);
+  border-radius: var(--settings-radius-lg);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all var(--settings-duration-normal) ease;
+  margin-bottom: var(--settings-spacing-lg);
+}
+
+#settings-tab .ws-status-indicator--connected {
+  background: var(--settings-success-bg);
+  color: var(--settings-success-text);
+}
+
+#settings-tab .ws-status-indicator--disconnected {
+  background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+  color: var(--settings-text-secondary);
+}
+
+#settings-tab .ws-status-indicator--connecting {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  color: #1e40af;
+}
+
+#settings-tab .ws-status-indicator--error {
+  background: var(--settings-error-bg);
+  color: var(--settings-error-text);
+}
+
+#settings-tab .ws-status__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+#settings-tab .ws-status-indicator--connected .ws-status__dot {
+  background: var(--settings-success-text);
+}
+
+#settings-tab .ws-status-indicator--disconnected .ws-status__dot {
+  background: var(--settings-text-secondary);
+}
+
+#settings-tab .ws-status-indicator--connecting .ws-status__dot {
+  background: #1e40af;
+}
+
+#settings-tab .ws-status-indicator--error .ws-status__dot {
+  background: var(--settings-error-text);
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.1);
+  }
+}
+
+/* 兼容旧版类名 */
+#settings-tab .ws-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--settings-spacing-sm);
+  padding: var(--settings-spacing-sm) var(--settings-spacing-lg);
+  border-radius: var(--settings-radius-lg);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all var(--settings-duration-normal) ease;
+  margin-bottom: var(--settings-spacing-lg);
+}
+
+#settings-tab .ws-status.disconnected {
+  background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+  color: var(--settings-text-secondary);
+}
+
+#settings-tab .ws-status.connected {
+  background: var(--settings-success-bg);
+  color: var(--settings-success-text);
+}
+
+#settings-tab .ws-status .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+/* ============================================================
+   按钮组
+   ============================================================ */
+
+#settings-tab .settings-actions {
+  display: flex;
+  gap: var(--settings-spacing-sm);
+  margin-bottom: var(--settings-spacing-xl);
+}
+
+#settings-tab .settings-actions .btn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--settings-spacing-sm);
+}
+
+/* ============================================================
+   警告框
+   ============================================================ */
+
+#settings-tab .warning-box {
+  background: var(--settings-warning-bg);
+  border-left: 4px solid var(--settings-warning-text);
+  padding: var(--settings-spacing-lg);
+  border-radius: var(--settings-radius-lg);
+  margin: var(--settings-spacing-lg) 0;
+  font-size: 13px;
+  color: var(--settings-warning-text);
+  box-shadow: 0 2px 8px rgba(217, 119, 6, 0.15);
+}
+
+#settings-tab .warning-box strong {
+  display: block;
+  margin-bottom: var(--settings-spacing-sm);
+  font-weight: 600;
+}
+
+#settings-tab .warning-box ul {
+  margin: var(--settings-spacing-sm) 0 0 var(--settings-spacing-lg);
+  padding: 0;
+}
+
+#settings-tab .warning-box li {
+  margin-bottom: var(--settings-spacing-xs);
+  line-height: 1.5;
+}
+
+/* ============================================================
+   平台列表
+   ============================================================ */
+
+#settings-tab .platform-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--settings-spacing-sm);
+  margin-top: var(--settings-spacing-md);
+}
+
+#settings-tab .platform-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--settings-spacing-md) var(--settings-spacing-lg);
+  background: var(--settings-card-bg);
+  border: 1px solid var(--settings-border);
+  border-radius: var(--settings-radius-lg);
+  font-size: 13px;
+  transition: all var(--settings-duration-normal) cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--settings-shadow-sm);
+}
+
+#settings-tab .platform-item:hover {
+  border-color: var(--settings-primary);
+  transform: translateY(-1px);
+  box-shadow: var(--settings-shadow-md);
+}
+
+#settings-tab .platform-item strong {
+  color: var(--settings-text-primary);
+  font-weight: 600;
+}
+
+#settings-tab .platform-item a {
+  color: #2196f3;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  background: #e3f2fd;
+  border-radius: var(--settings-radius-sm);
+  transition: all var(--settings-duration-fast) ease;
+}
+
+#settings-tab .platform-item a:hover {
+  background: #2196f3;
+  color: white;
+  transform: scale(1.05);
+}
+
+/* ============================================================
+   可访问性增强
+   ============================================================ */
+
+/* 焦点可见性 */
+#settings-tab .setting-input:focus-visible,
+#settings-tab .setting-checkbox:focus-visible,
+#settings-tab .btn:focus-visible {
+  outline: 2px solid var(--settings-primary);
+  outline-offset: 2px;
+}
+
+/* 键盘导航 */
+#settings-tab .setting-input:focus,
+#settings-tab .btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* ============================================================
+   辅助类
+   ============================================================ */
+
+#settings-tab .hidden {
+  display: none !important;
+}
+
+#settings-tab .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ============================================================
+   减少动画偏好设置支持
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  #settings-tab .setting-card,
+  #settings-tab .platform-item,
+  #settings-tab .ws-status-indicator,
+  #settings-tab .ws-status__dot,
+  #settings-tab .setting-input,
+  #settings-tab .btn,
+  #settings-tab .platform-item a {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+/* ============================================================
+   响应式设计
+   ============================================================ */
+
+@media (max-width: 768px) {
+  #settings-tab .settings-section {
+    padding: var(--settings-spacing-md);
+  }
+
+  #settings-tab .setting-card {
+    padding: var(--settings-spacing-md);
+  }
+
+  #settings-tab .settings-actions {
+    flex-direction: column;
+  }
+
+  #settings-tab .platform-item {
+    padding: var(--settings-spacing-sm) var(--settings-spacing-md);
+  }
+}
+
+/* ============================================================
+   设置页面容器
+   ============================================================ */
+
+.settings-section {
+  padding: var(--settings-spacing-lg);
+}
+
+/* ============================================================
+   设置区块标题
+   ============================================================ */
+
+.settings-section__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--settings-text-primary);
+  margin-top: var(--settings-spacing-xl);
+  margin-bottom: var(--settings-spacing-md);
+  letter-spacing: -0.01em;
+}
+
+.settings-section__title:first-child {
+  margin-top: 0;
+}
+
+/* ============================================================
+   设置卡片
+   ============================================================ */
+
+.setting-card {
+  background: var(--settings-card-bg);
+  border: 1px solid var(--settings-border);
+  border-radius: var(--settings-radius-lg);
+  padding: var(--settings-spacing-lg);
+  margin-bottom: var(--settings-spacing-lg);
+  transition: all var(--settings-duration-normal) cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--settings-shadow-sm);
+}
+
+.setting-card:hover {
+  border-color: var(--settings-primary);
+  box-shadow: var(--settings-shadow-md);
+  transform: translateY(-2px);
+}
+
+/* ============================================================
+   表单标签
+   ============================================================ */
+
+.setting-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--settings-text-secondary);
+  margin-bottom: var(--settings-spacing-sm);
+  display: block;
+}
+
+/* ============================================================
+   表单输入框
+   ============================================================ */
+
+.setting-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--settings-border);
+  border-radius: var(--settings-radius-md);
+  font-size: 14px;
+  font-family: inherit;
+  transition: all var(--settings-duration-fast) ease;
+  background: #fafafa;
+}
+
+.setting-input:focus {
+  outline: none;
+  border-color: var(--settings-primary);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.setting-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.setting-input::placeholder {
+  color: var(--settings-text-hint);
+}
+
+/* ============================================================
+   表单描述文本
+   ============================================================ */
+
+.setting-hint {
+  font-size: 11px;
+  color: var(--settings-text-hint);
+  margin-top: var(--settings-spacing-sm);
+  display: block;
+  line-height: 1.4;
+}
+
+.setting-desc {
+  font-size: 11px;
+  color: var(--settings-text-hint);
+  margin: var(--settings-spacing-sm) 0 0;
+  line-height: 1.4;
+}
+
+/* ============================================================
+   复选框包装器
+   ============================================================ */
+
+.setting-checkbox-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--settings-spacing-sm);
+}
+
+.setting-checkbox-wrapper .setting-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--settings-primary);
+}
+
+/* ============================================================
+   开关切换器
+   ============================================================ */
+
+.setting-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--settings-spacing-sm);
+}
+
+.setting-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--settings-primary);
+}
+
+.setting-toggle label {
+  font-size: 13px;
+  color: var(--settings-text-primary);
+  cursor: pointer;
+  user-select: none;
+  font-weight: 500;
+}
+
+/* ============================================================
+   WebSocket 状态指示器
+   ============================================================ */
+
+.ws-status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--settings-spacing-sm);
+  padding: var(--settings-spacing-sm) var(--settings-spacing-lg);
+  border-radius: var(--settings-radius-lg);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all var(--settings-duration-normal) ease;
+  margin-bottom: var(--settings-spacing-lg);
+}
+
+.ws-status-indicator--connected {
+  background: var(--settings-success-bg);
+  color: var(--settings-success-text);
+}
+
+.ws-status-indicator--disconnected {
+  background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+  color: var(--settings-text-secondary);
+}
+
+.ws-status-indicator--connecting {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  color: #1e40af;
+}
+
+.ws-status-indicator--error {
+  background: var(--settings-error-bg);
+  color: var(--settings-error-text);
+}
+
+.ws-status__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.ws-status-indicator--connected .ws-status__dot {
+  background: var(--settings-success-text);
+}
+
+.ws-status-indicator--disconnected .ws-status__dot {
+  background: var(--settings-text-secondary);
+}
+
+.ws-status-indicator--connecting .ws-status__dot {
+  background: #1e40af;
+}
+
+.ws-status-indicator--error .ws-status__dot {
+  background: var(--settings-error-text);
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.1);
+  }
+}
+
+/* 兼容旧版类名 */
+.ws-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--settings-spacing-sm);
+  padding: var(--settings-spacing-sm) var(--settings-spacing-lg);
+  border-radius: var(--settings-radius-lg);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all var(--settings-duration-normal) ease;
+  margin-bottom: var(--settings-spacing-lg);
+}
+
+.ws-status.disconnected {
+  background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+  color: var(--settings-text-secondary);
+}
+
+.ws-status.connected {
+  background: var(--settings-success-bg);
+  color: var(--settings-success-text);
+}
+
+.ws-status .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+/* ============================================================
+   按钮组
+   ============================================================ */
+
+.settings-actions {
+  display: flex;
+  gap: var(--settings-spacing-sm);
+  margin-bottom: var(--settings-spacing-xl);
+}
+
+.settings-actions .btn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--settings-spacing-sm);
+}
+
+/* ============================================================
+   警告框
+   ============================================================ */
+
+.warning-box {
+  background: var(--settings-warning-bg);
+  border-left: 4px solid var(--settings-warning-text);
+  padding: var(--settings-spacing-lg);
+  border-radius: var(--settings-radius-lg);
+  margin: var(--settings-spacing-lg) 0;
+  font-size: 13px;
+  color: var(--settings-warning-text);
+  box-shadow: 0 2px 8px rgba(217, 119, 6, 0.15);
+}
+
+.warning-box strong {
+  display: block;
+  margin-bottom: var(--settings-spacing-sm);
+  font-weight: 600;
+}
+
+.warning-box ul {
+  margin: var(--settings-spacing-sm) 0 0 var(--settings-spacing-lg);
+  padding: 0;
+}
+
+.warning-box li {
+  margin-bottom: var(--settings-spacing-xs);
+  line-height: 1.5;
+}
+
+/* ============================================================
+   平台列表
+   ============================================================ */
+
+.platform-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--settings-spacing-sm);
+  margin-top: var(--settings-spacing-md);
+}
+
+.platform-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--settings-spacing-md) var(--settings-spacing-lg);
+  background: var(--settings-card-bg);
+  border: 1px solid var(--settings-border);
+  border-radius: var(--settings-radius-lg);
+  font-size: 13px;
+  transition: all var(--settings-duration-normal) cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--settings-shadow-sm);
+}
+
+.platform-item:hover {
+  border-color: var(--settings-primary);
+  transform: translateY(-1px);
+  box-shadow: var(--settings-shadow-md);
+}
+
+.platform-item strong {
+  color: var(--settings-text-primary);
+  font-weight: 600;
+}
+
+.platform-item a {
+  color: #2196f3;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  background: #e3f2fd;
+  border-radius: var(--settings-radius-sm);
+  transition: all var(--settings-duration-fast) ease;
+}
+
+.platform-item a:hover {
+  background: #2196f3;
+  color: white;
+  transform: scale(1.05);
+}
+
+/* ============================================================
+   可访问性增强
+   ============================================================ */
+
+/* 焦点可见性 */
+.setting-input:focus-visible,
+.setting-checkbox:focus-visible,
+.btn:focus-visible {
+  outline: 2px solid var(--settings-primary);
+  outline-offset: 2px;
+}
+
+/* 键盘导航 */
+.setting-input:focus,
+.btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* ============================================================
+   辅助类
+   ============================================================ */
+
+.hidden {
+  display: none !important;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ============================================================
+   减少动画偏好设置支持
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .setting-card,
+  .platform-item,
+  .ws-status-indicator,
+  .ws-status__dot,
+  .setting-input,
+  .btn,
+  .platform-item a {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+/* ============================================================
+   响应式设计
+   ============================================================ */
+
+@media (max-width: 768px) {
+  .settings-section {
+    padding: var(--settings-spacing-md);
+  }
+  
+  .setting-card {
+    padding: var(--settings-spacing-md);
+  }
+  
+  .settings-actions {
+    flex-direction: column;
+  }
+  
+  .platform-item {
+    padding: var(--settings-spacing-sm) var(--settings-spacing-md);
+  }
+}

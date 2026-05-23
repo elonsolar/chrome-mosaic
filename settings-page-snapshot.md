@@ -1,0 +1,92 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - navigation [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - img [ref=e6]
+          - generic [ref=e9]: Free AI
+        - paragraph
+      - generic [ref=e10]:
+        - link "📝 提示词" [ref=e11] [cursor=pointer]:
+          - /url: "#prompts"
+          - generic [ref=e12]: 📝
+          - generic [ref=e13]: 提示词
+        - link "🤖 模型" [ref=e14] [cursor=pointer]:
+          - /url: "#models"
+          - generic [ref=e15]: 🤖
+          - generic [ref=e16]: 模型
+        - link "🎓 专家" [ref=e17] [cursor=pointer]:
+          - /url: "#experts"
+          - generic [ref=e18]: 🎓
+          - generic [ref=e19]: 专家
+        - link "⚙️ 设置" [ref=e20] [cursor=pointer]:
+          - /url: "#settings"
+          - generic [ref=e21]: ⚙️
+          - generic [ref=e22]: 设置
+      - button "返回对话" [ref=e24] [cursor=pointer]:
+        - img [ref=e26]
+        - generic [ref=e28]: 返回对话
+        - img [ref=e29]
+    - main [ref=e31]:
+      - generic [ref=e38]:
+        - generic [ref=e39]:
+          - heading "系统设置" [level=2] [ref=e40]
+          - paragraph [ref=e41]: 配置您的 Free AI 使用偏好
+        - generic [ref=e42]:
+          - generic [ref=e43]:
+            - generic [ref=e44]: 🔌
+            - heading "连接设置" [level=3] [ref=e45]
+          - generic [ref=e46]:
+            - generic [ref=e47]:
+              - generic [ref=e48]:
+                - generic [ref=e49]: WebSocket 服务器地址
+                - paragraph [ref=e50]: 输入本地 WebSocket 服务器地址
+              - textbox "WebSocket 服务器地址" [ref=e51]:
+                - /placeholder: ws://localhost:8080
+                - text: ws://localhost:8080
+            - generic [ref=e52]:
+              - generic [ref=e53]:
+                - generic [ref=e54]: 启用 WebSocket 连接
+                - paragraph [ref=e55]: 启用后将自动连接到本地服务器
+              - generic [ref=e56]:
+                - switch "启用 WebSocket 连接"
+            - generic [ref=e58]:
+              - generic [ref=e59]:
+                - generic [ref=e60]: 连接状态
+                - paragraph [ref=e61]: 实时显示 WebSocket 连接情况
+              - generic [ref=e64]: 未连接
+        - generic [ref=e65]:
+          - generic [ref=e66]:
+            - generic [ref=e67]: 💬
+            - heading "消息设置" [level=3] [ref=e68]
+          - generic [ref=e70]:
+            - generic [ref=e71]:
+              - generic [ref=e72]: 浮动窗口
+              - paragraph [ref=e73]: 在当前页面显示 AI 回复，不切换标签页
+            - generic [ref=e74]:
+              - switch "启用浮动窗口"
+        - generic [ref=e76]:
+          - generic [ref=e77]:
+            - generic [ref=e78]: 🤖
+            - heading "辅助功能" [level=3] [ref=e79]
+          - generic [ref=e81]:
+            - generic [ref=e82]:
+              - generic [ref=e83]: 辅助模型
+              - paragraph [ref=e84]: 用于会话标题生成、提示词优化等系统辅助功能
+            - combobox "辅助模型" [ref=e85] [cursor=pointer]:
+              - option "请选择模型" [selected]
+              - option "DeepSeek"
+              - option "豆包"
+              - option "千问"
+              - option "Kimi"
+        - generic [ref=e86]:
+          - generic [ref=e87]:
+            - generic [ref=e88]: ⚠️
+            - heading "使用提示" [level=3] [ref=e89]
+          - generic [ref=e90]:
+            - strong [ref=e91]: 重要提示：
+            - list [ref=e92]:
+              - listitem [ref=e93]: 使用前请先在浏览器中登录对应的 AI 网站
+              - listitem [ref=e94]: 插件会在后台打开 AI 网站标签页进行操作
+              - listitem [ref=e95]: 请勿关闭 AI 网站标签页，否则无法发送消息
+  - text: ℹ ℹ

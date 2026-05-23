@@ -1,0 +1,532 @@
+- generic [ref=e1]:
+  - generic [ref=e18]:
+    - alert [ref=e20]:
+      - generic [ref=e21]:
+        - generic [ref=e25]:
+          - text: 扣子编程，你的 AI 开发伙伴已就位，
+          - link "立即前往体验" [ref=e26] [cursor=pointer]:
+            - /url: https://code.coze.cn
+        - button "Close" [ref=e27] [cursor=pointer]:
+          - img [ref=e29]
+    - generic [ref=e34]:
+      - generic [ref=e38]:
+        - generic [ref=e39]:
+          - button [ref=e41] [cursor=pointer]:
+            - img [ref=e43]
+          - generic [ref=e45]:
+            - listitem [ref=e47]
+            - heading "电路学习" [level=1] [ref=e48]
+            - button [ref=e50] [cursor=pointer]:
+              - img [ref=e52]
+        - generic [ref=e56]:
+          - generic [ref=e57] [cursor=pointer]:
+            - generic [ref=e58]:
+              - radio "业务逻辑" [checked] [ref=e59]
+              - img "radio" [ref=e61]:
+                - img [ref=e62]
+            - generic [ref=e66]:
+              - img [ref=e67]
+              - generic [ref=e69]: 业务逻辑
+          - generic [ref=e70] [cursor=pointer]:
+            - radio "用户界面" [ref=e72]
+            - generic [ref=e75]:
+              - img [ref=e76]
+              - generic [ref=e79]: 用户界面
+        - generic [ref=e81]:
+          - button [ref=e84] [cursor=pointer]:
+            - img [ref=e86]
+          - button [ref=e90] [cursor=pointer]:
+            - img [ref=e92]
+          - button "发布" [ref=e96] [cursor=pointer]:
+            - generic [ref=e97]: 发布
+          - button [ref=e99] [cursor=pointer]:
+            - img [ref=e101]
+      - generic [ref=e104]:
+        - generic [ref=e107]:
+          - generic [ref=e110]:
+            - generic [ref=e111]:
+              - generic [ref=e112]:
+                - text: 资源
+                - button "引用关系" [ref=e113] [cursor=pointer]:
+                  - generic [ref=e114]:
+                    - img [ref=e115]
+                    - generic [ref=e118]: 引用关系
+              - button [ref=e120] [cursor=pointer]:
+                - img [ref=e122]
+            - generic [ref=e125]:
+              - generic [ref=e126]:
+                - generic [ref=e127] [cursor=pointer]:
+                  - generic [ref=e128]:
+                    - img [ref=e129]
+                    - generic [ref=e131]: 工作流
+                  - button [ref=e134]:
+                    - img [ref=e136]
+                - generic [ref=e140]:
+                  - generic [ref=e144] [cursor=pointer]:
+                    - img [ref=e147]
+                    - generic [ref=e152]: stm32
+                  - generic [ref=e156] [cursor=pointer]:
+                    - img [ref=e159]
+                    - generic [ref=e163]: xx
+              - generic [ref=e165]:
+                - generic [ref=e166] [cursor=pointer]:
+                  - generic [ref=e167]:
+                    - img [ref=e168]
+                    - generic [ref=e170]: 插件
+                  - button [ref=e173]:
+                    - img [ref=e175]
+                - generic [ref=e186]: 还未添加插件
+              - generic [ref=e188]:
+                - generic [ref=e189] [cursor=pointer]:
+                  - generic [ref=e190]:
+                    - img [ref=e191]
+                    - generic [ref=e193]: 数据
+                  - button [ref=e196]:
+                    - img [ref=e198]
+                - generic [ref=e206] [cursor=pointer]:
+                  - img [ref=e210]
+                  - generic [ref=e215]: stm32
+          - generic [ref=e220]:
+            - generic [ref=e221]:
+              - generic [ref=e222]: 设置
+              - button [ref=e224] [cursor=pointer]:
+                - img [ref=e226]
+            - generic [ref=e228]:
+              - img [ref=e229]
+              - text: 会话管理
+            - generic [ref=e233]:
+              - img [ref=e234]
+              - text: 变量
+        - generic [ref=e237]:
+          - generic [ref=e239]:
+            - tablist [ref=e241]:
+              - listitem [ref=e242]:
+                - generic [ref=e247] [cursor=pointer]:
+                  - img [ref=e249]
+                  - generic [ref=e252]: xx
+            - generic [ref=e257]:
+              - button [ref=e259] [cursor=pointer]:
+                - img [ref=e261]
+              - button [ref=e264] [cursor=pointer]:
+                - img [ref=e266]
+          - tabpanel [ref=e268]:
+            - generic [ref=e274]:
+              - generic [ref=e276]:
+                - img [ref=e279]
+                - generic:
+                  - generic [ref=e282]:
+                    - generic [ref=e286]
+                    - generic [ref=e302]
+                  - generic [ref=e316]:
+                    - generic [ref=e320]
+                    - generic [ref=e327]
+                  - generic [ref=e345]:
+                    - generic [ref=e349]
+                    - generic [ref=e368]
+                  - generic [ref=e408]:
+                    - generic [ref=e412]
+                    - generic [ref=e431]
+                  - generic [ref=e471]:
+                    - generic [ref=e475]
+                    - generic [ref=e494]
+                  - generic [ref=e534]:
+                    - generic [ref=e538]
+                    - generic [ref=e557]
+                  - img [ref=e615]
+                  - img [ref=e620]
+                  - img [ref=e624]
+                  - img [ref=e629]
+                  - img [ref=e634]
+                  - img [ref=e639]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic
+                    - generic
+  - dialog [ref=e704]:
+    - generic [ref=e708]:
+      - img
+      - generic [ref=e710]:
+        - img [ref=e712]
+        - textbox "搜索节点、插件、工作流" [ref=e714]
+      - generic [ref=e718]:
+        - generic [ref=e720]:
+          - generic [ref=e721]:
+            - generic [ref=e724] [cursor=pointer]:
+              - img [ref=e727]
+              - generic [ref=e729]: 大模型
+            - generic [ref=e732] [cursor=pointer]:
+              - img [ref=e735]
+              - generic [ref=e737]: 大模型
+          - generic [ref=e738]:
+            - generic [ref=e741] [cursor=pointer]:
+              - img [ref=e744]
+              - generic [ref=e746]: 插件
+            - generic [ref=e749] [cursor=pointer]:
+              - img [ref=e752]
+              - generic [ref=e754]: 插件
+          - generic [ref=e755]:
+            - generic [ref=e758] [cursor=pointer]:
+              - img [ref=e761]
+              - generic [ref=e763]: 工作流
+            - generic [ref=e766] [cursor=pointer]:
+              - img [ref=e769]
+              - generic [ref=e771]: 工作流
+        - generic [ref=e772]:
+          - generic [ref=e773]: 业务逻辑
+          - generic [ref=e774]:
+            - generic [ref=e775]:
+              - generic [ref=e778] [cursor=pointer]:
+                - img [ref=e781]
+                - generic [ref=e783]: 代码
+              - generic [ref=e786] [cursor=pointer]:
+                - img [ref=e789]
+                - generic [ref=e791]: 代码
+            - generic [ref=e792]:
+              - generic [ref=e795] [cursor=pointer]:
+                - img [ref=e798]
+                - generic [ref=e800]: 选择器
+              - generic [ref=e803] [cursor=pointer]:
+                - img [ref=e806]
+                - generic [ref=e808]: 选择器
+            - generic [ref=e809]:
+              - generic [ref=e812] [cursor=pointer]:
+                - img [ref=e815]
+                - generic [ref=e817]: 意图识别
+              - generic [ref=e820] [cursor=pointer]:
+                - img [ref=e823]
+                - generic [ref=e825]: 意图识别
+            - generic [ref=e826]:
+              - generic [ref=e829] [cursor=pointer]:
+                - img [ref=e832]
+                - generic [ref=e834]: 循环
+              - generic [ref=e837] [cursor=pointer]:
+                - img [ref=e840]
+                - generic [ref=e842]: 循环
+            - generic [ref=e843]:
+              - generic [ref=e846] [cursor=pointer]:
+                - img [ref=e849]
+                - generic [ref=e851]: 批处理
+              - generic [ref=e854] [cursor=pointer]:
+                - img [ref=e857]
+                - generic [ref=e859]: 批处理
+            - generic [ref=e860]:
+              - generic [ref=e863] [cursor=pointer]:
+                - img [ref=e866]
+                - generic [ref=e868]: 变量聚合
+              - generic [ref=e871] [cursor=pointer]:
+                - img [ref=e874]
+                - generic [ref=e876]: 变量聚合
+            - generic [ref=e877]:
+              - generic [ref=e880] [cursor=pointer]:
+                - img [ref=e883]
+                - generic [ref=e885]: 异步任务
+              - generic [ref=e888] [cursor=pointer]:
+                - img [ref=e891]
+                - generic [ref=e893]: 异步任务
+        - generic [ref=e894]:
+          - generic [ref=e895]: 输入&输出
+          - generic [ref=e896]:
+            - generic [ref=e897]:
+              - generic [ref=e900] [cursor=pointer]:
+                - img [ref=e903]
+                - generic [ref=e905]: 输入
+              - generic [ref=e908] [cursor=pointer]:
+                - img [ref=e911]
+                - generic [ref=e913]: 输入
+            - generic [ref=e914]:
+              - generic [ref=e917] [cursor=pointer]:
+                - img [ref=e920]
+                - generic [ref=e922]: 输出
+              - generic [ref=e925] [cursor=pointer]:
+                - img [ref=e928]
+                - generic [ref=e930]: 输出
+        - generic [ref=e931]:
+          - generic [ref=e932]: 数据库
+          - generic [ref=e933]:
+            - generic [ref=e934]:
+              - generic [ref=e937] [cursor=pointer]:
+                - img [ref=e940]
+                - generic [ref=e942]: SQL自定义
+              - generic [ref=e945] [cursor=pointer]:
+                - img [ref=e948]
+                - generic [ref=e950]: SQL自定义
+            - generic [ref=e951]:
+              - generic [ref=e954] [cursor=pointer]:
+                - img [ref=e957]
+                - generic [ref=e959]: 新增数据
+              - generic [ref=e962] [cursor=pointer]:
+                - img [ref=e965]
+                - generic [ref=e967]: 新增数据
+            - generic [ref=e968]:
+              - generic [ref=e971] [cursor=pointer]:
+                - img [ref=e974]
+                - generic [ref=e976]: 更新数据
+              - generic [ref=e979] [cursor=pointer]:
+                - img [ref=e982]
+                - generic [ref=e984]: 更新数据
+            - generic [ref=e985]:
+              - generic [ref=e988] [cursor=pointer]:
+                - img [ref=e991]
+                - generic [ref=e993]: 查询数据
+              - generic [ref=e996] [cursor=pointer]:
+                - img [ref=e999]
+                - generic [ref=e1001]: 查询数据
+            - generic [ref=e1002]:
+              - generic [ref=e1005] [cursor=pointer]:
+                - img [ref=e1008]
+                - generic [ref=e1010]: 删除数据
+              - generic [ref=e1013] [cursor=pointer]:
+                - img [ref=e1016]
+                - generic [ref=e1018]: 删除数据
+        - generic [ref=e1019]:
+          - generic [ref=e1020]: 知识库&数据
+          - generic [ref=e1021]:
+            - generic [ref=e1022]:
+              - generic [ref=e1025] [cursor=pointer]:
+                - img [ref=e1028]
+                - generic [ref=e1030]: 知识库写入
+              - generic [ref=e1033] [cursor=pointer]:
+                - img [ref=e1036]
+                - generic [ref=e1038]: 知识库写入
+            - generic [ref=e1039]:
+              - generic [ref=e1042] [cursor=pointer]:
+                - img [ref=e1045]
+                - generic [ref=e1047]: 知识库检索
+              - generic [ref=e1050] [cursor=pointer]:
+                - img [ref=e1053]
+                - generic [ref=e1055]: 知识库检索
+            - generic [ref=e1056]:
+              - generic [ref=e1059] [cursor=pointer]:
+                - img [ref=e1062]
+                - generic [ref=e1064]: 知识库删除
+              - generic [ref=e1067] [cursor=pointer]:
+                - img [ref=e1070]
+                - generic [ref=e1072]: 知识库删除
+            - generic [ref=e1073]:
+              - generic [ref=e1076] [cursor=pointer]:
+                - img [ref=e1079]
+                - generic [ref=e1081]: 变量赋值
+              - generic [ref=e1084] [cursor=pointer]:
+                - img [ref=e1087]
+                - generic [ref=e1089]: 变量赋值
+        - generic [ref=e1090]:
+          - generic [ref=e1091]: 图像处理
+          - generic [ref=e1092]:
+            - generic [ref=e1093]:
+              - generic [ref=e1096] [cursor=pointer]:
+                - img [ref=e1099]
+                - generic [ref=e1101]: 图像生成
+                - img [ref=e1104]
+              - generic [ref=e1108] [cursor=pointer]:
+                - img [ref=e1111]
+                - generic [ref=e1113]: 图像生成
+                - img [ref=e1116]
+            - generic [ref=e1118]:
+              - generic [ref=e1121] [cursor=pointer]:
+                - img [ref=e1124]
+                - generic [ref=e1126]: 画板
+              - generic [ref=e1129] [cursor=pointer]:
+                - img [ref=e1132]
+                - generic [ref=e1134]: 画板
+            - generic [ref=e1135]:
+              - generic [ref=e1138] [cursor=pointer]:
+                - img [ref=e1141]
+                - generic [ref=e1143]: 抠图
+                - img [ref=e1146]
+              - generic [ref=e1150] [cursor=pointer]:
+                - img [ref=e1153]
+                - generic [ref=e1155]: 抠图
+                - img [ref=e1158]
+            - generic [ref=e1160]:
+              - generic [ref=e1163] [cursor=pointer]:
+                - img [ref=e1166]
+                - generic [ref=e1168]: 提示词优化
+                - img [ref=e1171]
+              - generic [ref=e1175] [cursor=pointer]:
+                - img [ref=e1178]
+                - generic [ref=e1180]: 提示词优化
+                - img [ref=e1183]
+            - generic [ref=e1185]:
+              - generic [ref=e1188] [cursor=pointer]:
+                - img [ref=e1191]
+                - generic [ref=e1193]: 画质提升
+                - img [ref=e1196]
+              - generic [ref=e1200] [cursor=pointer]:
+                - img [ref=e1203]
+                - generic [ref=e1205]: 画质提升
+                - img [ref=e1208]
+            - generic [ref=e1210]:
+              - generic [ref=e1213] [cursor=pointer]:
+                - img [ref=e1216]
+                - generic [ref=e1217]: 更多图像插件
+              - generic [ref=e1220] [cursor=pointer]:
+                - img [ref=e1223]
+                - generic [ref=e1224]: 更多图像插件
+        - generic [ref=e1225]:
+          - generic [ref=e1226]: 音视频处理
+          - generic [ref=e1227]:
+            - generic [ref=e1228]:
+              - generic [ref=e1231] [cursor=pointer]:
+                - img [ref=e1234]
+                - generic [ref=e1236]: 视频生成
+                - img [ref=e1239]
+              - generic [ref=e1243] [cursor=pointer]:
+                - img [ref=e1246]
+                - generic [ref=e1248]: 视频生成
+                - img [ref=e1251]
+            - generic [ref=e1253]:
+              - generic [ref=e1256] [cursor=pointer]:
+                - img [ref=e1259]
+                - generic [ref=e1261]: 视频提取音频
+              - generic [ref=e1264] [cursor=pointer]:
+                - img [ref=e1267]
+                - generic [ref=e1269]: 视频提取音频
+            - generic [ref=e1270]:
+              - generic [ref=e1273] [cursor=pointer]:
+                - img [ref=e1276]
+                - generic [ref=e1278]: 视频抽帧
+              - generic [ref=e1281] [cursor=pointer]:
+                - img [ref=e1284]
+                - generic [ref=e1286]: 视频抽帧
+        - generic [ref=e1287]:
+          - generic [ref=e1288]: 组件
+          - generic [ref=e1289]:
+            - generic [ref=e1290]:
+              - generic [ref=e1293] [cursor=pointer]:
+                - img [ref=e1296]
+                - generic [ref=e1298]: 问答
+              - generic [ref=e1301] [cursor=pointer]:
+                - img [ref=e1304]
+                - generic [ref=e1306]: 问答
+            - generic [ref=e1307]:
+              - generic [ref=e1310] [cursor=pointer]:
+                - img [ref=e1313]
+                - generic [ref=e1315]: 文本处理
+              - generic [ref=e1318] [cursor=pointer]:
+                - img [ref=e1321]
+                - generic [ref=e1323]: 文本处理
+            - generic [ref=e1324]:
+              - generic [ref=e1327] [cursor=pointer]:
+                - img [ref=e1330]
+                - generic [ref=e1332]: HTTP 请求
+              - generic [ref=e1335] [cursor=pointer]:
+                - img [ref=e1338]
+                - generic [ref=e1340]: HTTP 请求
+            - generic [ref=e1341]:
+              - generic [ref=e1344] [cursor=pointer]:
+                - img [ref=e1347]
+                - generic [ref=e1349]: JSON 序列化
+              - generic [ref=e1352] [cursor=pointer]:
+                - img [ref=e1355]
+                - generic [ref=e1357]: JSON 序列化
+            - generic [ref=e1358]:
+              - generic [ref=e1361] [cursor=pointer]:
+                - img [ref=e1364]
+                - generic [ref=e1366]: JSON 反序列化
+              - generic [ref=e1369] [cursor=pointer]:
+                - img [ref=e1372]
+                - generic [ref=e1374]: JSON 反序列化
+        - generic [ref=e1375]:
+          - generic [ref=e1376]: 会话管理
+          - generic [ref=e1377]:
+            - generic [ref=e1378]:
+              - generic [ref=e1381] [cursor=pointer]:
+                - img [ref=e1384]
+                - generic [ref=e1386]: 创建会话
+              - generic [ref=e1389] [cursor=pointer]:
+                - img [ref=e1392]
+                - generic [ref=e1394]: 创建会话
+            - generic [ref=e1395]:
+              - generic [ref=e1398] [cursor=pointer]:
+                - img [ref=e1401]
+                - generic [ref=e1403]: 修改会话
+              - generic [ref=e1406] [cursor=pointer]:
+                - img [ref=e1409]
+                - generic [ref=e1411]: 修改会话
+            - generic [ref=e1412]:
+              - generic [ref=e1415] [cursor=pointer]:
+                - img [ref=e1418]
+                - generic [ref=e1420]: 删除会话
+              - generic [ref=e1423] [cursor=pointer]:
+                - img [ref=e1426]
+                - generic [ref=e1428]: 删除会话
+            - generic [ref=e1429]:
+              - generic [ref=e1432] [cursor=pointer]:
+                - img [ref=e1435]
+                - generic [ref=e1437]: 查询会话列表
+              - generic [ref=e1440] [cursor=pointer]:
+                - img [ref=e1443]
+                - generic [ref=e1445]: 查询会话列表
+        - generic [ref=e1446]:
+          - generic [ref=e1447]: 会话历史
+          - generic [ref=e1448]:
+            - generic [ref=e1449]:
+              - generic [ref=e1452] [cursor=pointer]:
+                - img [ref=e1455]
+                - generic [ref=e1457]: 查询会话历史
+              - generic [ref=e1460] [cursor=pointer]:
+                - img [ref=e1463]
+                - generic [ref=e1465]: 查询会话历史
+            - generic [ref=e1466]:
+              - generic [ref=e1469] [cursor=pointer]:
+                - img [ref=e1472]
+                - generic [ref=e1474]: 清空会话历史
+              - generic [ref=e1477] [cursor=pointer]:
+                - img [ref=e1480]
+                - generic [ref=e1482]: 清空会话历史
+        - generic [ref=e1483]:
+          - generic [ref=e1484]: 消息
+          - generic [ref=e1485]:
+            - generic [ref=e1486]:
+              - generic [ref=e1489] [cursor=pointer]:
+                - img [ref=e1492]
+                - generic [ref=e1494]: 创建消息
+              - generic [ref=e1497] [cursor=pointer]:
+                - img [ref=e1500]
+                - generic [ref=e1502]: 创建消息
+            - generic [ref=e1503]:
+              - generic [ref=e1506] [cursor=pointer]:
+                - img [ref=e1509]
+                - generic [ref=e1511]: 修改消息
+              - generic [ref=e1514] [cursor=pointer]:
+                - img [ref=e1517]
+                - generic [ref=e1519]: 修改消息
+            - generic [ref=e1520]:
+              - generic [ref=e1523] [cursor=pointer]:
+                - img [ref=e1526]
+                - generic [ref=e1528]: 删除消息
+              - generic [ref=e1531] [cursor=pointer]:
+                - img [ref=e1534]
+                - generic [ref=e1536]: 删除消息
+            - generic [ref=e1537]:
+              - generic [ref=e1540] [cursor=pointer]:
+                - img [ref=e1543]
+                - generic [ref=e1545]: 查询消息列表
+              - generic [ref=e1548] [cursor=pointer]:
+                - img [ref=e1551]
+                - generic [ref=e1553]: 查询消息列表
+        - generic [ref=e1554]:
+          - generic [ref=e1555]: 触发器
+          - generic [ref=e1556]:
+            - generic [ref=e1557]:
+              - generic [ref=e1560] [cursor=pointer]:
+                - img [ref=e1563]
+                - generic [ref=e1565]: 设置定时触发器
+              - generic [ref=e1568] [cursor=pointer]:
+                - img [ref=e1571]
+                - generic [ref=e1573]: 设置定时触发器
+            - generic [ref=e1574]:
+              - generic [ref=e1577] [cursor=pointer]:
+                - img [ref=e1580]
+                - generic [ref=e1582]: 删除定时触发器
+              - generic [ref=e1585] [cursor=pointer]:
+                - img [ref=e1588]
+                - generic [ref=e1590]: 删除定时触发器
+            - generic [ref=e1591]:
+              - generic [ref=e1594] [cursor=pointer]:
+                - img [ref=e1597]
+                - generic [ref=e1599]: 查询定时触发器
+              - generic [ref=e1602] [cursor=pointer]:
+                - img [ref=e1605]
+                - generic [ref=e1607]: 查询定时触发器

@@ -1,0 +1,111 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - img [ref=e7]
+        - generic [ref=e10] [cursor=pointer]: Free AI
+      - generic [ref=e11]:
+        - button "搜索会话" [ref=e12] [cursor=pointer]:
+          - img [ref=e13]
+        - button "收起侧边栏" [ref=e16] [cursor=pointer]:
+          - img [ref=e17]
+    - button "开启新对话 Ctrl+J" [ref=e20] [cursor=pointer]:
+      - img [ref=e21]
+      - generic [ref=e23]: 开启新对话
+      - generic [ref=e24]: Ctrl+J
+    - generic [ref=e25]:
+      - generic [ref=e26]:
+        - generic [ref=e27]: 今天
+        - generic "11" [ref=e28] [cursor=pointer]:
+          - generic [ref=e29]: 💡
+          - generic [ref=e30]: "11"
+      - generic [ref=e31]:
+        - generic [ref=e32]: 昨天
+        - generic "33" [ref=e33] [cursor=pointer]:
+          - generic [ref=e34]: 🪑
+          - generic [ref=e35]: "33"
+        - generic "1" [ref=e36] [cursor=pointer]:
+          - generic [ref=e37]: 💡
+          - generic [ref=e38]: "1"
+      - generic [ref=e39]:
+        - generic [ref=e40]: 最近7天
+        - generic "test" [ref=e41] [cursor=pointer]:
+          - generic [ref=e42]: 💡
+          - generic [ref=e43]: test
+    - button "设置" [ref=e45] [cursor=pointer]:
+      - img [ref=e47]
+      - generic [ref=e50]: 设置
+      - img [ref=e51]
+  - generic [ref=e53]:
+    - generic [ref=e54]:
+      - generic [ref=e55]:
+        - heading "新对话" [level=1] [ref=e56] [cursor=pointer]
+        - generic "点击切换发送模式" [ref=e57] [cursor=pointer]
+      - button "+" [ref=e60] [cursor=pointer]
+    - generic [ref=e62]:
+      - generic [ref=e63] [cursor=pointer]:
+        - generic [ref=e64]:
+          - generic [ref=e65]: 💡
+          - generic [ref=e66]:
+            - heading "头脑风暴" [level=3] [ref=e67]
+            - paragraph [ref=e68]: 排查问题 · 多方案对比 · 各给各的答案
+        - generic [ref=e70]:
+          - generic [ref=e71]:
+            - generic [ref=e110]: 我们的 API 响应要 3 秒，帮我看下瓶颈可能在哪
+            - generic [ref=e115]:
+              - generic [ref=e116]: DeepSeek
+              - generic [ref=e117]: 先查数据库慢查询日志，大概率是 N+1 查询或缺索引
+            - generic [ref=e122]:
+              - generic [ref=e123]: 千问
+              - generic [ref=e124]: 检查 Express 中间件链，可能是序列化或鉴权中间件阻塞了请求
+          - generic [ref=e125]:
+            - text: 点击开始类似对话
+            - img [ref=e126]
+      - generic [ref=e75] [cursor=pointer]:
+        - generic [ref=e76]:
+          - generic [ref=e77]: 🪑
+          - generic [ref=e78]:
+            - heading "圆桌讨论" [level=3] [ref=e79]
+            - paragraph [ref=e80]: 方案辩论 · 互相挑毛病 · 逐步深入
+        - generic [ref=e82]:
+          - generic [ref=e83]:
+            - generic [ref=e129]: 电商项目日订单 5000，代码 8 万行，部署要 15 分钟，要不要拆微服务？
+            - generic [ref=e134]:
+              - generic [ref=e135]: DeepSeek
+              - generic [ref=e136]: 8 万行还不大，先拆订单和支付两个独立部署就够了，别过度拆分
+            - generic [ref=e141]:
+              - generic [ref=e142]: 千问
+              - generic [ref=e143]: 同意 DeepSeek 说的，而且部署慢的问题可能 CI/CD 优化收益更大
+            - generic [ref=e148]:
+              - generic [ref=e149]: 豆包
+              - generic [ref=e150]: 补充一点：你们说的对，但拆之前先做好服务间通信的基础设施，不然后面更乱
+          - generic [ref=e151]: 电商项目日订单 5000，代码 8 万行，部署要 15 分钟，要不要拆微服务？
+          - generic [ref=e152]:
+            - text: 点击开始类似对话
+            - img [ref=e153]
+      - generic [ref=e87] [cursor=pointer]:
+        - generic [ref=e88]:
+          - generic [ref=e89]: 🎓
+          - generic [ref=e90]:
+            - heading "专家问答" [level=3] [ref=e91]
+            - paragraph [ref=e92]: 系统设计 · 全面审计 · 分步骤协作
+        - generic [ref=e94]:
+          - generic [ref=e95]:
+            - generic [ref=e156]: 帮我设计支付模块，日交易量 5 万，对接微信和支付宝，需要退款和自动对账
+            - generic [ref=e161]:
+              - generic [ref=e162]: 支付架构专家
+              - generic [ref=e163]: 支付网关：统一接口封装渠道差异，requestId 保证幂等性，异步回调 + 消息队列确保最终一致性。退款：申请→风控→渠道退款→状态回调，全程异步。对账：每日定时拉取渠道账单自动核对，差异告警。
+          - generic [ref=e164]: 帮我设计支付模块，日交易量 5 万，对接微信和支付宝，需要退款和自动对账
+          - generic [ref=e165]:
+            - text: 点击开始类似对话
+            - img [ref=e166]
+    - generic [ref=e99]:
+      - textbox "输入消息，按 Enter 发送..." [ref=e100]
+      - button "发送" [ref=e103] [cursor=pointer]:
+        - img [ref=e104]
+        - text: 发送
+  - generic [ref=e106]:
+    - button "▶" [ref=e107] [cursor=pointer]:
+      - generic [ref=e108]: ▶
+    - generic:
+      - generic: 平台窗口将在此显示

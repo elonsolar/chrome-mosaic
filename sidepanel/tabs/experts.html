@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>专家管理</title>
+  <link rel="stylesheet" href="../../styles/sidepanel.css">
+  <style>
+    .experts-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border, #e8e8ed);
+    }
+    .experts-toolbar h3 { margin: 0; font-size: 16px; }
+    .experts-list { padding: 16px; }
+    .expert-card {
+      background: #fff;
+      border: 2px solid #e8e8ed;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .expert-card:hover { border-color: #007AFF; box-shadow: 0 2px 8px rgba(0,122,255,0.1); }
+    .expert-card-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .expert-card-icon { font-size: 28px; }
+    .expert-card-name { font-weight: 600; font-size: 15px; color: #1d1d1f; }
+    .expert-card-desc { font-size: 13px; color: #86868b; margin-bottom: 8px; }
+    .expert-card-meta {
+      display: flex;
+      gap: 12px;
+      font-size: 12px;
+      color: #86868b;
+      align-items: center;
+    }
+    .expert-card-meta span { display: flex; align-items: center; gap: 4px; }
+    .expert-card-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #f0f0f0;
+    }
+    .expert-btn {
+      padding: 4px 12px;
+      border-radius: 6px;
+      border: 1px solid #e8e8ed;
+      background: #fff;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .expert-btn:hover { background: #f5f5f7; }
+    .expert-btn.danger { color: #ff3b30; border-color: #ffccc7; }
+    .expert-btn.danger:hover { background: #fff5f5; }
+    .expert-btn.primary { color: #007AFF; border-color: #007AFF; }
+    .expert-btn.primary:hover { background: #f0f7ff; }
+    .empty-state { text-align: center; padding: 40px 20px; color: #86868b; }
+    .empty-state-icon { font-size: 48px; margin-bottom: 12px; }
+    .empty-state h3 { color: #1d1d1f; margin: 0 0 8px 0; }
+
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-backdrop.active { display: flex; }
+    .modal-box {
+      background: #fff;
+      border-radius: 14px;
+      padding: 24px;
+      width: 90%;
+      max-width: 480px;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    .modal-box h2 { margin: 0 0 16px 0; font-size: 18px; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-weight: 500; font-size: 13px; margin-bottom: 6px; color: #1d1d1f; }
+    .form-input, .form-textarea, .form-select {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #e8e8ed;
+      border-radius: 8px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    .form-textarea { resize: vertical; min-height: 80px; }
+    .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+    .btn { padding: 8px 20px; border-radius: 8px; font-size: 14px; cursor: pointer; border: none; }
+    .btn-primary { background: #007AFF; color: #fff; }
+    .btn-primary:hover { background: #0066d6; }
+    .btn-secondary { background: #f5f5f7; color: #1d1d1f; }
+    .btn-secondary:hover { background: #e8e8ed; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <div class="modal-backdrop" id="expertModal">
+    <div class="modal-box">
+      <h2 id="expertModalTitle">新建专家</h2>
+      <div class="form-group">
+        <label>名称</label>
+        <input type="text" id="expertName" class="form-input" placeholder="专家名称">
+      </div>
+      <div class="form-group">
+        <label>图标</label>
+        <input type="text" id="expertIcon" class="form-input" placeholder="🤖" maxlength="2">
+      </div>
+      <div class="form-group">
+        <label>描述</label>
+        <textarea id="expertDesc" class="form-textarea" placeholder="描述此专家的用途"></textarea>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-secondary" id="cancelExpertBtn">取消</button>
+        <button class="btn btn-primary" id="saveExpertBtn">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../../config/providers.config.js"></script>
+  <script src="../../utils/storage.js"></script>
+  <script src="experts.js"></script>
+</body>
+</html>

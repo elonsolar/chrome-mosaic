@@ -11,7 +11,7 @@ class PromptManager {
    * 创建新提示词
    */
   async createPrompt(data) {
-    const { name, content, variables } = data;
+    const { name, content, tags, isBuiltin } = data;
 
     if (!name || !content) {
       throw new Error('提示词名称和内容不能为空');
@@ -22,7 +22,8 @@ class PromptManager {
       id: this.generateId(),
       name,
       content,
-      variables: variables || [],
+      tags: tags || [],
+      isBuiltin: isBuiltin || false,
       createdAt: Date.now(),
       updatedAt: Date.now()
     };

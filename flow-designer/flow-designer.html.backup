@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>流程设计器</title>
+  <link rel="stylesheet" href="../styles/flow-designer-page.css">
+</head>
+<body>
+  <div class="flow-designer-page">
+    <!-- 顶部工具栏 -->
+    <header class="toolbar">
+      <div class="toolbar-left">
+        <div class="flow-name-wrapper">
+          <input type="text" id="flowNameInput" class="flow-name-input" placeholder="输入流程名称..." spellcheck="false">
+          <span class="flow-id" id="flowIdDisplay"></span>
+        </div>
+      </div>
+      <div class="toolbar-right">
+        <button class="btn btn-ghost" id="runFlowBtn" title="试运行流程">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M4 2L12 8L4 14V2Z"/>
+          </svg>
+          <span>试运行</span>
+        </button>
+        <button class="btn btn-primary" id="saveBtn" title="保存流程">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M13.5 2H2.5C2.22386 2 2 2.22386 2 2.5V13.5C2 13.7761 2.22386 14 2.5 14H13.5C13.7761 14 14 13.7761 14 13.5V2.5C14 2.22386 13.7761 2 13.5 2ZM13 13H3V3H13V13ZM4 4H12V12H4V4Z"/>
+          </svg>
+          <span>保存</span>
+        </button>
+        <button class="btn btn-ghost" id="closeBtn" title="关闭">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8.70711 8L11.8536 4.85355C12.0488 4.65829 12.0488 4.34171 11.8536 4.14645C11.6583 3.95118 11.3417 3.95118 11.1464 4.14645L8 7.29289L4.85355 4.14645C4.65829 3.95118 4.34171 3.95118 4.14645 4.14645C3.95118 4.34171 3.95118 4.65829 4.14645 4.85355L7.29289 8L4.14645 11.1464C3.95118 11.3417 3.95118 11.6583 4.14645 11.8536C4.34171 12.0488 4.65829 12.0488 4.85355 11.8536L8 8.70711L11.1464 11.8536C11.3417 12.0488 11.6583 12.0488 11.8536 11.8536C12.0488 11.6583 12.0488 11.3417 11.8536 11.1464L8.70711 8Z"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- 画布区域 -->
+    <main class="canvas-container">
+      <div class="canvas" id="canvas">
+        <!-- 节点将在这里动态生成 -->
+        <div class="empty-state" id="emptyState" style="display:none;">
+          <svg width="64" height="64" viewBox="0 0 64 64" fill="none" class="empty-icon">
+            <rect x="8" y="8" width="48" height="48" rx="4" stroke="currentColor" stroke-width="2" stroke-dasharray="4 4"/>
+            <path d="M32 24V40M24 32H40" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <div class="empty-text">开始配置流程</div>
+          <div class="empty-hint">添加大模型或工具节点，连接开始和结束节点</div>
+        </div>
+      </div>
+      
+      <!-- 浮动添加按钮 -->
+      <button class="fab" id="floatingAddBtn" title="添加节点">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </main>
+
+    <!-- 节点配置面板 -->
+    <aside class="side-panel" id="nodeConfigPanel" style="display:none;">
+      <div class="side-panel-overlay" id="panelOverlay"></div>
+      <div class="side-panel-container">
+        <header class="side-panel-header">
+          <h2 class="side-panel-title" id="panelTitle">配置节点</h2>
+          <button class="icon-btn" id="closePanelBtn" title="关闭">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <path d="M15 5L5 15M5 5L15 15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </header>
+        
+        <div class="side-panel-body">
+          <!-- 节点类型选择（仅新建时显示） -->
+          <section class="panel-section" id="nodeTypeSection">
+            <div class="section-label">选择节点类型</div>
+            <div class="node-type-grid" id="nodeTypeGrid">
+              <div class="type-card" data-type="llm">
+                <div class="type-card-icon">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                  </svg>
+                </div>
+                <div class="type-card-content">
+                  <div class="type-card-title">大模型</div>
+                  <div class="type-card-desc">调用AI模型处理任务</div>
+                </div>
+              </div>
+              <div class="type-card" data-type="tool">
+                <div class="type-card-icon">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/>
+                  </svg>
+                </div>
+                <div class="type-card-content">
+                  <div class="type-card-title">工具</div>
+                  <div class="type-card-desc">调用外部工具或API</div>
+                </div>
+              </div>
+            </div>
+          </section>
+          
+          <!-- 基本信息 -->
+          <section class="panel-section">
+            <div class="section-label">基本信息</div>
+            <div class="form-group">
+              <label class="form-label" for="panelNodeName">节点名称</label>
+              <input type="text" class="form-input" id="panelNodeName" placeholder="输入节点名称" spellcheck="false">
+            </div>
+            
+            <!-- LLM模型选择 -->
+            <div class="form-group" id="panelModelGroup" style="display:none;">
+              <label class="form-label" for="panelModelId">选择模型</label>
+              <select class="form-select" id="panelModelId">
+                <option value="">选择模型...</option>
+              </select>
+            </div>
+          </section>
+          
+          <!-- 模型选择 (LLM节点) -->
+          <section class="panel-section" id="panelModelSection" style="display:none;">
+            <div class="section-label">模型</div>
+            <div class="form-group">
+              <select class="form-select" id="panelModelId">
+                <option value="">选择模型...</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">技能</label>
+              <div class="skills-config">
+                <div class="skills-empty">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                    <path d="M8 4V8H11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  </svg>
+                  <span>暂未配置技能</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 输入变量 (LLM/Tool节点) -->
+          <section class="panel-section" id="panelInputSection" style="display:none;">
+            <div class="section-header">
+              <div class="section-label">输入</div>
+              <button class="btn-small btn-ghost" id="panelAddInputBtn">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+                  <path d="M7 1V13M1 7H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                添加
+              </button>
+            </div>
+            <div class="vars-list" id="panelInputParams">
+              <!-- 动态生成输入变量，带引用标签 -->
+            </div>
+          </section>
+
+          <!-- 变量引用选择器弹窗 -->
+          <div class="variable-picker-modal" id="variablePickerModal" style="display:none;">
+            <div class="variable-picker-overlay" id="variablePickerOverlay"></div>
+            <div class="variable-picker-dropdown">
+              <div class="variable-picker-header">
+                <span class="variable-picker-title">选择变量</span>
+              </div>
+              <div class="variable-picker-body" id="variablePickerList">
+                <!-- 动态生成变量列表 -->
+              </div>
+            </div>
+          </div>
+
+          <!-- 系统提示词 (LLM节点) -->
+          <section class="panel-section" id="panelSystemPromptSection" style="display:none;">
+            <div class="section-label">系统提示词</div>
+            <div class="form-group">
+              <textarea class="form-textarea" id="panelSystemPrompt" rows="4" placeholder="输入系统提示词..." spellcheck="false"></textarea>
+            </div>
+          </section>
+
+          <!-- 用户提示词 (LLM节点) -->
+          <section class="panel-section" id="panelUserPromptSection" style="display:none;">
+            <div class="section-label">用户提示词</div>
+            <div class="form-group">
+              <textarea class="form-textarea" id="panelUserPrompt" rows="6" placeholder="使用 {{变量名}} 引用输入变量..." spellcheck="false"></textarea>
+            </div>
+          </section>
+
+          <!-- 结束节点配置 -->
+          <section class="panel-section" id="panelEndOutputSection" style="display:none;">
+            <!-- 返回文本 -->
+            <div class="form-group">
+              <label class="form-label">返回文本</label>
+              <input type="text" class="form-input" id="panelReturnText" placeholder="返回文本" spellcheck="false">
+              <div class="form-hint">工作流的最终返回文本</div>
+            </div>
+
+            <!-- 输出变量 -->
+            <div class="section-header">
+              <div class="section-label">输出变量</div>
+              <button class="btn-small btn-ghost" id="panelAddOutputVarBtn">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+                  <path d="M7 1V13M1 7H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                添加
+              </button>
+            </div>
+            <div class="vars-list" id="panelOutputVars">
+              <!-- 动态生成输出变量 -->
+            </div>
+          </section>
+
+          <!-- 高级配置 (LLM节点) -->
+          <section class="panel-section" id="panelLlmAdvancedSection" style="display:none;">
+            <details class="config-details">
+              <summary class="config-details-summary">高级配置</summary>
+              <div class="config-details-content">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label" for="panelTemperature">温度</label>
+                    <input type="number" class="form-input" id="panelTemperature" min="0" max="2" step="0.1" value="0.7">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="panelMaxTokens">最大Token</label>
+                    <input type="number" class="form-input" id="panelMaxTokens" min="1" max="32000" value="2000">
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">输出格式</label>
+                  <div class="radio-group">
+                    <label class="radio-label">
+                      <input type="radio" name="outputFormat" value="text" checked>
+                      <span>文本</span>
+                    </label>
+                    <label class="radio-label">
+                      <input type="radio" name="outputFormat" value="json">
+                      <span>JSON</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </details>
+          </section>
+        </div>
+        
+        <footer class="side-panel-footer">
+          <button class="btn btn-secondary" id="panelCancelBtn">取消</button>
+          <button class="btn btn-primary" id="panelSaveBtn">确认</button>
+        </footer>
+      </div>
+    </aside>
+
+    <!-- 变量引用选择器 -->
+    <div class="variable-selector" id="variableSelector" style="display:none;">
+      <div class="variable-selector-overlay"></div>
+      <div class="variable-selector-dropdown" id="variableDropdown">
+        <header class="variable-selector-header">
+          <span class="variable-selector-title">选择父节点输出变量</span>
+          <button class="icon-btn icon-btn-small" id="closeVariableSelector">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M8.70711 8L11.8536 4.85355C12.0488 4.65829 12.0488 4.34171 11.8536 4.14645C11.6583 3.95118 11.3417 3.95118 11.1464 4.14645L8 7.29289L4.85355 4.14645C4.65829 3.95118 4.34171 3.95118 4.14645 4.14645C3.95118 4.34171 3.95118 4.65829 4.14645 4.85355L7.29289 8L4.14645 11.1464C3.95118 11.3417 3.95118 11.6583 4.14645 11.8536C4.34171 12.0488 4.65829 12.0488 4.85355 11.8536L8 8.70711L11.1464 11.8536C11.3417 12.0488 11.6583 12.0488 11.8536 11.8536C12.0488 11.6583 12.0488 11.3417 11.8536 11.1464L8.70711 8Z"/>
+            </svg>
+          </button>
+        </header>
+        <div class="variable-selector-body" id="variableList">
+          <!-- 动态生成 -->
+        </div>
+      </div>
+    </div>
+
+    <!-- 试运行面板 -->
+    <aside class="run-panel" id="runPanel" style="display:none;">
+      <header class="run-panel-header">
+        <div class="run-panel-title">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M5 4L15 10L5 16V4Z"/>
+          </svg>
+          <span>试运行流程</span>
+        </div>
+        <button class="icon-btn" id="closeRunPanel" title="关闭">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M15 5L5 15M5 5L15 15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </header>
+      
+      <div class="run-panel-body">
+        <!-- 输入参数表单 -->
+        <section class="run-section">
+          <h3 class="run-section-title">输入参数</h3>
+          <div class="run-inputs-form" id="runInputsForm">
+            <!-- 根据Start节点动态生成 -->
+          </div>
+        </section>
+        
+        <!-- 执行按钮 -->
+        <div class="run-actions">
+          <button class="btn btn-primary" id="startRunBtn">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M4 2L12 8L4 14V2Z"/>
+            </svg>
+            开始执行
+          </button>
+          <button class="btn btn-danger" id="stopRunBtn" style="display:none;">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <rect x="3" y="3" width="10" height="10" rx="1"/>
+            </svg>
+            停止执行
+          </button>
+        </div>
+        
+        <!-- 执行进度 -->
+        <section class="run-section run-progress" id="runProgress" style="display:none;">
+          <h3 class="run-section-title">执行进度</h3>
+          <div class="run-progress-steps" id="runProgressSteps">
+            <!-- 动态生成执行步骤 -->
+          </div>
+        </section>
+        
+        <!-- 执行结果 -->
+        <section class="run-section run-results" id="runResults" style="display:none;">
+          <h3 class="run-section-title">执行结果</h3>
+          <div class="run-results-content" id="runResultsContent">
+            <!-- 显示最终输出 -->
+          </div>
+        </section>
+      </div>
+    </aside>
+  </div>
+
+  <script src="../utils/storage.js"></script>
+  <script src="flow-designer-page.js"></script>
+</body>
+</html>

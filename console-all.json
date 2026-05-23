@@ -1,0 +1,9 @@
+Total messages: 0 (Errors: 0, Warnings: 0)
+Returning 6 messages for level "info"
+
+[LOG] Coze Studio Flow Designer ready @ chrome-extension://anohnmmabfdpckoiidlibmiookpcldla/flow-designer/flow-designer-init.js:76
+[LOG] Coze Studio Flow Designer ready @ chrome-extension://anohnmmabfdpckoiidlibmiookpcldla/flow-designer/flow-designer-init.js:76
+[LOG] Coze Studio Flow Designer ready @ chrome-extension://anohnmmabfdpckoiidlibmiookpcldla/flow-designer/flow-designer-init.js:76
+[LOG] Coze Studio Flow Designer ready @ chrome-extension://anohnmmabfdpckoiidlibmiookpcldla/flow-designer/flow-designer-init.js:76
+[LOG] Executing node test: node_1779364295497 {0: sf, 1: ss, 2: hello} @ chrome-extension://anohnmmabfdpckoiidlibmiookpcldla/flow-designer/flow-app.js:340
+[LOG] [PlatformPanel] 面板收起 @ chrome-extension://anohnmmabfdpckoiidlibmiookpcldla/chat/chat.js:1626

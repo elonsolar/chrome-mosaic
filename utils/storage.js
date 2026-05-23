@@ -25,11 +25,11 @@ async function getConversation(conversationId) {
 }
 
 // 创建会话
-async function createConversation(name, roleIds) {
+async function createConversation(name, memberIds) {
   return sendMessage({
     action: 'createConversation',
     name,
-    roleIds
+    memberIds
   });
 }
 
@@ -42,25 +42,25 @@ async function deleteConversation(conversationId) {
 }
 
 // 添加消息
-async function addMessage(conversationId, roleId, content, isUser) {
+async function addMessage(conversationId, memberId, content, isUser) {
   return sendMessage({
     action: 'addMessage',
     conversationId,
-    roleId,
+    memberId,
     content,
     isUser
   });
 }
 
-// 获取所有角色
-async function getRoles() {
-  return sendMessage({ action: 'getRoles' });
+// 获取所有成员
+async function getMembers() {
+  return sendMessage({ action: 'getMembers' });
 }
 
-// 创建角色
-async function createRole(name, provider, model, systemPrompt) {
+// 创建成员
+async function createMember(name, provider, model, systemPrompt) {
   return sendMessage({
-    action: 'createRole',
+    action: 'createMember',
     name,
     provider,
     model,
@@ -68,21 +68,26 @@ async function createRole(name, provider, model, systemPrompt) {
   });
 }
 
-// 更新角色
-async function updateRole(roleId, updates) {
+// 更新成员
+async function updateMember(memberId, updates) {
   return sendMessage({
-    action: 'updateRole',
-    roleId,
+    action: 'updateMember',
+    memberId,
     updates
   });
 }
 
-// 删除角色
-async function deleteRole(roleId) {
+// 删除成员
+async function deleteMember(memberId) {
   return sendMessage({
-    action: 'deleteRole',
-    roleId
+    action: 'deleteMember',
+    memberId
   });
+}
+
+// 获取所有成员
+async function getMembers() {
+  return sendMessage({ action: 'getMembers' });
 }
 
 // 获取设置
@@ -98,6 +103,62 @@ async function updateSettings(settings) {
   });
 }
 
+// ========== 团队管理 API ==========
+
+// 获取所有团队
+async function getTeams() {
+  return sendMessage({ action: 'getTeams' });
+}
+
+// 获取单个团队
+async function getTeam(teamId) {
+  return sendMessage({
+    action: 'getTeam',
+    teamId
+  });
+}
+
+// 获取团队及其成员信息
+async function getTeamWithMembers(teamId) {
+  return sendMessage({
+    action: 'getTeamWithMembers',
+    teamId
+  });
+}
+
+// 创建团队
+async function createTeam(teamData) {
+  return sendMessage({
+    action: 'createTeam',
+    data: teamData
+  });
+}
+
+// 更新团队
+async function updateTeam(teamId, updates) {
+  return sendMessage({
+    action: 'updateTeam',
+    teamId,
+    data: updates
+  });
+}
+
+// 删除团队
+async function deleteTeam(teamId) {
+  return sendMessage({
+    action: 'deleteTeam',
+    teamId
+  });
+}
+
+// 搜索团队
+async function searchTeams(keyword) {
+  return sendMessage({
+    action: 'searchTeams',
+    keyword
+  });
+}
+
 // 导出函数
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
@@ -107,11 +168,18 @@ if (typeof module !== 'undefined' && module.exports) {
     createConversation,
     deleteConversation,
     addMessage,
-    getRoles,
-    createRole,
-    updateRole,
-    deleteRole,
+    getMembers,
+    createMember,
+    updateMember,
+    deleteMember,
     getSettings,
-    updateSettings
+    updateSettings,
+    getTeams,
+    getTeam,
+    getTeamWithMembers,
+    createTeam,
+    updateTeam,
+    deleteTeam,
+    searchTeams
   };
 }

@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Free AI - 管理面板</title>
+  <title>Free AI</title>
+  <link rel="icon" type="image/svg+xml" href="../icons/icon.svg">
   <link rel="stylesheet" href="../styles/dashboard.css">
 </head>
 <body>
@@ -11,439 +12,373 @@
     <!-- 左侧导航 -->
     <nav class="dashboard-sidebar">
       <div class="sidebar-header">
-        <h1 class="sidebar-title">Free AI</h1>
-        <p class="sidebar-subtitle">管理面板</p>
+        <div class="sidebar-logo">
+          <svg class="sidebar-logo-icon" width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="22" height="22" rx="6" fill="#3964FE"/>
+            <path d="M11 5C11 5 12 10 15.5 11C12 12 11 17 11 17C11 17 10 12 6.5 11C10 10 11 5 11 5Z" fill="white"/>
+          </svg>
+          <span class="sidebar-logo-text">Free AI</span>
+        </div>
+        <p class="sidebar-subtitle"></p>
       </div>
 
       <div class="sidebar-nav">
-        <a href="#home" class="nav-item active" data-page="home">
-          <span class="nav-icon">🏠</span>
-          <span class="nav-label">首页</span>
-        </a>
-        <a href="#teams" class="nav-item" data-page="teams">
-          <span class="nav-icon">👥</span>
-          <span class="nav-label">团队</span>
-        </a>
-        <a href="#conversations" class="nav-item" data-page="conversations">
-          <span class="nav-icon">💬</span>
-          <span class="nav-label">会话</span>
-        </a>
-        <a href="#prompts" class="nav-item" data-page="prompts">
+        <a href="#prompts" class="nav-item active" data-page="prompts">
           <span class="nav-icon">📝</span>
-          <span class="nav-label">角色</span>
+          <span class="nav-label">提示词</span>
         </a>
 
         <a class="nav-item" href="#models" data-page="models">
           <span class="nav-icon">🤖</span>
           <span class="nav-label">模型</span>
         </a>
+        <a class="nav-item" href="#experts" data-page="experts">
+          <span class="nav-icon">🎓</span>
+          <span class="nav-label">专家</span>
+        </a>
         <a href="#settings" class="nav-item" data-page="settings">
           <span class="nav-icon">⚙️</span>
           <span class="nav-label">设置</span>
         </a>
-      </nav>
-    </aside>
+      </div>
+
+      <div class="sidebar-footer">
+        <button class="sidebar-footer-btn" id="backToChatBtn" title="返回对话">
+          <div class="sidebar-footer-avatar">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M2.99997 8.00001C2.99997 8.18959 3.07927 8.37081 3.21954 8.50001L6.96954 11.87C7.26244 12.1334 7.71328 12.11 7.97669 11.8171C8.2401 11.5242 8.21669 11.0734 7.92379 10.81L5.44354 8.60001H12.3333C12.7359 8.60001 13.0622 8.30453 13.0622 7.94001C13.0622 7.57549 12.7359 7.28001 12.3333 7.28001H5.44354L7.92379 5.07001C8.21669 4.80666 8.2401 4.35582 7.97669 4.06292C7.71328 3.77002 7.26244 3.7466 6.96954 4.01001L3.21954 7.38001C3.07927 7.50921 2.99997 7.69043 2.99997 7.88001V8.00001Z" fill="currentColor"/></svg>
+          </div>
+          <span class="sidebar-footer-name">返回对话</span>
+          <svg class="sidebar-footer-arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M12.9999 8.00001C12.9999 7.81044 12.9206 7.62921 12.7803 7.50001L9.03032 4.13001C8.73742 3.86659 8.28658 3.89001 8.02317 4.18292C7.75976 4.47582 7.78317 4.92666 8.07608 5.19001L10.5563 7.40001H3.66657C3.26396 7.40001 2.93768 7.69549 2.93768 8.06001C2.93768 8.42454 3.26396 8.72001 3.66657 8.72001H10.5563L8.07608 10.93C7.78317 11.1934 7.75976 11.6442 8.02317 11.9371C8.28658 12.23 8.73742 12.2534 9.03032 11.99L12.7803 8.62001C12.9206 8.49081 12.9999 8.30959 12.9999 8.12001V8.00001Z" fill="currentColor"></path></svg>
+        </button>
+      </div>
+    </nav>
 
     <main class="main-content">
-      <!-- 首页 -->
-      <div class="page-content active" id="page-home">
-        <div class="page-header">
-          <h2>控制台</h2>
-        </div>
-
-        <div class="stats-grid">
-          <div class="stat-card">
-            <div class="stat-icon">💬</div>
-            <div class="stat-info">
-              <div class="stat-value" id="statConversations">0</div>
-              <div class="stat-label">会话数量</div>
-            </div>
+      <!-- 专家管理页面 -->
+      <div class="page-content" id="page-experts">
+      <div class="experts-page-header">
+        <div class="experts-header-left">
+          <div class="experts-title">
+            <span class="experts-icon">🎓</span>
+            <h2>专家</h2>
           </div>
-
-          <div class="stat-card">
-            <div class="stat-icon">👥</div>
-            <div class="stat-info">
-              <div class="stat-value" id="statTeams">0</div>
-              <div class="stat-label">团队数量</div>
-            </div>
-          </div>
-
-          <div class="stat-card">
-            <div class="stat-icon">🤖</div>
-            <div class="stat-info">
-              <div class="stat-value" id="statModels">0</div>
-              <div class="stat-label">模型数量</div>
-            </div>
-          </div>
-
-          <div class="stat-card">
-            <div class="stat-icon">🎭</div>
-            <div class="stat-info">
-              <div class="stat-value" id="statPrompts">0</div>
-              <div class="stat-label">角色数量</div>
-            </div>
+          <div class="experts-stats">
+            <span class="expert-stat-badge">
+              <strong id="expertCount">0</strong>
+              <span>个专家</span>
+            </span>
           </div>
         </div>
-
-        <div class="quick-actions">
-          <h3 class="section-title">快捷操作</h3>
-          <div class="quick-actions-grid">
-            <button class="quick-action-btn" id="quickCreateTeamBtn">
-              <span class="action-icon">👥</span>
-              <span class="action-label">创建团队</span>
-            </button>
-
-            <button class="quick-action-btn" id="quickCreatePromptBtn">
-              <span class="action-icon">🎭</span>
-              <span class="action-label">创建角色</span>
-            </button>
-          </div>
+        <div class="view-toggle" id="expertsViewToggle">
+          <button class="view-btn" data-view="list" title="列表视图">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <rect x="2" y="3" width="12" height="2" rx="1"/>
+              <rect x="2" y="7" width="12" height="2" rx="1"/>
+              <rect x="2" y="11" width="12" height="2" rx="1"/>
+            </svg>
+          </button>
+          <button class="view-btn active" data-view="grid" title="网格视图">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <rect x="2" y="2" width="5" height="5" rx="1"/>
+              <rect x="9" y="2" width="5" height="5" rx="1"/>
+              <rect x="2" y="9" width="5" height="5" rx="1"/>
+              <rect x="9" y="9" width="5" height="5" rx="1"/>
+            </svg>
+          </button>
         </div>
       </div>
 
-      <!-- 团队管理页面 -->
-      <div class="page-content" id="page-teams">
-        <div class="page-header-simple">
-          <h2>团队管理</h2>
-        </div>
-
-        <div class="teams-container" id="teamsContainer">
-          <div class="loading-skeleton-grid">
-            <div class="skeleton-card"></div>
-            <div class="skeleton-card"></div>
-            <div class="skeleton-card"></div>
-          </div>
+        <div class="experts-container" id="expertsContainer">
         </div>
 
         <!-- 浮动操作按钮 -->
-        <div class="fab-container" id="teamsFab">
-          <button class="fab fab-main" data-page="teams">
+        <div class="fab-container" id="expertsFab">
+          <button class="fab fab-main" data-action="createExpert" title="创建专家">
             <svg class="fab-icon fab-icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="12" y1="5" x2="12" y2="19"></line>
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
           </button>
-          <div class="fab-actions">
-            <button class="fab fab-action" data-action="createTeam">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                <circle cx="9" cy="7" r="4"></circle>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-              </svg>
-              </button>
-          </div>
         </div>
       </div>
 
-      <!-- 会话管理页面 -->
-      <div class="page-content" id="page-conversations">
-        <div class="page-header-simple">
-          <h2>会话管理</h2>
-        </div>
-
-        <!-- 过滤器 -->
-        <div class="conversations-filters" id="conversationsFilters">
-          <div class="filter-row">
-            <!-- 搜索框 -->
-            <div class="filter-item search-box">
-              <svg class="search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.5"/>
-                <path d="M11 11L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-              </svg>
-              <input type="text" placeholder="搜索会话名称..." id="conversationSearchInput">
-              <button class="clear-btn" id="clearSearchBtn" style="display: none;">×</button>
-            </div>
-            
-            <!-- 日期筛选 -->
-            <div class="filter-item">
-              <select id="conversationDateFilter" class="filter-select">
-                <option value="all">全部时间</option>
-                <option value="today">今天</option>
-                <option value="week">最近7天</option>
-                <option value="month">最近30天</option>
-              </select>
-            </div>
-            
-            <!-- 模型筛选 -->
-            <div class="filter-item">
-              <select id="conversationModelFilter" class="filter-select">
-                <option value="all">全部模型</option>
-              </select>
-            </div>
-            
-            <!-- 排序 -->
-            <div class="filter-item">
-              <select id="conversationSortBy" class="filter-select">
-                <option value="updatedAt">最近更新</option>
-                <option value="createdAt">创建时间</option>
-                <option value="name">名称</option>
-                <option value="messagesCount">消息数</option>
-              </select>
-              <button class="sort-toggle" id="sortOrderBtn" title="切换排序顺序">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-                  <path d="M7 3L7 11M7 3L4 6M7 3L10 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </button>
-            </div>
-          </div>
-          
-          <!-- 活跃筛选标签 -->
-          <div class="active-filters" id="activeFilters"></div>
-          
-          <!-- 结果统计 -->
-          <div class="filter-stats" id="filterStats" style="display: none;">
-            找到 <strong id="filteredCount">0</strong> 个会话
-            <button class="btn-link clear-all-filters" id="clearAllFiltersBtn" style="display: none;">清除全部筛选</button>
-          </div>
-        </div>
-
-        <!-- 批量操作栏 -->
-        <div class="batch-operations-bar" id="batchOperationsBar" style="display: none;">
-          <div class="batch-info">
-            <input type="checkbox" id="selectAllCheckbox" class="select-all-checkbox">
-            <span class="batch-count">已选择 <strong id="selectedCount">0</strong> 个会话</span>
-          </div>
-          
-          <div class="batch-actions">
-            <button class="btn btn-secondary batch-btn" id="batchExportBtn" title="导出会话">
-              <span>📥</span> 导出
-            </button>
-            <button class="btn btn-secondary batch-btn" id="batchDeleteBtn" title="删除会话">
-              <span>🗑️</span> 删除
-            </button>
-            <button class="btn btn-link batch-btn" id="cancelSelectionBtn">取消选择</button>
-          </div>
-        </div>
-
-        <div class="conversations-container" id="conversationsContainer">
-          <!-- 内容由 JS 动态渲染 -->
-        </div>
-
-        <!-- 会话详情视图 -->
-        <div class="conversation-detail-view" id="conversationDetailView" style="display: none;">
-          <div class="detail-header">
-            <button class="btn-back" id="backToConversationsBtn">
-              <span>←</span> 返回列表
-            </button>
-            <div class="detail-title">
-              <h2 id="detailConversationName">会话名称</h2>
-              <div class="detail-meta">
-                <span id="detailModels">模型1, 模型2</span>
-                <span id="detailTime">2小时前</span>
-              </div>
-            </div>
-            <div class="detail-actions">
-              <button class="btn btn-secondary" id="continueConversationBtn">
-                <span>💬</span> 继续对话
-              </button>
-              <button class="btn btn-secondary" id="exportSingleConversationBtn">
-                <span>📥</span> 导出
-              </button>
-            </div>
-          </div>
-
-          <div class="detail-content">
-            <div class="messages-list" id="detailMessagesList">
-              <!-- 消息列表 -->
-            </div>
-          </div>
-        </div>
-
-        <!-- 浮动操作按钮 -->
-        <div class="fab-container" id="conversationsFab">
-          <button class="fab fab-main" data-page="conversations">
-            <svg class="fab-icon fab-icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-          </button>
-          <div class="fab-actions">
-            <button class="fab fab-action" data-action="createConversation">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-              </svg>
-              </button>
-            <button class="fab fab-action" data-action="openSidepanel">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                <line x1="9" y1="3" x2="9" y2="21"></line>
-              </svg>
-              </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 角色管理页面 -->
+      <!-- 提示词管理页面 -->
       <div class="page-content" id="page-prompts">
         <iframe src="../sidepanel/tabs/prompts.html" class="page-iframe" id="promptsIframe"></iframe>
 
         <!-- 浮动操作按钮 -->
         <div class="fab-container" id="promptsFab">
-          <button class="fab fab-main" data-page="prompts">
+          <button class="fab fab-main" data-action="createPrompt" title="创建提示词">
             <svg class="fab-icon fab-icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="12" y1="5" x2="12" y2="19"></line>
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
           </button>
-          <div class="fab-actions">
-            <button class="fab fab-action" onclick="document.getElementById('promptsIframe').contentWindow.postMessage({action: 'createPrompt'}, '*')">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-              </svg>
-              </button>
-            <button class="fab fab-action" onclick="document.getElementById('promptsIframe').contentWindow.postMessage({action: 'importPrompts'}, '*')">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="7 10 12 15 17 10"></polyline>
-                <line x1="12" y1="15" x2="12" y2="3"></line>
-              </svg>
-              </button>
-            <button class="fab fab-action" onclick="document.getElementById('promptsIframe').contentWindow.postMessage({action: 'exportPrompts'}, '*')">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="17 8 12 3 7 8"></polyline>
-                <line x1="12" y1="3" x2="12" y2="15"></line>
-              </svg>
-              </button>
-          </div>
         </div>
       </div>
 
       <!-- 模型管理页面 -->
       <div class="page-content" id="page-models">
-        <iframe src="../sidepanel/tabs/models.html" class="page-iframe"></iframe>
+        <iframe src="../sidepanel/tabs/models.html" class="page-iframe" id="modelsIframe"></iframe>
 
         <!-- 浮动操作按钮 -->
         <div class="fab-container" id="modelsFab">
-          <button class="fab fab-main" data-page="models">
+          <button class="fab fab-main" data-action="createModel" title="创建模型">
             <svg class="fab-icon fab-icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="12" y1="5" x2="12" y2="19"></line>
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
           </button>
-          <div class="fab-actions">
-            <button class="fab fab-action" onclick="document.getElementById('modelsIframe').contentWindow.postMessage({action: 'createModel'}, '*')">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                <line x1="8" y1="21" x2="16" y2="21"></line>
-                <line x1="12" y1="17" x2="12" y2="21"></line>
-              </svg>
-              </button>
-            <button class="fab fab-action" onclick="document.getElementById('modelsIframe').contentWindow.postMessage({action: 'importModels'}, '*')">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="7 10 12 15 17 10"></polyline>
-                <line x1="12" y1="15" x2="12" y2="3"></line>
-              </svg>
-              </button>
-          </div>
         </div>
       </div>
 
-      <!-- 设置页面 -->
       <div class="page-content" id="page-settings">
-        <iframe src="../sidepanel/sidepanel.html#settings" class="page-iframe"></iframe>
+        <div class="settings-page">
+          <div class="settings-header">
+            <h2>系统设置</h2>
+            <p class="settings-subtitle">配置您的 Free AI 使用偏好</p>
+          </div>
+
+          <div class="settings-group">
+            <div class="settings-group-title">
+              <span class="title-icon" aria-hidden="true">🔌</span>
+              <h3>连接设置</h3>
+            </div>
+
+            <div class="settings-card">
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label class="setting-label" for="wsUrlInput">WebSocket 服务器地址</label>
+                  <p class="setting-hint">输入本地 WebSocket 服务器地址</p>
+                </div>
+                <input type="text" class="setting-input" id="wsUrlInput" placeholder="ws://localhost:8080" />
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label class="setting-label" for="wsEnabledCheckbox">启用 WebSocket 连接</label>
+                  <p class="setting-hint">启用后将自动连接到本地服务器</p>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" id="wsEnabledCheckbox" role="switch" aria-label="启用 WebSocket 连接">
+                  <span class="slider"></span>
+                </label>
+              </div>
+
+              <div class="setting-row setting-row-status">
+                <div class="setting-info">
+                  <label class="setting-label">连接状态</label>
+                  <p class="setting-hint">实时显示 WebSocket 连接情况</p>
+                </div>
+                <div class="ws-status-badge" id="wsStatusBadge">
+                  <span class="status-dot" id="wsStatusDot"></span>
+                  <span class="status-label" id="wsStatusLabel">未连接</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="settings-group-title">
+              <span class="title-icon" aria-hidden="true">💬</span>
+              <h3>消息设置</h3>
+            </div>
+
+            <div class="settings-card">
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label class="setting-label" for="floatWindowCheck">浮动窗口</label>
+                  <p class="setting-hint">在当前页面显示 AI 回复，不切换标签页</p>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" id="floatWindowCheck" checked role="switch" aria-label="启用浮动窗口">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="settings-group-title">
+              <span class="title-icon" aria-hidden="true">🤖</span>
+              <h3>辅助功能</h3>
+            </div>
+
+            <div class="settings-card">
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label class="setting-label" for="helperModelSelect">辅助模型</label>
+                  <p class="setting-hint">用于会话标题生成、提示词优化等系统辅助功能</p>
+                </div>
+                <select class="setting-select" id="helperModelSelect">
+                  <option value="">请选择模型</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="settings-group-title">
+              <span class="title-icon" aria-hidden="true">⚠️</span>
+              <h3>使用提示</h3>
+            </div>
+
+            <div class="warning-card">
+              <strong>重要提示：</strong>
+              <ul>
+                <li>使用前请先在浏览器中登录对应的 AI 网站</li>
+                <li>插件会在后台打开 AI 网站标签页进行操作</li>
+                <li>请勿关闭 AI 网站标签页，否则无法发送消息</li>
+              </ul>
+            </div>
+          </div>
+        </div>
       </div>
     </main>
   </div>
 
-  <!-- 团队表单模态框 -->
-  <div class="modal" id="teamModal">
+  <!-- 会话创建模态框 -->
+  <div class="modal" id="conversationModal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2 id="teamModalTitle">新建团队</h2>
+        <h2>新建会话</h2>
         <button class="close-btn">&times;</button>
       </div>
       <div class="modal-body">
-        <form id="teamForm">
+        <form id="conversationForm">
           <div class="form-group">
-            <label for="teamName">
-              团队名称 <span style="color: #ff3b30;">*</span>
-            </label>
-            <input type="text" id="teamName" class="form-input"
-                   placeholder="例如：开发顾问团" autocomplete="off">
-            <small class="form-hint">为团队设置一个易于识别的名称</small>
+            <label for="conversationName">会话名称</label>
+            <input type="text" id="conversationName" class="form-input"
+                   placeholder="输入会话名称（可选）" autocomplete="off">
+            <small class="form-hint">留空则自动生成标题</small>
           </div>
 
           <div class="form-group">
-            <label for="teamDescription">
-              团队描述
-            </label>
-            <textarea id="teamDescription" class="form-textarea" rows="3"
-                      placeholder="描述团队的用途和特点（可选）"></textarea>
-            <small class="form-hint">简要说明这个团队的用途</small>
-          </div>
-
-          <div class="form-group">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-              <label style="margin: 0;">
-                团队成员 <span style="color: #ff3b30;">*</span>
+            <label>对话模式</label>
+            <div class="mode-selector" id="convModeSelector">
+              <label class="mode-option">
+                <input type="radio" name="convMode" value="brainstorming" checked>
+                <div class="mode-card">
+                  <div class="mode-icon">💡</div>
+                  <div class="mode-title">头脑风暴</div>
+                  <div class="mode-desc">独享上下文 · 并行回复</div>
+                </div>
               </label>
-              <button type="button" class="btn-link" id="addTeamMemberBtn" style="padding: 4px 8px; font-size: 13px;">
-                <span style="font-size: 16px;">+</span> 新增成员
+              <label class="mode-option">
+                <input type="radio" name="convMode" value="discussion">
+                <div class="mode-card">
+                  <div class="mode-icon">🪑</div>
+                  <div class="mode-title">圆桌讨论</div>
+                  <div class="mode-desc">共享上下文 · 依次发言</div>
+                </div>
+              </label>
+              <label class="mode-option">
+                <input type="radio" name="convMode" value="expertqa">
+                <div class="mode-card">
+                  <div class="mode-icon">🎓</div>
+                  <div class="mode-title">专家问答</div>
+                  <div class="mode-desc">多AI协作 · 迭代求解</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- 专家选择区 (expertqa 模式) -->
+          <div class="form-group" id="convExpertGroup" style="display:none;">
+            <label>选择专家</label>
+            <div id="convExpertSelector" class="expert-selector"></div>
+          </div>
+
+          <!-- 成员选择区 (brainstorming / discussion 模式) -->
+          <div class="form-group" id="convMemberGroup">
+            <div class="member-actions-header">
+              <label>会话成员 <span style="color: #ff3b30;">*</span></label>
+              <button type="button" class="btn-link" id="convAddMemberBtn">
+                <span class="btn-icon">+</span> 创建新成员
               </button>
             </div>
-
-            <!-- 成员列表 -->
-            <div class="team-members-list" id="teamMembersList">
-              <div class="empty-state" style="padding: 24px; text-align: center; color: #86868b;">
-                <div style="font-size: 32px; margin-bottom: 8px;">👥</div>
-                <p style="margin: 0; font-size: 13px;">暂无成员，点击上方按钮添加</p>
+            <div class="members-selector" id="convModelSelector">
+              <div class="empty-state" style="padding: 16px; text-align: center; color: #86868b;">
+                <p style="margin: 0; font-size: 13px;">正在加载模型...</p>
               </div>
             </div>
 
-            <!-- 内联成员创建表单（默认隐藏） -->
-            <div class="inline-member-form" id="inlineMemberForm" style="display: none;">
-              <div style="background: #f9f9fb; border: 2px solid #e8e8ed; border-radius: 12px; padding: 16px; margin-top: 12px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                  <span style="font-weight: 600; color: #1d1d1f; font-size: 14px;">🆕 新建成员</span>
-                  <button type="button" class="btn-link" id="cancelInlineMemberBtn" style="padding: 4px 8px; color: #86868b;">取消</button>
-                </div>
-
-                <div style="display: grid; gap: 12px;">
-                  <div>
-                    <label style="font-size: 12px; font-weight: 500; color: #1d1d1f; margin-bottom: 6px; display: block;">
-                      选择角色 <span style="color: #ff3b30;">*</span>
-                    </label>
-                    <select id="inlineMemberFlow" class="form-select" style="font-size: 13px; padding: 8px 12px;">
-                      <option value="">请选择角色</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label style="font-size: 12px; font-weight: 500; color: #1d1d1f; margin-bottom: 6px; display: block;">
-                      选择模型 <span style="color: #ff3b30;">*</span>
-                    </label>
-                    <select id="inlineMemberModel" class="form-select" style="font-size: 13px; padding: 8px 12px;">
-                      <option value="">请选择</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label style="font-size: 12px; font-weight: 500; color: #1d1d1f; margin-bottom: 6px; display: block;">
-                      昵称（可选）
-                    </label>
-                    <input type="text" id="inlineMemberName" class="form-input" placeholder="留空则使用角色名称" style="font-size: 13px; padding: 8px 12px;">
-                  </div>
-
-                  <button type="button" class="btn btn-primary" id="saveInlineMemberBtn" style="width: 100%; margin-top: 8px; font-size: 13px; padding: 10px;">
-                    <span>✨</span> 创建并添加
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <small class="form-hint">为团队添加成员，每个成员由角色、模型和昵称组成</small>
           </div>
+
+          <!-- 内联创建成员表单 -->
+          <div class="inline-form-container" id="convInlineMemberForm" style="display:none;">
+            <div class="inline-form-body">
+              <div class="form-group">
+                <label for="convNewMemberName">成员名称 <span style="color: #ff3b30;">*</span></label>
+                <input type="text" id="convNewMemberName" class="form-input"
+                       placeholder="例如：Python 专家助手" autocomplete="off">
+              </div>
+              <div class="form-group">
+                <label for="convNewMemberModel">选择模型 <span style="color: #ff3b30;">*</span></label>
+                <select id="convNewMemberModel" class="form-select">
+                  <option value="">请选择模型...</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="convNewMemberPrompt">选择提示词 <span class="optional">(可选)</span></label>
+                <select id="convNewMemberPrompt" class="form-select">
+                  <option value="">无提示词</option>
+                </select>
+              </div>
+              <div class="inline-form-actions">
+                <button type="button" class="btn btn-secondary" id="convCancelInlineBtn">取消</button>
+                <button type="button" class="btn btn-primary" id="convSaveInlineBtn">
+                  <span>✨</span> 创建并添加
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 圆桌讨论发言顺序已整合到成员列表中 -->
         </form>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" id="cancelTeamBtn">取消</button>
-        <button class="btn btn-primary" id="saveTeamBtn">
-          <span>✓</span> 保存
+        <button class="btn btn-secondary" id="cancelConversationBtn">取消</button>
+        <button class="btn btn-primary" id="confirmConversationBtn">
+          <span>💬</span> 开始对话
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 专家创建/编辑模态框 -->
+  <div class="modal" id="expertModal">
+    <div class="modal-content">
+      <div class="modal-header" style="background: linear-gradient(135deg, #5856d6 0%, #3634a3 100%);">
+        <h2 id="expertModalTitle">新建专家</h2>
+        <button class="close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="expert-modal-avatar-preview">
+          <div class="expert-preview-avatar" id="expertAvatarPreview">
+            <img src="https://api.dicebear.com/7.x/adventurer/svg?seed=expert&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf" alt="预览">
+          </div>
+          <button class="btn btn-secondary btn-sm" id="refreshAvatarBtn" title="换一个头像">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="form-group">
+          <label for="expertName">名称</label>
+          <input type="text" id="expertName" class="form-input" placeholder="例如：资深架构师" autocomplete="off">
+        </div>
+
+        <div class="form-group">
+          <label for="expertDesc">描述</label>
+          <textarea id="expertDesc" class="form-textarea" placeholder="描述此专家的专业领域、能力与特点" rows="4"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer" style="background: #f9f9fb;">
+        <button class="btn btn-secondary" id="cancelExpertBtn">取消</button>
+        <button class="btn btn-primary" id="saveExpertBtn" style="background: linear-gradient(135deg, #5856d6 0%, #3634a3 100%); box-shadow: 0 4px 12px rgba(88, 86, 214, 0.3);">保存</button>
       </div>
     </div>
   </div>
@@ -452,7 +387,8 @@
   <script src="../config/providers.config.js"></script>
   <script src="../utils/storage.js"></script>
   <script src="dashboard.js"></script>
-  <script src="components/team-manager.js"></script>
-  <script src="components/team-form.js"></script>
+  <script src="components/settings-manager.js"></script>
+
+
 </body>
 </html>
