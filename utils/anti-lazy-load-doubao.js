@@ -1,43 +1,52 @@
 // 豆包专用防懒加载脚本
-// 豆包使用 React + IntersectionObserver
 (function() {
   'use strict';
 
-  console.log('[Anti-Lazy-Load-Doubao] ========== 开始注入豆包专用脚本 ==========');
-
-  // 1. 基础Visibility API覆盖
-  try {
-    Object.defineProperty(document, 'hidden', {
-      get: () => false,
-      configurable: true
-    });
-    Object.defineProperty(document, 'visibilityState', {
-      get: () => "visible",
-      configurable: true
-    });
-    console.log('[Anti-Lazy-Load-Doubao] ✓ Visibility API 已覆盖');
-  } catch (e) {
-    console.warn('[Anti-Lazy-Load-Doubao] 覆盖 Visibility API 失败:', e);
-  }
-
-  // 2. 拦截 visibilitychange 事件
-  const origAddEventListener = EventTarget.prototype.addEventListener;
-  EventTarget.prototype.addEventListener = function(type, listener, options) {
-    if (type === 'visibilitychange') {
-      console.log('[Anti-Lazy-Load-Doubao] 拦截 visibilitychange listener');
-      return;
+  // 配置
+  const CONFIG = {
+    debug: false,
+    mouseMovement: {
+      minInterval: 2000,
+      maxInterval: 5000,
+      smoothMovement: true
+    },
+    userActivity: {
+      eventTypes: ['mousemove', 'mousedown', 'mouseup'],
+      interval: { min: 2000, max: 4000 }
     }
-    return origAddEventListener.call(this, type, listener, options);
   };
 
-  // 3. 覆盖 IntersectionObserver（豆包重点）
-  if (window.IntersectionObserver) {
-    const OriginalIntersectionObserver = window.IntersectionObserver;
+  const activityIntervals = [];
 
+  function debug(...args) {
+    if (CONFIG.debug) {
+      console.log('[Anti-Lazy-Load-Doubao]', ...args);
+    }
+  }
+
+  // 覆盖 Visibility API
+  function overrideVisibilityAPI() {
+    try {
+      Object.defineProperty(document, 'hidden', {
+        get: () => false,
+        configurable: true
+      });
+      Object.defineProperty(document, 'visibilityState', {
+        get: () => "visible",
+        configurable: true
+      });
+      debug('Visibility API 已覆盖');
+    } catch (e) {}
+  }
+
+  // 覆盖 IntersectionObserver（立即触发回调）
+  function overrideIntersectionObserver() {
+    if (!window.IntersectionObserver) return;
+
+    const OriginalIntersectionObserver = window.IntersectionObserver;
     window.IntersectionObserver = function(callback, options) {
       const wrappedCallback = (entries, observer) => {
         const modifiedEntries = entries.map(entry => {
-          // 强制设置为完全可见
           entry.isIntersecting = true;
           entry.intersectionRatio = 1;
           entry.intersectionRect = entry.boundingClientRect;
@@ -47,14 +56,9 @@
       };
 
       const observer = new OriginalIntersectionObserver(wrappedCallback, options);
-
-      // 保存原始observe方法
       const originalObserve = observer.observe.bind(observer);
 
-      // 重写observe方法
       observer.observe = function(element) {
-        console.log('[Anti-Lazy-Load-Doubao] 拦截 IntersectionObserver.observe');
-        // 立即触发一次回调，告知元素可见
         setTimeout(() => {
           const mockEntry = {
             target: element,
@@ -67,85 +71,137 @@
           };
           wrappedCallback([mockEntry], observer);
         }, 0);
-
         return originalObserve(element);
       };
 
       return observer;
     };
-
-    // 保留原型方法
     window.IntersectionObserver.prototype = OriginalIntersectionObserver.prototype;
-
-    console.log('[Anti-Lazy-Load-Doubao] ✓ IntersectionObserver 已覆盖');
+    debug('IntersectionObserver 已覆盖');
   }
 
-  // 4. 覆盖 requestIdleCallback（React可能使用）
-  if (window.requestIdleCallback) {
+  // 覆盖 requestIdleCallback
+  function overrideRequestIdleCallback() {
+    if (!window.requestIdleCallback) return;
     const originalRequestIdleCallback = window.requestIdleCallback;
     window.requestIdleCallback = function(callback, options) {
-      console.log('[Anti-Lazy-Load-Doubao] 拦截 requestIdleCallback');
-      // 立即执行，不等待空闲
-      const deadline = {
-        didTimeout: true,
-        timeRemaining: () => 50, // 返回较大的剩余时间
-      };
+      const deadline = { didTimeout: true, timeRemaining: () => 50 };
       return setTimeout(() => callback(deadline), 0);
     };
-    console.log('[Anti-Lazy-Load-Doubao] ✓ requestIdleCallback 已覆盖');
+    debug('requestIdleCallback 已覆盖');
   }
 
-  // 5. 覆盖 Focus 相关API
-  try {
-    Object.defineProperty(document, 'hasFocus', {
-      value: () => true,
-      writable: false,
-      configurable: true
-    });
-    console.log('[Anti-Lazy-Load-Doubao] ✓ hasFocus 已覆盖');
-  } catch (e) {
-    console.warn('[Anti-Lazy-Load-Doubao] 覆盖 hasFocus 失败:', e);
+  // 覆盖 Focus API
+  function overrideFocusAPI() {
+    try {
+      Object.defineProperty(document, 'hasFocus', {
+        value: () => true,
+        writable: false,
+        configurable: true
+      });
+      debug('hasFocus 已覆盖');
+    } catch (e) {}
   }
 
-  // 7. 模拟定期用户活动
-  setInterval(() => {
-    const events = [
-      new MouseEvent('mousemove', {
-        bubbles: true,
-        cancelable: true,
-        view: window,
-        clientX: 100 + Math.random() * 50,
-        clientY: 100 + Math.random() * 50
-      }),
-      new MouseEvent('mousedown', {
-        bubbles: true,
-        cancelable: true,
-        view: window,
-        clientX: 100 + Math.random() * 50,
-        clientY: 100 + Math.random() * 50
-      }),
-      new MouseEvent('mouseup', {
-        bubbles: true,
-        cancelable: true,
-        view: window,
-        clientX: 100 + Math.random() * 50,
-        clientY: 100 + Math.random() * 50
-      })
-    ];
+  // 拦截 visibilitychange 事件
+  function blockVisibilityChange() {
+    const origAddEventListener = EventTarget.prototype.addEventListener;
+    EventTarget.prototype.addEventListener = function(type, listener, options) {
+      if (type === 'visibilitychange') {
+        return;
+      }
+      return origAddEventListener.call(this, type, listener, options);
+    };
+    debug('visibilitychange 拦截已启用');
+  }
 
-    events.forEach(event => {
+  // 拦截 freeze 事件
+  function blockFreezeEvent() {
+    window.addEventListener('freeze', (e) => {
+      e.stopImmediatePropagation();
+    }, true);
+    debug('freeze 事件拦截已启用');
+  }
+
+  // 鼠标移动模拟
+  function startMouseMovement() {
+    const moveMouse = () => {
+      const x = Math.random() * (window.innerWidth - 200) + 100;
+      const y = Math.random() * (window.innerHeight - 200) + 100;
+
+      if (CONFIG.mouseMovement.smoothMovement) {
+        // 平滑移动（模拟贝塞尔曲线）
+        const steps = 5;
+        for (let i = 0; i <= steps; i++) {
+          setTimeout(() => {
+            const event = new MouseEvent('mousemove', {
+              bubbles: true,
+              cancelable: true,
+              view: window,
+              clientX: x * (i / steps),
+              clientY: y * (i / steps)
+            });
+            document.dispatchEvent(event);
+          }, (i * 50));
+        }
+      } else {
+        const event = new MouseEvent('mousemove', {
+          bubbles: true,
+          cancelable: true,
+          view: window,
+          clientX: x,
+          clientY: y
+        });
+        document.dispatchEvent(event);
+      }
+
+      const interval = Math.random() * (CONFIG.mouseMovement.maxInterval - CONFIG.mouseMovement.minInterval) + CONFIG.mouseMovement.minInterval;
+      const intervalId = setTimeout(moveMouse, interval);
+      activityIntervals.push(intervalId);
+    };
+    const intervalId = setTimeout(moveMouse, 1000);
+    activityIntervals.push(intervalId);
+    debug('鼠标移动模拟已启动');
+  }
+
+  // 用户活动模拟
+  function startUserActivity() {
+    const simulateActivity = () => {
+      const eventType = CONFIG.userActivity.eventTypes[Math.floor(Math.random() * CONFIG.userActivity.eventTypes.length)];
+      const x = Math.random() * (window.innerWidth - 200) + 100;
+      const y = Math.random() * (window.innerHeight - 200) + 100;
+
+      const event = new MouseEvent(eventType, {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        clientX: x,
+        clientY: y
+      });
       document.dispatchEvent(event);
-    });
-  }, 3000);
 
-  console.log('[Anti-Lazy-Load-Doubao] ✓ 用户活动模拟已启用');
+      const interval = Math.random() * (CONFIG.userActivity.interval.max - CONFIG.userActivity.interval.min) + CONFIG.userActivity.interval.min;
+      const intervalId = setTimeout(simulateActivity, interval);
+      activityIntervals.push(intervalId);
+    };
+    const intervalId = setTimeout(simulateActivity, 1500);
+    activityIntervals.push(intervalId);
+    debug('用户活动模拟已启动');
+  }
 
-  // 8. 覆盖 Page Lifecycle API
-  window.addEventListener('freeze', (e) => {
-    e.stopImmediatePropagation();
-    console.log('[Anti-Lazy-Load-Doubao] 拦截 freeze 事件');
-  }, true);
+  // 初始化
+  function init() {
+    overrideVisibilityAPI();
+    blockVisibilityChange();
+    overrideIntersectionObserver();
+    overrideRequestIdleCallback();
+    overrideFocusAPI();
+    blockFreezeEvent();
+    startMouseMovement();
+    startUserActivity();
+    debug('防懒加载脚本初始化完成');
+  }
 
-  console.log('[Anti-Lazy-Load-Doubao] ========== 注入完成 ==========');
+  init();
 
 })();

@@ -1,80 +1,95 @@
 // 千问专用防懒加载脚本
-// 千问可能使用 Page Lifecycle API + 网络状态检测
 (function() {
   'use strict';
 
-  console.log('[Anti-Lazy-Load-Qianwen] ========== 开始注入千问专用脚本 ==========');
-
-  // 1. 基础Visibility API覆盖
-  try {
-    Object.defineProperty(document, 'hidden', {
-      get: () => false,
-      configurable: true
-    });
-    Object.defineProperty(document, 'visibilityState', {
-      get: () => "visible",
-      configurable: true
-    });
-    Object.defineProperty(document, 'webkitVisibilityState', {
-      get: () => "visible",
-      configurable: true
-    });
-    Object.defineProperty(document, 'webkitHidden', {
-      get: () => false,
-      configurable: true
-    });
-    console.log('[Anti-Lazy-Load-Qianwen] ✓ Visibility API 已覆盖');
-  } catch (e) {
-    console.warn('[Anti-Lazy-Load-Qianwen] 覆盖 Visibility API 失败:', e);
-  }
-
-  // 2. 拦截所有可见性相关事件
-  const origAddEventListener = EventTarget.prototype.addEventListener;
-  EventTarget.prototype.addEventListener = function(type, listener, options) {
-    const blockedEvents = [
-      'visibilitychange',
-      'webkitvisibilitychange',
-      'freeze',
-      'resume',
-      'pagehide',
-      'pageshow'
-    ];
-
-    if (blockedEvents.includes(type)) {
-      console.log(`[Anti-Lazy-Load-Qianwen] 拦截 ${type} listener`);
-      return;
+  // 配置
+  const CONFIG = {
+    debug: false,
+    mouseMovement: {
+      minInterval: 1000,
+      maxInterval: 4000,
+      smoothMovement: true
+    },
+    userActivity: {
+      eventTypes: ['mousemove', 'keydown', 'scroll'],
+      interval: { min: 1500, max: 3500 },
+      enableTouch: true
+    },
+    websocket: {
+      enabled: true,
+      pingInterval: 15000,
+      pingMessage: { type: 'ping' }
     }
-    return origAddEventListener.call(this, type, listener, options);
   };
 
-  console.log('[Anti-Lazy-Load-Qianwen] ✓ 事件拦截已启用');
+  const activityIntervals = [];
 
-  // 3. 覆盖 Page Lifecycle API
-  const originalDispatchEvent = EventTarget.prototype.dispatchEvent;
-  EventTarget.prototype.dispatchEvent = function(event) {
-    if (event.type === 'freeze' || event.type === 'pagehide') {
-      console.log(`[Anti-Lazy-Load-Qianwen] 拦截 ${event.type} 事件`);
-      return false;
+  function debug(...args) {
+    if (CONFIG.debug) {
+      console.log('[Anti-Lazy-Load-Qianwen]', ...args);
     }
-    return originalDispatchEvent.call(this, event);
-  };
-
-  // 4. 覆盖 document.wasDiscarded（页面卸载检测）
-  try {
-    Object.defineProperty(document, 'wasDiscarded', {
-      get: () => false,
-      configurable: true
-    });
-    console.log('[Anti-Lazy-Load-Qianwen] ✓ wasDiscarded 已覆盖');
-  } catch (e) {
-    console.warn('[Anti-Lazy-Load-Qianwen] 覆盖 wasDiscarded 失败:', e);
   }
 
-  // 5. 覆盖网络状态API（千问可能使用）
-  if (navigator.connection) {
+  // 覆盖 Visibility API
+  function overrideVisibilityAPI() {
+    try {
+      Object.defineProperty(document, 'hidden', {
+        get: () => false,
+        configurable: true
+      });
+      Object.defineProperty(document, 'visibilityState', {
+        get: () => "visible",
+        configurable: true
+      });
+      Object.defineProperty(document, 'webkitVisibilityState', {
+        get: () => "visible",
+        configurable: true
+      });
+      Object.defineProperty(document, 'webkitHidden', {
+        get: () => false,
+        configurable: true
+      });
+      debug('Visibility API 已覆盖');
+    } catch (e) {}
+  }
+
+  // 拦截所有可见性相关事件
+  function blockVisibilityEvents() {
+    const blockedEvents = ['visibilitychange', 'webkitvisibilitychange', 'freeze', 'resume', 'pagehide', 'pageshow'];
+    const origAddEventListener = EventTarget.prototype.addEventListener;
+    EventTarget.prototype.addEventListener = function(type, listener, options) {
+      if (blockedEvents.includes(type)) {
+        return;
+      }
+      return origAddEventListener.call(this, type, listener, options);
+    };
+    debug('可见性事件拦截已启用');
+  }
+
+  // 覆盖 Page Lifecycle API
+  function overridePageLifecycleAPI() {
+    const originalDispatchEvent = EventTarget.prototype.dispatchEvent;
+    EventTarget.prototype.dispatchEvent = function(event) {
+      if (event.type === 'freeze' || event.type === 'pagehide') {
+        return false;
+      }
+      return originalDispatchEvent.call(this, event);
+    };
+
+    try {
+      Object.defineProperty(document, 'wasDiscarded', {
+        get: () => false,
+        configurable: true
+      });
+      debug('Page Lifecycle API 已覆盖');
+    } catch (e) {}
+  }
+
+  // 覆盖 Network Information API
+  function overrideNetworkInfoAPI() {
+    if (!navigator.connection) return;
     try {
       const originalConnection = navigator.connection;
-
       Object.defineProperty(navigator, 'connection', {
         get: () => ({
           ...originalConnection,
@@ -92,46 +107,37 @@
         get: () => false,
         configurable: true
       });
-
       Object.defineProperty(navigator.connection, 'effectiveType', {
         get: () => '4g',
         configurable: true
       });
-
       Object.defineProperty(navigator.connection, 'rtt', {
         get: () => 0,
         configurable: true
       });
-
       Object.defineProperty(navigator.connection, 'downlink', {
         get: () => 100,
         configurable: true
       });
-
-      console.log('[Anti-Lazy-Load-Qianwen] ✓ Network Information API 已覆盖');
-    } catch (e) {
-      console.warn('[Anti-Lazy-Load-Qianwen] 覆盖 Network Information API 失败:', e);
-    }
+      debug('Network Information API 已覆盖');
+    } catch (e) {}
   }
 
-  // 6. 覆盖 requestIdleCallback
-  if (window.requestIdleCallback) {
+  // 覆盖 requestIdleCallback
+  function overrideRequestIdleCallback() {
+    if (!window.requestIdleCallback) return;
     const originalRequestIdleCallback = window.requestIdleCallback;
     window.requestIdleCallback = function(callback, options) {
-      console.log('[Anti-Lazy-Load-Qianwen] 拦截 requestIdleCallback');
-      const deadline = {
-        didTimeout: false,
-        timeRemaining: () => 100,
-      };
+      const deadline = { didTimeout: false, timeRemaining: () => 100 };
       return setTimeout(() => callback(deadline), 0);
     };
-    console.log('[Anti-Lazy-Load-Qianwen] ✓ requestIdleCallback 已覆盖');
+    debug('requestIdleCallback 已覆盖');
   }
 
-  // 7. 覆盖 IntersectionObserver
-  if (window.IntersectionObserver) {
+  // 覆盖 IntersectionObserver
+  function overrideIntersectionObserver() {
+    if (!window.IntersectionObserver) return;
     const OriginalIntersectionObserver = window.IntersectionObserver;
-
     window.IntersectionObserver = function(callback, options) {
       const wrappedCallback = (entries, observer) => {
         const modifiedEntries = entries.map(entry => {
@@ -144,119 +150,175 @@
       };
 
       const observer = new OriginalIntersectionObserver(wrappedCallback, options);
-
       const originalObserve = observer.observe.bind(observer);
+
       observer.observe = function(element) {
-        console.log('[Anti-Lazy-Load-Qianwen] 拦截 IntersectionObserver.observe');
-        const mockEntry = {
-          target: element,
-          isIntersecting: true,
-          intersectionRatio: 1,
-          boundingClientRect: element.getBoundingClientRect(),
-          intersectionRect: element.getBoundingClientRect(),
-          rootBounds: null,
-          time: performance.now()
-        };
-        setTimeout(() => wrappedCallback([mockEntry], observer), 0);
+        setTimeout(() => {
+          const mockEntry = {
+            target: element,
+            isIntersecting: true,
+            intersectionRatio: 1,
+            boundingClientRect: element.getBoundingClientRect(),
+            intersectionRect: element.getBoundingClientRect(),
+            rootBounds: null,
+            time: performance.now()
+          };
+          wrappedCallback([mockEntry], observer);
+        }, 0);
         return originalObserve(element);
       };
 
       return observer;
     };
-
     window.IntersectionObserver.prototype = OriginalIntersectionObserver.prototype;
-
-    console.log('[Anti-Lazy-Load-Qianwen] ✓ IntersectionObserver 已覆盖');
+    debug('IntersectionObserver 已覆盖');
   }
 
-  // 8. 强制触发 focus 事件
-  setTimeout(() => {
-    window.dispatchEvent(new Event('focus'));
-    document.dispatchEvent(new Event('focus'));
-    console.log('[Anti-Lazy-Load-Qianwen] ✓ 强制触发 focus 事件');
-  }, 100);
+  // 强制触发 focus 事件
+  function triggerFocusEvent() {
+    setTimeout(() => {
+      window.dispatchEvent(new Event('focus'));
+      document.dispatchEvent(new Event('focus'));
+      debug('focus 事件已触发');
+    }, 100);
+  }
 
-  // 10. 模拟用户活动
-  let activityCount = 0;
-  const activityInterval = setInterval(() => {
-    activityCount++;
+  // 鼠标移动模拟
+  function startMouseMovement() {
+    const moveMouse = () => {
+      const x = Math.random() * (window.innerWidth - 200) + 100;
+      const y = Math.random() * (window.innerHeight - 200) + 100;
 
-    const events = [
-      new MouseEvent('mousemove', {
-        bubbles: true,
-        cancelable: true,
-        view: window,
-        clientX: 100 + Math.random() * 100,
-        clientY: 100 + Math.random() * 100
-      }),
-      new KeyboardEvent('keydown', {
-        bubbles: true,
-        cancelable: true,
-        view: window,
-        keyCode: 0
-      })
-    ];
+      if (CONFIG.mouseMovement.smoothMovement) {
+        const steps = 5;
+        for (let i = 0; i <= steps; i++) {
+          setTimeout(() => {
+            const event = new MouseEvent('mousemove', {
+              bubbles: true,
+              cancelable: true,
+              view: window,
+              clientX: x * (i / steps),
+              clientY: y * (i / steps)
+            });
+            document.dispatchEvent(event);
+          }, (i * 40));
+        }
+      } else {
+        const event = new MouseEvent('mousemove', {
+          bubbles: true,
+          cancelable: true,
+          view: window,
+          clientX: x,
+          clientY: y
+        });
+        document.dispatchEvent(event);
+      }
 
-    events.forEach(event => {
-      document.dispatchEvent(event);
-    });
+      const interval = Math.random() * (CONFIG.mouseMovement.maxInterval - CONFIG.mouseMovement.minInterval) + CONFIG.mouseMovement.minInterval;
+      const intervalId = setTimeout(moveMouse, interval);
+      activityIntervals.push(intervalId);
+    };
+    const intervalId = setTimeout(moveMouse, 1000);
+    activityIntervals.push(intervalId);
+    debug('鼠标移动模拟已启动');
+  }
 
-    // 每隔一段时间触发一次scroll事件
-    if (activityCount % 3 === 0) {
-      window.dispatchEvent(new Event('scroll'));
-    }
+  // 用户活动模拟
+  function startUserActivity() {
+    let activityCount = 0;
+    const simulateActivity = () => {
+      activityCount++;
+      const eventType = CONFIG.userActivity.eventTypes[Math.floor(Math.random() * CONFIG.userActivity.eventTypes.length)];
+      const x = Math.random() * (window.innerWidth - 200) + 100;
+      const y = Math.random() * (window.innerHeight - 200) + 100;
 
-    // 每隔一段时间触发一次touch事件（移动端模拟）
-    if (activityCount % 5 === 0) {
-      const touch = new Touch({
-        identifier: Date.now(),
-        target: document.body,
-        clientX: 100 + Math.random() * 100,
-        clientY: 100 + Math.random() * 100,
-        pageX: 100 + Math.random() * 100,
-        pageY: 100 + Math.random() * 100,
-        screenX: 100 + Math.random() * 100,
-        screenY: 100 + Math.random() * 100,
-        radiusX: 2.5,
-        radiusY: 2.5,
-        rotationAngle: 0,
-        force: 1
-      });
-      const touchEvent = new TouchEvent('touchstart', {
-        bubbles: true,
-        cancelable: true,
-        touches: [touch],
-        targetTouches: [touch],
-        changedTouches: [touch]
-      });
-      document.dispatchEvent(touchEvent);
-    }
-  }, 2000);
+      let event;
+      if (eventType === 'mousemove') {
+        event = new MouseEvent('mousemove', {
+          bubbles: true,
+          cancelable: true,
+          view: window,
+          clientX: x,
+          clientY: y
+        });
+      } else if (eventType === 'keydown') {
+        event = new KeyboardEvent('keydown', {
+          bubbles: true,
+          cancelable: true,
+          view: window,
+          keyCode: Math.floor(Math.random() * 255)
+        });
+      } else if (eventType === 'scroll') {
+        event = new Event('scroll', { bubbles: true });
+      }
 
-  console.log('[Anti-Lazy-Load-Qianwen] ✓ 用户活动模拟已启用');
+      if (event) {
+        document.dispatchEvent(event);
+      }
 
-  // 11. 确保WebSocket连接保持活跃
-  const originalWebSocket = window.WebSocket;
-  if (originalWebSocket) {
+      // 触摸事件（移动端）
+      if (CONFIG.userActivity.enableTouch && activityCount % 10 === 0) {
+        const touch = new Touch({
+          identifier: Date.now(),
+          target: document.body,
+          clientX: x,
+          clientY: y,
+          pageX: x,
+          pageY: y,
+          screenX: x,
+          screenY: y,
+          radiusX: 2.5,
+          radiusY: 2.5,
+          rotationAngle: 0,
+          force: 1
+        });
+        const touchEvent = new TouchEvent('touchstart', {
+          bubbles: true,
+          cancelable: true,
+          touches: [touch],
+          targetTouches: [touch],
+          changedTouches: [touch]
+        });
+        document.dispatchEvent(touchEvent);
+      }
+
+      // 定期触发 scroll 事件
+      if (activityCount % 3 === 0) {
+        window.dispatchEvent(new Event('scroll'));
+      }
+
+      const interval = Math.random() * (CONFIG.userActivity.interval.max - CONFIG.userActivity.interval.min) + CONFIG.userActivity.interval.min;
+      const intervalId = setTimeout(simulateActivity, interval);
+      activityIntervals.push(intervalId);
+    };
+    const intervalId = setTimeout(simulateActivity, 1500);
+    activityIntervals.push(intervalId);
+    debug('用户活动模拟已启动');
+  }
+
+  // 覆盖 WebSocket
+  function overrideWebSocket() {
+    if (!CONFIG.websocket.enabled) return;
+    const originalWebSocket = window.WebSocket;
+    if (!originalWebSocket) return;
+
     window.WebSocket = function(...args) {
       const ws = new originalWebSocket(...args);
-
       const originalSend = ws.send.bind(ws);
       ws.send = function(...sendArgs) {
-        console.log('[Anti-Lazy-Load-Qianwen] WebSocket 发送数据');
         return originalSend(...sendArgs);
       };
 
-      // 定期发送ping
+      // 定期发送 ping
       const pingInterval = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
           try {
-            ws.send(JSON.stringify({ type: 'ping' }));
+            ws.send(JSON.stringify(CONFIG.websocket.pingMessage));
           } catch (e) {
             clearInterval(pingInterval);
           }
         }
-      }, 10000);
+      }, CONFIG.websocket.pingInterval);
 
       ws.addEventListener('close', () => {
         clearInterval(pingInterval);
@@ -264,25 +326,41 @@
 
       return ws;
     };
-
     window.WebSocket.prototype = originalWebSocket.prototype;
-
-    console.log('[Anti-Lazy-Load-Qianwen] ✓ WebSocket 保活已启用');
+    debug('WebSocket 保活已启用');
   }
 
-  // 12. 覆盖 performance.now() 防止时间检测
-  const originalPerformanceNow = performance.now;
-  let lastTime = originalPerformanceNow.call(performance);
-  performance.now = function() {
-    const currentTime = originalPerformanceNow.call(performance);
-    // 确保时间递增
-    if (currentTime <= lastTime) {
-      return lastTime + 16.67; // ~60fps
-    }
-    lastTime = currentTime;
-    return currentTime;
-  };
+  // 覆盖 performance.now
+  function overridePerformanceNow() {
+    const originalPerformanceNow = performance.now;
+    let lastTime = originalPerformanceNow.call(performance);
+    performance.now = function() {
+      const currentTime = originalPerformanceNow.call(performance);
+      if (currentTime <= lastTime) {
+        return lastTime + 16.67;
+      }
+      lastTime = currentTime;
+      return currentTime;
+    };
+    debug('performance.now 已覆盖');
+  }
 
-  console.log('[Anti-Lazy-Load-Qianwen] ========== 注入完成 ==========');
+  // 初始化
+  function init() {
+    overrideVisibilityAPI();
+    blockVisibilityEvents();
+    overridePageLifecycleAPI();
+    overrideNetworkInfoAPI();
+    overrideRequestIdleCallback();
+    overrideIntersectionObserver();
+    triggerFocusEvent();
+    startMouseMovement();
+    startUserActivity();
+    overrideWebSocket();
+    overridePerformanceNow();
+    debug('防懒加载脚本初始化完成');
+  }
+
+  init();
 
 })();

@@ -31,21 +31,43 @@
   },
   "content_scripts": [
     {
-      "matches": [
-        "https://chat.deepseek.com/*",
-        "https://www.doubao.com/*",
-        "https://www.qianwen.com/*",
-        "https://www.kimi.com/*"
-      ],
+      "matches": ["https://chat.deepseek.com/*"],
       "js": [
+        "utils/anti-lazy-load-deepseek.js",
         "utils/platforms/base-adapter.js",
         "utils/platforms/deepseek-adapter.js",
+        "utils/content-script.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://www.doubao.com/*"],
+      "js": [
+        "utils/anti-lazy-load-doubao.js",
+        "utils/platforms/base-adapter.js",
         "utils/platforms/doubao-adapter.js",
+        "utils/content-script.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://www.qianwen.com/*"],
+      "js": [
+        "utils/anti-lazy-load-qianwen.js",
+        "utils/platforms/base-adapter.js",
         "utils/platforms/qianwen-adapter.js",
+        "utils/content-script.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://www.kimi.com/*"],
+      "js": [
+        "utils/platforms/base-adapter.js",
         "utils/platforms/kimi-adapter.js",
         "utils/content-script.js"
       ],
-      "run_at": "document_idle"
+      "run_at": "document_start"
     },
     {
       "matches": ["<all_urls>"],
