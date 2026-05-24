@@ -104,20 +104,21 @@ class QianwenAdapter extends BasePlatformAdapter {
   }
 
   async processSendMessage(content, messageId, conversationId = null) {
-    console.log(`[${this.platform}] ========== processSendMessage ==========`);
-    console.log(`[${this.platform}] content:`, content);
-    console.log(`[${this.platform}] messageId:`, messageId);
-    console.log(`[${this.platform}] conversationId:`, conversationId);
+    const timestamp = () => new Date().toISOString().split('T')[1].replace('Z', '');
+    console.log(`[${timestamp()}] [${this.platform}] ========== processSendMessage ==========`);
+    console.log(`[${timestamp()}] [${this.platform}] content:`, content);
+    console.log(`[${timestamp()}] [${this.platform}] messageId:`, messageId);
+    console.log(`[${timestamp()}] [${this.platform}] conversationId:`, conversationId);
 
     window.isSendingMessage = true;
-    console.log(`[${this.platform}] ✓ 已设置 isSendingMessage = true`);
+    console.log(`[${timestamp()}] [${this.platform}] ✓ 已设置 isSendingMessage = true`);
 
     try {
       await this.sendMessage(content);
-      console.log(`[${this.platform}] ✓ 消息已发送到输入框`);
+      console.log(`[${timestamp()}] [${this.platform}] ✓ 消息已发送到输入框`);
 
       const response = await this.waitForAIResponse();
-      console.log(`[${this.platform}] ✓ 收到 AI 回复，长度:`, response?.length || 0);
+      console.log(`[${timestamp()}] [${this.platform}] ✓ 收到 AI 回复，长度:`, response?.length || 0);
 
       // 等待 URL 更新（Qianwen 发送消息后会导航到新会话）
       const conversationUrl = await this.waitForUrlUpdate();
@@ -143,19 +144,23 @@ class QianwenAdapter extends BasePlatformAdapter {
             });
             setTimeout(() => reject(new Error('sendMessage超时')), 5000);
           });
-          console.log(`[${this.platform}] ✓ 已发送 aiResponse 消息到 background (第${attempt}次尝试)`);
+          const ts = timestamp();
+          console.log(`[${ts}] [${this.platform}] ✓ 已发送 aiResponse 消息到 background (第${attempt}次尝试)`);
           break;
         } catch (error) {
-          console.warn(`[${this.platform}] ⚠️ 第${attempt}次发送aiResponse失败:`, error.message);
+          const ts = timestamp();
+          console.warn(`[${ts}] [${this.platform}] ⚠️ 第${attempt}次发送aiResponse失败:`, error.message);
           if (attempt < 3) {
             await this.sleep(1000 * attempt);
           } else {
-            console.error(`[${this.platform}] ❌ 发送aiResponse最终失败，已重试3次`);
+            console.error(`[${ts}] [${this.platform}] ❌ 发送aiResponse最终失败，已重试3次`);
             throw error;
           }
         }
       }
     } catch (error) {
+      const ts = timestamp();
+      console.error(`[${ts}] [${this.platform}] ❌ 错误:`, error.message);
       chrome.runtime.sendMessage({
         type: 'aiResponse',
         platform: this.platform,
@@ -165,12 +170,14 @@ class QianwenAdapter extends BasePlatformAdapter {
       });
     } finally {
       window.isSendingMessage = false;
-      console.log(`[${this.platform}] ✓ 消息处理完成，已清除 isSendingMessage 标记`);
+      const ts = timestamp();
+      console.log(`[${ts}] [${this.platform}] ✓ 消息处理完成，已清除 isSendingMessage 标记`);
     }
   }
 
   async waitForAIResponse() {
-    console.log(`[${this.platform}] ========== 开始等待 AI 回复 ==========`);
+    const timestamp = () => new Date().toISOString().split('T')[1].replace('Z', '');
+    console.log(`[${timestamp()}] [${this.platform}] ========== 开始等待 AI 回复 ==========`);
 
     return new Promise((resolve, reject) => {
       let lastContent = '';
@@ -183,16 +190,20 @@ class QianwenAdapter extends BasePlatformAdapter {
           clearTimeout(timeoutHandle);
         }
         timeoutHandle = setTimeout(() => {
+          const ts = timestamp();
           if (lastContent.length > 0) {
+            console.log(`[${ts}] [${this.platform}] Watchdog 触发 cleanup`);
             cleanup(lastContent);
           } else {
+            console.log(`[${ts}] [${this.platform}] Watchdog 超时 reject`);
             reject(new Error('等待AI回复超时 (30秒无响应)'));
           }
         }, WATCHDOG_TIMEOUT);
       };
 
       const checkNewMessage = (mutations) => {
-        console.log(`[${this.platform}] [${new Date().toLocaleTimeString()}] MutationObserver 触发`);
+        const ts = timestamp();
+        console.log(`[${ts}] [${this.platform}] MutationObserver 触发`);
         const messageContainer = document.querySelector('.message-list-content-container');
         if (!messageContainer) return null;
 
@@ -330,18 +341,20 @@ class QianwenAdapter extends BasePlatformAdapter {
         };
 
         let rawText = extractTextWithNewlines(clone).trim();
+        console.log(`[${timestamp()}] [${this.platform}] 提取文本长度: ${rawText.length}, 前50字符: ${rawText.substring(0, 50)}`);
 
         return rawText;
       };
 
       const cleanup = (content) => {
-        console.log(`[${this.platform}] ========== cleanup 被调用 ==========`);
-        console.log(`[${this.platform}] 原始内容长度:`, content?.length || 0);
+        const ts = timestamp();
+        console.log(`[${ts}] [${this.platform}] ========== cleanup 被调用 ==========`);
+        console.log(`[${ts}] [${this.platform}] 原始内容长度:`, content?.length || 0);
         if (observer) observer.disconnect();
         if (timeoutHandle) clearTimeout(timeoutHandle);
 
         const finalContent = content.replace(/\[\[<<>>\]\]/g, '').trim();
-        console.log(`[${this.platform}] 清理后内容长度:`, finalContent?.length || 0);
+        console.log(`[${ts}] [${this.platform}] 清理后内容长度:`, finalContent?.length || 0);
         resolve(finalContent);
       };
 
@@ -374,6 +387,8 @@ class QianwenAdapter extends BasePlatformAdapter {
         characterData: true
       });
 
+      const ts = timestamp();
+      console.log(`[${ts}] [${this.platform}] Watchdog 已启动，超时时间: ${WATCHDOG_TIMEOUT}ms`);
       resetWatchdog();
     });
   }

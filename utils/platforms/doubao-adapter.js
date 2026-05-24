@@ -36,11 +36,12 @@ class DoubaoAdapter extends BasePlatformAdapter {
   }
 
   async sendMessage(content) {
-    console.log(`[${this.platform}] ========== 开始发送消息 ==========`);
-    console.log(`[${this.platform}] 消息内容:`, content);
+    const timestamp = () => new Date().toISOString().split('T')[1].replace('Z', '');
+    console.log(`[${timestamp()}] [${this.platform}] ========== 开始发送消息 ==========`);
+    console.log(`[${timestamp()}] [${this.platform}] 消息内容:`, content);
 
     const inputBox = await this.waitForElement('textarea.semi-input-textarea', 10000);
-    console.log(`[${this.platform}] ✓ 找到输入框`);
+    console.log(`[${timestamp()}] [${this.platform}] ✓ 找到输入框`);
 
     inputBox.focus();
     await this.sleep(200);
@@ -56,30 +57,31 @@ class DoubaoAdapter extends BasePlatformAdapter {
 
     // 等待发送按钮可用
     const sendButton = await this.waitForButton();
-    console.log(`[${this.platform}] ✓ 找到发送按钮`);
+    console.log(`[${timestamp()}] [${this.platform}] ✓ 找到发送按钮`);
 
     // 点击发送按钮
     sendButton.click();
-    console.log(`[${this.platform}] ✓ 已点击发送按钮`);
+    console.log(`[${timestamp()}] [${this.platform}] ✓ 已点击发送按钮`);
 
     await this.sleep(1000);
   }
 
   async processSendMessage(content, messageId, conversationId = null) {
-    console.log(`[${this.platform}] ========== processSendMessage ==========`);
-    console.log(`[${this.platform}] content:`, content);
-    console.log(`[${this.platform}] messageId:`, messageId);
-    console.log(`[${this.platform}] conversationId:`, conversationId);
+    const timestamp = () => new Date().toISOString().split('T')[1].replace('Z', '');
+    console.log(`[${timestamp()}] [${this.platform}] ========== processSendMessage ==========`);
+    console.log(`[${timestamp()}] [${this.platform}] content:`, content);
+    console.log(`[${timestamp()}] [${this.platform}] messageId:`, messageId);
+    console.log(`[${timestamp()}] [${this.platform}] conversationId:`, conversationId);
 
     window.isSendingMessage = true;
-    console.log(`[${this.platform}] ✓ 已设置 isSendingMessage = true`);
+    console.log(`[${timestamp()}] [${this.platform}] ✓ 已设置 isSendingMessage = true`);
 
     try {
       await this.sendMessage(content);
-      console.log(`[${this.platform}] ✓ 消息已发送到输入框`);
+      console.log(`[${timestamp()}] [${this.platform}] ✓ 消息已发送到输入框`);
 
       const response = await this.waitForAIResponse();
-      console.log(`[${this.platform}] ✓ 收到 AI 回复，长度:`, response?.length || 0);
+      console.log(`[${timestamp()}] [${this.platform}] ✓ 收到 AI 回复，长度:`, response?.length || 0);
 
       // 使用重试机制发送响应
       for (let attempt = 1; attempt <= 3; attempt++) {
@@ -101,20 +103,23 @@ class DoubaoAdapter extends BasePlatformAdapter {
             });
             setTimeout(() => reject(new Error('sendMessage超时')), 5000);
           });
-          console.log(`[${this.platform}] ✓ 已发送 aiResponse 消息到 background (第${attempt}次尝试)`);
+          const ts = timestamp();
+          console.log(`[${ts}] [${this.platform}] ✓ 已发送 aiResponse 消息到 background (第${attempt}次尝试)`);
           break;
         } catch (error) {
-          console.warn(`[${this.platform}] ⚠️ 第${attempt}次发送aiResponse失败:`, error.message);
+          const ts = timestamp();
+          console.warn(`[${ts}] [${this.platform}] ⚠️ 第${attempt}次发送aiResponse失败:`, error.message);
           if (attempt < 3) {
             await this.sleep(1000 * attempt);
           } else {
-            console.error(`[${this.platform}] ❌ 发送aiResponse最终失败，已重试3次`);
+            console.error(`[${ts}] [${this.platform}] ❌ 发送aiResponse最终失败，已重试3次`);
             throw error;
           }
         }
       }
     } catch (error) {
-      console.error(`[${this.platform}] ❌ 错误:`, error.message);
+      const ts = timestamp();
+      console.error(`[${ts}] [${this.platform}] ❌ 错误:`, error.message);
       chrome.runtime.sendMessage({
         type: 'aiResponse',
         platform: this.platform,
@@ -124,7 +129,8 @@ class DoubaoAdapter extends BasePlatformAdapter {
       });
     } finally {
       window.isSendingMessage = false;
-      console.log(`[${this.platform}] ✓ 消息处理完成，已清除 isSendingMessage 标记`);
+      const ts = timestamp();
+      console.log(`[${ts}] [${this.platform}] ✓ 消息处理完成，已清除 isSendingMessage 标记`);
     }
   }
 
@@ -285,7 +291,8 @@ class DoubaoAdapter extends BasePlatformAdapter {
   }
 
   async waitForAIResponse() {
-    console.log(`[${this.platform}] ========== 开始等待 AI 回复 ==========`);
+    const timestamp = () => new Date().toISOString().split('T')[1].replace('Z', '');
+    console.log(`[${timestamp()}] [${this.platform}] ========== 开始等待 AI 回复 ==========`);
 
     return new Promise((resolve, reject) => {
       let lastContent = '';
@@ -298,22 +305,26 @@ class DoubaoAdapter extends BasePlatformAdapter {
           clearTimeout(timeoutHandle);
         }
         timeoutHandle = setTimeout(() => {
+          const ts = timestamp();
           if (lastContent.length > 0) {
+            console.log(`[${ts}] [${this.platform}] Watchdog 触发 cleanup`);
             cleanup(lastContent);
           } else {
+            console.log(`[${ts}] [${this.platform}] Watchdog 超时 reject`);
             reject(new Error('等待AI回复超时 (30秒无响应)'));
           }
         }, WATCHDOG_TIMEOUT);
       };
 
       const checkNewMessage = (mutations) => {
-        console.log(`[${this.platform}] MutationObserver 触发`);
+        const ts = timestamp();
+        console.log(`[${ts}] [${this.platform}] MutationObserver 触发`);
         const msgList = document.querySelector('[class*="message-list"]');
         if (!msgList) return null;
 
         // 查找所有消息行（豆包使用 .v_list_row）
         const allRows = msgList.querySelectorAll('.v_list_row');
-        const messageRows = Array.from(allRows).filter(row => 
+        const messageRows = Array.from(allRows).filter(row =>
           row.textContent && row.textContent.trim().length > 0
         );
 
@@ -341,7 +352,7 @@ class DoubaoAdapter extends BasePlatformAdapter {
         // 移除所有按钮
         const buttons = clonedMessage.querySelectorAll('button');
         buttons.forEach(btn => btn.remove());
-        
+
         // 移除用户输入部分（通常包含输入提示）
         const userInputElements = clonedMessage.querySelectorAll('[class*="whitespace-pre-wrap"], [class*="user-input"]');
         userInputElements.forEach(el => el.remove());
@@ -353,7 +364,7 @@ class DoubaoAdapter extends BasePlatformAdapter {
         const formattedElement = this.formatCodeBlocks(clonedMessage);
 
         let rawText = this.extractTextWithNewlines(formattedElement).trim();
-        console.log(`[${this.platform}] 提取文本长度: ${rawText.length}, 前50字符: ${rawText.substring(0, 50)}`);
+        console.log(`[${timestamp()}] [${this.platform}] 提取文本长度: ${rawText.length}, 前50字符: ${rawText.substring(0, 50)}`);
 
         if (!rawText) return null;
 
@@ -365,13 +376,14 @@ class DoubaoAdapter extends BasePlatformAdapter {
       };
 
       const cleanup = (content) => {
-        console.log(`[${this.platform}] ========== cleanup 被调用 ==========`);
-        console.log(`[${this.platform}] 原始内容长度:`, content?.length || 0);
+        const ts = timestamp();
+        console.log(`[${ts}] [${this.platform}] ========== cleanup 被调用 ==========`);
+        console.log(`[${ts}] [${this.platform}] 原始内容长度:`, content?.length || 0);
         if (observer) observer.disconnect();
         if (timeoutHandle) clearTimeout(timeoutHandle);
 
         const finalContent = content.replace(/\[\[<<>>\]\]/g, '').trim();
-        console.log(`[${this.platform}] 清理后内容长度:`, finalContent?.length || 0);
+        console.log(`[${ts}] [${this.platform}] 清理后内容长度:`, finalContent?.length || 0);
         resolve(finalContent);
       };
 
@@ -382,7 +394,8 @@ class DoubaoAdapter extends BasePlatformAdapter {
           lastContent = content;
 
           if (content.includes('[[<<>>]]')) {
-            console.log("检测到结束标记");
+            const ts = timestamp();
+            console.log(`[${ts}] [${this.platform}] 检测到结束标记`);
             if (timeoutHandle) {
               clearTimeout(timeoutHandle);
               timeoutHandle = null;
@@ -405,6 +418,8 @@ class DoubaoAdapter extends BasePlatformAdapter {
         characterData: true
       });
 
+      const ts = timestamp();
+      console.log(`[${ts}] [${this.platform}] Watchdog 已启动，超时时间: ${WATCHDOG_TIMEOUT}ms`);
       resetWatchdog();
     });
   }
