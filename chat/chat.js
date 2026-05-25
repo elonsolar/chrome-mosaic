@@ -286,20 +286,19 @@ function initElements() {
 
 async function loadData() {
   try {
-    const [conversation, members, models, prompts, experts] = await Promise.all([
+    const [conversation, models, prompts, experts] = await Promise.all([
       getConversation(conversationId),
-      getMembers(),
       chrome.runtime.sendMessage({ action: 'getModels' }),
       chrome.runtime.sendMessage({ action: 'getPrompts' }),
       chrome.runtime.sendMessage({ action: 'getExperts' }).catch(() => [])
     ]);
 
     console.log('[Chat] loadData - conversation:', conversation);
+    console.log('[Chat] loadData - conversation.members:', conversation?.members);
     console.log('[Chat] loadData - conversation.mode:', conversation?.mode);
     console.log('[Chat] loadData - conversation.contextMode:', conversation?.contextMode);
 
     state.conversation = conversation;
-    state.members = members || [];
     state.models = models || [];
     state.prompts = prompts || [];
     state.experts = experts || [];
@@ -489,7 +488,7 @@ async function handleStorageChange(change) {
     renderMessages();
 
     // 更新输入状态
-    const hasMembers = state.conversation.memberIds && state.conversation.memberIds.length > 0;
+    const hasMembers = state.conversation.members && state.conversation.members.length > 0;
     if (elements.messageInput) {
       elements.messageInput.disabled = !hasMembers;
       elements.messageInput.placeholder = hasMembers ? '输入消息...' : '请先添加成员后再发送消息';
@@ -515,21 +514,18 @@ async function handleStorageChange(change) {
 }
 
 function updatePlatformPanelMessages() {
-  if (!state.conversation.memberIds || state.conversation.memberIds.length === 0) {
+  if (!state.conversation.members || state.conversation.members.length === 0) {
     return;
   }
 
-  state.conversation.memberIds.forEach(memberId => {
-    const member = state.members.find(r => r.id === memberId);
-    if (!member) return;
-
-    const windowElement = document.querySelector(`.platform-window[data-member-id="${memberId}"]`);
+  state.conversation.members.forEach(member => {
+    const windowElement = document.querySelector(`.platform-window[data-member-id="${member.id}"]`);
     if (!windowElement) return;
 
     const messageList = windowElement.querySelector('.platform-message-list');
     if (!messageList) return;
 
-    const roleMessages = getMemberMessages(memberId);
+    const roleMessages = getMemberMessages(member.id);
 
     if (roleMessages.length > 0) {
       messageList.innerHTML = roleMessages.map(msg => createMessageHTML(msg, member)).join('');
@@ -606,7 +602,7 @@ function render() {
   renderMessages();
 
   // 根据是否有成员或专家来启用/禁用输入
-  const hasMembers = (state.conversation.memberIds && state.conversation.memberIds.length > 0) ||
+  const hasMembers = (state.conversation.members && state.conversation.members.length > 0) ||
     (state.conversation.mode === 'expertqa' && state.conversation.expertId);
   if (elements.messageInput) {
     elements.messageInput.disabled = !hasMembers;
@@ -618,6 +614,8 @@ function render() {
 }
 
 function renderMembersTags() {
+  console.log('[Chat] renderMembersTags - conversation.members:', state.conversation.members);
+
   if (state.conversation.mode === 'expertqa' || state.conversation.contextMode === 'expertqa') {
     const expertId = state.conversation.expertId || state.conversation.memberSettings?.expertId;
     if (expertId) {
@@ -631,27 +629,31 @@ function renderMembersTags() {
     }
   }
 
-  if (!state.conversation.memberIds || state.conversation.memberIds.length === 0) {
+  if (!state.conversation.members || state.conversation.members.length === 0) {
+    console.log('[Chat] renderMembersTags - No members, clearing tags');
     elements.membersTags.innerHTML = '';
     return;
   }
 
   const hasOrdering = state.conversation.mode === 'discussion' ||
     (state.conversation.sendMode && state.conversation.sendMode === 'sequential');
+  const memberIds = state.conversation.members.map(m => m.id);
 
-  elements.membersTags.innerHTML = state.conversation.memberIds.map(memberId => {
-    const member = state.members.find(r => r.id === memberId);
-    if (!member) return '';
-    const memberIndex = (state.conversation.memberOrder || state.conversation.memberIds).indexOf(memberId);
+  console.log('[Chat] renderMembersTags - Rendering', state.conversation.members.length, 'members');
+
+  elements.membersTags.innerHTML = state.conversation.members.map(member => {
+    const memberIndex = (state.conversation.memberOrder || memberIds).indexOf(member.id);
     const provider = PROVIDERS[member.provider];
     const color = provider ? provider.color : '#666';
-    return `<span class="member-tag${hasOrdering ? ' draggable' : ''}" data-member-id="${memberId}" title="${hasOrdering ? '点击调整顺序' : ''}">
+    return `<span class="member-tag${hasOrdering ? ' draggable' : ''}" data-member-id="${member.id}" title="${hasOrdering ? '点击调整顺序' : ''}">
       ${hasOrdering ? `<span class="member-tag-drag-handle">#${memberIndex + 1}</span>` : ''}
       <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:2px;"></span>
       ${escapeHtml(member.name)}
       <span class="member-tag-remove" title="移除成员">×</span>
     </span>`;
   }).join('');
+
+  console.log('[Chat] renderMembersTags - Members tags HTML:', elements.membersTags.innerHTML);
 }
 
 function renderModeBadge() {
@@ -703,7 +705,7 @@ function renderModeBadge() {
 
 function renderMessages() {
   // 专家问答模式有专家ID即可
-  const hasParticipants = (state.conversation.memberIds && state.conversation.memberIds.length > 0) ||
+  const hasParticipants = (state.conversation.members && state.conversation.members.length > 0) ||
     (state.conversation.mode === 'expertqa' && state.conversation.expertId);
 
   if (!hasParticipants) {
@@ -729,7 +731,7 @@ function renderMessages() {
   }
 
   elements.messagesContainer.innerHTML = state.conversation.messages.map((msg, index) => {
-    const member = state.members.find(r => r.id === msg.memberId);
+    const member = state.conversation.members.find(m => m.id === msg.memberId);
     const roleSetting = state.conversation.memberSettings?.[msg.memberId] || {};
     const displayName = roleSetting.nickname || member?.name || '未知成员';
     const providerName = member ? getProviderDisplayName(member.provider) : '';
@@ -857,16 +859,16 @@ function resetSendButton() {
 }
 
 async function checkHasVirtualModels() {
-  if (!state.conversation.modelIds && !state.conversation.memberIds) {
+  if (!state.conversation.modelIds && !state.conversation.members) {
     return false;
   }
-  
-  const modelIds = state.conversation.modelIds || state.conversation.memberIds || [];
+
+  const modelIds = state.conversation.modelIds || state.conversation.members.map(m => m.id) || [];
 
   try {
     const models = await chrome.runtime.sendMessage({ action: 'getModels' });
     if (!models) return false;
-    
+
     return modelIds.some(id => {
       const model = models.find(m => m.id === id);
       return model && model.isVirtual;
@@ -1183,7 +1185,8 @@ function showModeSelector(focusOrder) {
 
   const currentContextMode = state.conversation.contextMode || 'self';
   const currentSendMode = state.conversation.sendMode || (currentContextMode === 'self' ? 'parallel' : 'parallel');
-  const currentOrder = state.conversation.memberOrder || state.conversation.memberIds || [];
+  const memberIds = state.conversation.members.map(m => m.id);
+  const currentOrder = state.conversation.memberOrder || memberIds || [];
 
   const contextModeNames = {
     self: '独享模式',
@@ -1251,7 +1254,7 @@ function showModeSelector(focusOrder) {
           <p class="mode-order-hint">拖动成员卡片调整顺序（用于串行模式）</p>
           <div class="member-order-list" id="modeMemberOrderList">
             ${currentOrder.map((memberId, index) => {
-              const member = state.members.find(r => r.id === memberId);
+              const member = state.conversation.members.find(m => m.id === memberId);
               if (!member) return '';
               const providerConfig = PROVIDERS ? PROVIDERS[member.provider] : null;
               const color = providerConfig ? providerConfig.color : '#667eea';
@@ -1433,20 +1436,6 @@ async function getConversation(id) {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('获取会话超时')), 30000);
     chrome.runtime.sendMessage({ action: 'getConversation', conversationId: id }, (response) => {
-      clearTimeout(timeout);
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
-      } else {
-        resolve(response);
-      }
-    });
-  });
-}
-
-async function getMembers() {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('获取成员超时')), 30000);
-    chrome.runtime.sendMessage({ action: 'getMembers' }, (response) => {
       clearTimeout(timeout);
       if (chrome.runtime.lastError) {
         reject(new Error(chrome.runtime.lastError.message));
@@ -1736,7 +1725,7 @@ function initPlatformPanel() {
     console.log('[PlatformPanel] 默认收起平台面板');
   }
 
-  if (!state.conversation || !state.conversation.memberIds) {
+  if (!state.conversation || !state.conversation.members) {
     console.log('[PlatformPanel] 没有成员，跳过创建窗口');
     return;
   }
@@ -1750,16 +1739,15 @@ function createPlatformWindows() {
 
   elements.platformWindows.innerHTML = '';
 
-  const memberIds = state.conversation.memberIds || [];
-  if (memberIds.length === 0) {
+  const members = state.conversation.members || [];
+  if (members.length === 0) {
     elements.platformWindows.innerHTML = '<div class="platform-empty">平台窗口将在此显示</div>';
     return;
   }
 
-  memberIds.forEach(memberId => {
-    const member = state.members.find(r => r.id === memberId);
-    if (member) {
-      const windowElement = createPlatformWindow(member);
+  members.forEach(member => {
+    const windowElement = createPlatformWindow(member);
+    if (windowElement) {
       elements.platformWindows.appendChild(windowElement);
     }
   });
@@ -2073,12 +2061,6 @@ function showAddMemberModal() {
     }
   }
 
-  const allMembers = state.members || [];
-  const currentMemberIds = state.conversation.memberIds || [];
-  console.log('[DEBUG] allMembers:', allMembers.length, 'currentMemberIds:', currentMemberIds);
-
-  const availableMembers = allMembers.filter(m => !currentMemberIds.includes(m.id));
-
   const modal = document.createElement('div');
   modal.className = 'modal-overlay active';
   modal.innerHTML = `
@@ -2164,42 +2146,43 @@ function showAddMemberModal() {
         }
       }
 
-      const newMember = await chrome.runtime.sendMessage({
-        action: 'createMember',
+      // 直接创建 Member 对象，不再调用 createMember action
+      const newMember = {
+        id: `member_${Date.now().toString(36)}_${Math.random().toString(36).substr(2)}`,
         name: memberName,
         provider: model.provider,
         model: model.model,
-        systemPrompt: systemPrompt
+        systemPrompt: systemPrompt,
+        baseUrl: model.baseUrl || '',
+        apiKey: model.apiKey || ''
+      };
+
+      const currentMembers = state.conversation.members || [];
+      const updatedMembers = [...currentMembers, newMember];
+      const memberIds = updatedMembers.map(m => m.id);
+      const updates = { members: updatedMembers };
+
+      if (state.conversation.mode === 'discussion' || state.conversation.sendMode === 'sequential') {
+        updates.memberOrder = memberIds;
+      }
+
+      const updatedConversation = await chrome.runtime.sendMessage({
+        action: 'updateConversation',
+        conversationId,
+        updates
       });
 
-      if (newMember) {
-        const currentMemberIds = state.conversation.memberIds || [];
-        const updatedMemberIds = [...currentMemberIds, newMember.id];
-        const updates = { memberIds: updatedMemberIds };
-
-        if (state.conversation.mode === 'discussion' || state.conversation.sendMode === 'sequential') {
-          updates.memberOrder = updatedMemberIds;
-        }
-
-        const updatedConversation = await chrome.runtime.sendMessage({
-          action: 'updateConversation',
-          conversationId,
-          updates
-        });
-
-        if (updatedConversation) {
-          state.conversation = updatedConversation;
-          state.members.push(newMember);
-          render();
-          initPlatformPanel();
-          console.log('[Chat] 新成员已创建并添加到会话');
-        }
-
+      if (updatedConversation) {
+        state.conversation = updatedConversation;
+        render();
+        initPlatformPanel();
+        console.log('[Chat] 新成员已创建并添加到会话');
         document.body.removeChild(modal);
       }
     } catch (error) {
       console.error('创建成员失败:', error);
       alert('创建成员失败：' + error.message);
+      document.body.removeChild(modal);
     }
   });
 }
@@ -2210,12 +2193,13 @@ async function removeMemberFromConversation(memberId) {
   }
 
   try {
-    const currentMemberIds = state.conversation.memberIds || [];
-    const updatedMemberIds = currentMemberIds.filter(id => id !== memberId);
-    const updates = { memberIds: updatedMemberIds };
+    const currentMembers = state.conversation.members || [];
+    const updatedMembers = currentMembers.filter(m => m.id !== memberId);
+    const memberIds = updatedMembers.map(m => m.id);
+    const updates = { members: updatedMembers };
 
     if (state.conversation.mode === 'discussion' || state.conversation.sendMode === 'sequential') {
-      updates.memberOrder = updatedMemberIds;
+      updates.memberOrder = memberIds;
     }
 
     const updatedConversation = await chrome.runtime.sendMessage({
@@ -3115,25 +3099,26 @@ async function saveNewConvInlineMember() {
       if (prompt) systemPrompt = prompt.content || '';
     }
 
-    const newMember = await chrome.runtime.sendMessage({
-      action: 'createMember',
+    // 直接创建 Member 对象，不再调用 createMember action
+    const newMember = {
+      id: `member_${Date.now().toString(36)}_${Math.random().toString(36).substr(2)}`,
       name: memberName,
       provider: model.provider,
       model: model.model || model.id,
-      systemPrompt
-    });
+      systemPrompt: systemPrompt,
+      baseUrl: model.baseUrl || '',
+      apiKey: model.apiKey || ''
+    };
 
-    if (newMember) {
-      newConvState.members.push(newMember);
-      renderNewConvMemberList();
-      saveBtn.innerHTML = '<span>✓</span> 创建成功';
-      saveBtn.style.background = 'linear-gradient(135deg, #34c759 0%, #30b350 100%)';
-      setTimeout(() => {
-        const form = document.getElementById('convInlineMemberForm');
-        if (form) form.style.display = 'none';
-        resetInlineMemberForm();
-      }, 800);
-    }
+    newConvState.members.push(newMember);
+    renderNewConvMemberList();
+    saveBtn.innerHTML = '<span>✓</span> 创建成功';
+    saveBtn.style.background = 'linear-gradient(135deg, #34c759 0%, #30b350 100%)';
+    setTimeout(() => {
+      const form = document.getElementById('convInlineMemberForm');
+      if (form) form.style.display = 'none';
+      resetInlineMemberForm();
+    }, 800);
   } catch (error) {
     console.error('[NewConvModal] 创建成员失败:', error);
     saveBtn.disabled = false;
@@ -3219,18 +3204,19 @@ async function createNewConversation() {
       return;
     }
     data.expertId = newConvState.selectedExpertId;
-    data.modelIds = [];
+    data.members = [];
   } else {
-    const allMemberIds = newConvState.members.map(m => m.id);
+    // 使用新的 members 字段，而不是 modelIds
+    const members = newConvState.members;
 
-    if (mode === 'discussion' && allMemberIds.length < 2) {
+    if (mode === 'discussion' && members.length < 2) {
       alert('圆桌讨论至少需要 2 个成员');
       return;
     }
-    data.modelIds = allMemberIds;
+    data.members = members;
 
     if (mode === 'discussion') {
-      data.memberOrder = allMemberIds;
+      data.memberOrder = members.map(m => m.id);
     }
   }
 
@@ -3243,7 +3229,7 @@ async function createNewConversation() {
     if (result && result.id) {
       const pendingMessage = newConvState.pendingMessage;
       hideNewConversationModal();
-      
+
       // 导航到新会话
       window.location.href = `chat.html?id=${result.id}${pendingMessage ? '&autoSend=' + encodeURIComponent(pendingMessage) : ''}`;
     }

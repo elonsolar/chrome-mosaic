@@ -55,21 +55,32 @@ document.getElementById('newChatBtn').addEventListener('click', async () => {
       hour12: false
     }).replace(/\//g, '-').replace(/,\s*/g, ' ');
 
-    let allMemberIds = [];
+    let members = [];
 
     try {
-      const members = await chrome.runtime.sendMessage({ action: 'getMembers' });
-      if (members && members.length > 0) {
-        allMemberIds = members.map(member => member.id);
+      const models = await chrome.runtime.sendMessage({ action: 'getModels' });
+      if (models && models.length > 0) {
+        // 将 Model 转换为 Member 对象
+        members = models
+          .filter(model => model.enabled !== false)
+          .map(model => ({
+            id: `member_${Date.now().toString(36)}_${Math.random().toString(36).substr(2)}`,
+            name: model.name,
+            provider: model.provider,
+            model: model.model,
+            systemPrompt: '',
+            baseUrl: model.baseUrl || '',
+            apiKey: model.apiKey || ''
+          }));
       }
     } catch (error) {
-      console.warn('获取成员列表失败，使用空成员列表:', error);
+      console.warn('获取模型列表失败，使用空成员列表:', error);
     }
 
     const response = await chrome.runtime.sendMessage({
       action: 'createConversation',
       name: timeString,
-      memberIds: allMemberIds
+      members: members
     });
 
     if (response && response.id) {

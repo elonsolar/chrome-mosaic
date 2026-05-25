@@ -69,9 +69,8 @@ function initProviderSelect() {
 }
 
 async function loadData() {
-  const [conversations, members, settings, models, prompts, teams] = await Promise.all([
+  const [conversations, settings, models, prompts, teams] = await Promise.all([
     sendMessage({ action: 'getConversations' }),
-    sendMessage({ action: 'getMembers' }),
     sendMessage({ action: 'getSettings' }),
     sendMessage({ action: 'getModels' }),
     sendMessage({ action: 'getPrompts' }),
@@ -79,7 +78,7 @@ async function loadData() {
   ]);
 
   state.conversations = conversations || [];
-  state.members = members || [];
+  state.members = []; // 不再使用全局 members
   state.settings = settings || { wsUrl: 'ws://localhost:8080', wsEnabled: false, contextMode: 'self', floatWindow: true };
   state.models = models || [];
   state.prompts = prompts || [];
@@ -268,21 +267,8 @@ function renderConversations() {
   }
 
   elements.conversationList.innerHTML = recentConversations.map(conv => {
-    // 兼容旧数据：memberIds 和 新数据：modelIds
-    const modelIds = conv.modelIds || conv.memberIds || [];
-    const models = modelIds.map(id => {
-      // 优先从新models中查找，再从旧members中查找
-      let model = state.models.find(m => m.id === id);
-      if (model) return model;
-
-      const member = state.members.find(m => m.id === id);
-      return member ? { name: member.name, isVirtual: false } : null;
-    }).filter(Boolean);
-
-    const modelNames = models.map(m => {
-      if (m.isVirtual) return `${m.icon || '🤖'} ${m.name}`;
-      return m.name;
-    }).join(', ');
+    const members = conv.members || [];
+    const modelNames = members.map(m => m.name).filter(Boolean).join(', ');
 
     const lastMessage = conv.messages[conv.messages.length - 1];
     const preview = lastMessage ? lastMessage.content.substring(0, 60) + '...' : '暂无消息';
@@ -415,6 +401,32 @@ async function createConversation() {
     return;
   }
 
+  if (selectedMemberIds.length === 0) {
+    alert('请至少选择一个成员');
+    return;
+  }
+
+  // 从选中的 memberIds 获取完整的 members 对象
+  const selectedMembers = selectedMemberIds.map(memberId => {
+    const member = state.members.find(m => m.id === memberId);
+    if (!member) {
+      // 如果找不到 member，从 models 中创建一个临时的
+      const model = state.models.find(m => m.id === memberId);
+      if (model) {
+        return {
+          id: `member_${Date.now().toString(36)}_${Math.random().toString(36).substr(2)}`,
+          name: model.name,
+          provider: model.provider,
+          model: model.model,
+          systemPrompt: '',
+          baseUrl: model.baseUrl || '',
+          apiKey: model.apiKey || ''
+        };
+      }
+    }
+    return member;
+  }).filter(Boolean);
+
   const options = {};
 
   if (mode === 'discussion') {
@@ -428,9 +440,13 @@ async function createConversation() {
   }
 
   if (state.editingConversationId) {
-    const updates = { name, memberIds: selectedMemberIds };
+    const memberIds = selectedMembers.map(m => m.id);
+    const updates = { name, members: selectedMembers };
     if (teamId) {
       updates.teamId = teamId;
+    }
+    if (mode === 'discussion' || options.memberOrder) {
+      updates.memberOrder = options.memberOrder || memberIds;
     }
     await sendMessage({
       action: 'updateConversation',
@@ -448,7 +464,7 @@ async function createConversation() {
     const conversation = await sendMessage({
       action: 'createConversation',
       name,
-      memberIds: selectedMemberIds,
+      members: selectedMembers,
       mode,
       ...options
     });
@@ -1187,13 +1203,11 @@ function showEditConversationModal(conversation) {
   updateModeVisibility(mode);
 
   const memberSelector = document.getElementById('memberSelector');
-  if (state.members.length === 0) {
-    memberSelector.innerHTML = '<div class="empty-state">请先创建成员</div>';
+  const members = conversation.members || [];
+  if (members.length === 0) {
+    memberSelector.innerHTML = '<div class="empty-state">暂无成员</div>';
   } else {
-    const modelIds = conversation.modelIds || conversation.memberIds || [];
-    memberSelector.innerHTML = state.members.map(member => {
-      const isCurrent = modelIds.includes(member.id);
-      if (!isCurrent) return '';
+    memberSelector.innerHTML = members.map(member => {
       const info = getMemberDisplayInfo(member);
       const provider = PROVIDERS[member.provider];
       const color = provider ? provider.color : '#666';

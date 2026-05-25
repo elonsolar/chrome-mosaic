@@ -379,82 +379,80 @@ class FlowDesignerApp {
           throw new Error('节点不存在');
         }
 
-        if (node.type === '3') {
-          const model = node.data?.model;
-          if (!model?.id) {
-            throw new Error('LLM 节点未配置模型');
+        const tempFlow = {
+          name: 'Single Node Test',
+          nodes: [
+            { type: '1', id: 'start', name: 'Start', data: { outputs: node.data?.inputs || [] } },
+            node,
+            { type: '2', id: 'end', name: 'End', data: {} }
+          ],
+          connections: [
+            { from: 'start', to: node.id },
+            { from: node.id, to: 'end' }
+          ]
+        };
+
+        const inputParams = node.data?.$$input_decorator$$?.inputParameters || [];
+        const inputs = {};
+        testPanel.querySelectorAll('.test-input-textarea').forEach((input, i) => {
+          if (inputParams[i]) {
+            inputs[inputParams[i].name] = input.value;
           }
+        });
 
-          const inputParams = node.data?.$$input_decorator$$?.inputParameters || [];
-          const inputs = {};
-          testPanel.querySelectorAll('.test-input-textarea').forEach((input, i) => {
-            if (inputParams[i]) {
-              inputs[inputParams[i].name] = input.value;
-            }
-          });
+        const userInput = Object.values(inputs).join('\n');
 
-          let systemPrompt = node.data?.$$prompt_decorator$$?.systemPrompt || '';
-          let prompt = node.data?.$$prompt_decorator$$?.prompt || '';
+        response = await Promise.race([
+          new Promise((resolve, reject) => {
+            chrome.runtime.sendMessage({
+              action: 'executeFlow',
+              flow: tempFlow,
+              userInput,
+              context: { maxIterations: 1 }
+            }, (resp) => {
+              if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message));
+              } else if (resp?.error) {
+                reject(new Error(resp.error));
+              } else {
+                resolve(resp.result);
+              }
+            });
+          }),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('执行超时（5分钟）')), TIMEOUT_MS)
+          )
+        ]);
 
-          Object.entries(inputs).forEach(([key, value]) => {
-            const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
-            systemPrompt = systemPrompt.replace(regex, value);
-            prompt = prompt.replace(regex, value);
-          });
+        if (response && response.nodeResults) {
+          const nodeResult = response.nodeResults.find(r => r.nodeId === node.id);
+          if (nodeResult) {
+            response = {
+              success: nodeResult.result.success,
+              content: nodeResult.result.content,
+              error: nodeResult.result.error
+            };
+          }
+        }
 
-          const accessMethod = model.accessMethod || 'web';
-          let finalContent, finalSystemPrompt;
-          if (accessMethod === 'web') {
-            finalContent = systemPrompt ? `[系统]\n${systemPrompt}\n\n[用户]\n${prompt}` : prompt;
-            finalSystemPrompt = null;
+        if (progressContent) {
+          progressContent.innerHTML = '<div class="test-progress-complete">✓ 执行完成</div>';
+        }
+
+        if (resultContent) {
+          if (response.content) {
+            resultContent.className = 'test-result-content test-result-success';
+            resultContent.innerHTML = `
+              <div class="test-result-header-text">节点输出：</div>
+              <div class="test-result-final-output">${this.escHtml(response.content)}</div>
+            `;
+          } else if (response.error) {
+            resultContent.className = 'test-result-content test-result-error';
+            resultContent.textContent = '执行失败：' + response.error;
           } else {
-            finalContent = prompt;
-            finalSystemPrompt = systemPrompt || null;
+            resultContent.className = 'test-result-content test-result-error';
+            resultContent.textContent = '执行失败：未知错误';
           }
-
-          response = await Promise.race([
-            new Promise((resolve, reject) => {
-              chrome.runtime.sendMessage({
-                action: 'conversationOneShot',
-                modelId: model.id,
-                content: finalContent,
-                systemPrompt: finalSystemPrompt
-              }, (resp) => {
-                if (chrome.runtime.lastError) {
-                  reject(new Error(chrome.runtime.lastError.message));
-                } else if (resp?.error) {
-                  reject(new Error(resp.error));
-                } else {
-                  resolve(resp);
-                }
-              });
-            }),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('执行超时（5分钟）')), TIMEOUT_MS)
-            )
-          ]);
-
-          if (progressContent) {
-            progressContent.innerHTML = '<div class="test-progress-complete">✓ 执行完成</div>';
-          }
-
-          if (resultContent) {
-            if (response.content) {
-              resultContent.className = 'test-result-content test-result-success';
-              resultContent.innerHTML = `
-                <div class="test-result-header-text">节点输出：</div>
-                <div class="test-result-final-output">${this.escHtml(response.content)}</div>
-              `;
-            } else if (response.error) {
-              resultContent.className = 'test-result-content test-result-error';
-              resultContent.textContent = '执行失败：' + response.error;
-            } else {
-              resultContent.className = 'test-result-content test-result-error';
-              resultContent.textContent = '执行失败：未知错误';
-            }
-          }
-        } else {
-          throw new Error(`不支持的节点类型: ${node.type}`);
         }
       } else {
         const flowData = {
@@ -507,14 +505,18 @@ class FlowDesignerApp {
 
             if (success) {
               resultContent.className = 'test-result-content test-result-success';
+              const sortedResults = [...nodeResults].sort((a, b) => (a.order || 0) - (b.order || 0));
+              const totalDuration = sortedResults.reduce((sum, nr) => sum + (nr.duration || 0), 0);
               resultContent.innerHTML = `
                 <div class="test-result-header-text">最终输出：</div>
                 <div class="test-result-final-output">${this.escHtml(finalOutput)}</div>
                 <div class="test-result-node-results">
-                  <div class="test-result-header-text">节点执行详情：</div>
-                  ${nodeResults.map(nr => `
+                  <div class="test-result-header-text">执行详情 (总耗时 ${totalDuration}ms)：</div>
+                  ${sortedResults.map(nr => `
                     <div class="test-node-result">
+                      <span class="test-node-order">#${nr.order || '?'}</span>
                       <span class="node-name">${this.escHtml(nr.nodeName)}</span>
+                      <span class="test-node-duration">${nr.duration || '?'}ms</span>
                       <span class="node-status ${nr.result.success ? 'success' : 'error'}">
                         ${nr.result.success ? '✓' : '✗'}
                       </span>
@@ -522,7 +524,29 @@ class FlowDesignerApp {
                     </div>
                   `).join('')}
                 </div>
+                ${response.result.executionLog ? `
+                <div class="test-execution-log-section">
+                  <div class="test-result-header-text test-log-toggle" data-expanded="false">执行日志 ▸</div>
+                  <div class="test-execution-log" style="display:none;">
+                    ${response.result.executionLog.map(entry => {
+                      if (entry.phase === 'start') return `<div class="test-log-entry test-log-phase">▶ ${this.escHtml(entry.message)}</div>`;
+                      if (entry.phase === 'end') return `<div class="test-log-entry test-log-phase">■ ${this.escHtml(entry.message)}</div>`;
+                      return `<div class="test-log-entry ${entry.success ? '' : 'test-log-error'}">[${entry.order}] ${this.escHtml(entry.nodeName)} ${entry.duration}ms ${entry.success ? '✓' : '✗ ' + this.escHtml(entry.error || '')}</div>`;
+                    }).join('')}
+                  </div>
+                </div>
+                ` : ''}
               `;
+              const logToggle = resultContent.querySelector('.test-log-toggle');
+              const logContainer = resultContent.querySelector('.test-execution-log');
+              if (logToggle && logContainer) {
+                logToggle.addEventListener('click', () => {
+                  const expanded = logToggle.getAttribute('data-expanded') === 'true';
+                  logToggle.setAttribute('data-expanded', String(!expanded));
+                  logToggle.textContent = expanded ? '执行日志 ▸' : '执行日志 ▾';
+                  logContainer.style.display = expanded ? 'none' : 'block';
+                });
+              }
             } else {
               resultContent.className = 'test-result-content test-result-error';
               const failedNode = nodeResults.find(nr => !nr.result.success);
@@ -936,7 +960,7 @@ class FlowDesignerApp {
       ? outputs.map(o => this.makeVarTag(o.name, false)).join('')
       : this.makeVarTag('output', false);
 
-    const modelName = data.model?.modelType || 'default';
+    const modelName = data.model?.name || data.model?.modelType || 'default';
 
     return `
       <div class="node-section">
@@ -1466,6 +1490,7 @@ class FlowDesignerApp {
                       n.data.model = {
                         id: selectedModel.id,
                         name: selectedModel.name,
+                        modelType: selectedModel.name,
                         provider: selectedModel.provider,
                         model: selectedModel.model,
                         accessMethod: selectedModel.accessMethod || 'web',

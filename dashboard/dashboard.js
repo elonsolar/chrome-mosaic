@@ -850,15 +850,8 @@ class Dashboard {
     }
 
     this.elements.recentConversationsList.innerHTML = recentConversations.map(conv => {
-      const modelIds = conv.modelIds || conv.memberIds || [];
-      const models = modelIds.map(id => {
-        let model = this.state.models.find(m => m.id === id);
-        if (model) return model;
-        const member = this.state.members?.find(m => m.id === id);
-        return member ? { name: member.name } : null;
-      }).filter(Boolean);
-
-      const modelNames = models.map(m => m.name).join(', ');
+      const members = conv.members || [];
+      const modelNames = members.map(m => m.name).filter(Boolean).join(', ');
       const time = this.formatTime(conv.updatedAt || conv.createdAt);
 
       return `
@@ -950,8 +943,8 @@ class Dashboard {
     // 获取所有在会话中使用的模型
     const usedModels = new Set();
     this.state.conversations.forEach(conv => {
-      (conv.modelIds || conv.memberIds || []).forEach(modelId => {
-        const model = this.state.models.find(m => m.id === modelId);
+      (conv.members || []).forEach(member => {
+        const model = this.state.models.find(m => m.provider === member.provider && m.model === member.model);
         if (model) {
           usedModels.add(model);
         }
@@ -1003,9 +996,14 @@ class Dashboard {
 
     // 模型过滤
     if (filters.modelId !== 'all') {
-      filtered = filtered.filter(conv =>
-        (conv.modelIds || conv.memberIds || []).includes(filters.modelId)
-      );
+      const selectedModel = this.state.models.find(m => m.id === filters.modelId);
+      filtered = filtered.filter(conv => {
+        if (!conv.members || conv.members.length === 0) return false;
+        return conv.members.some(member => {
+          if (!selectedModel) return false;
+          return member.provider === selectedModel.provider && member.model === selectedModel.model;
+        });
+      });
     }
 
     // 排序
@@ -1081,14 +1079,7 @@ class Dashboard {
     this.elements.conversationsContainer.innerHTML = `
       <div class="conversations-grid">
         ${conversations.map(conv => {
-          const modelIds = conv.modelIds || conv.memberIds || [];
-          const models = modelIds.map(id => {
-            let model = this.state.models.find(m => m.id === id);
-            if (model) return model;
-            const member = this.state.members?.find(m => m.id === id);
-            return member ? { name: member.name } : null;
-          }).filter(Boolean);
-
+          const members = conv.members || [];
           const time = this.formatTime(conv.updatedAt || conv.createdAt);
           const messages = conv.messages || [];
           const lastMsg = messages[messages.length - 1];
@@ -1131,12 +1122,12 @@ class Dashboard {
                     <span class="conv-card-mode ${modeInfo.class}">${modeInfo.text}</span>
                     <div class="conv-card-time">${time}</div>
                   </div>
-                  ${models.length > 0 ? `
+                  ${members.length > 0 ? `
                     <div class="conv-card-models">
-                      ${models.slice(0, 3).map(m => `
+                      ${members.slice(0, 3).map(m => `
                         <span class="conv-model-chip">🤖 ${this.escapeHtml(m.name)}</span>
                       `).join('')}
-                      ${models.length > 3 ? `<span class="conv-model-chip">+${models.length - 3}</span>` : ''}
+                      ${members.length > 3 ? `<span class="conv-model-chip">+${members.length - 3}</span>` : ''}
                     </div>
                   ` : ''}
                 </div>
@@ -1171,14 +1162,7 @@ class Dashboard {
     this.elements.conversationsContainer.innerHTML = `
       <div class="conversations-list">
         ${conversations.map(conv => {
-          const modelIds = conv.modelIds || conv.memberIds || [];
-          const models = modelIds.map(id => {
-            let model = this.state.models.find(m => m.id === id);
-            if (model) return model;
-            const member = this.state.members?.find(m => m.id === id);
-            return member ? { name: member.name } : null;
-          }).filter(Boolean);
-
+          const members = conv.members || [];
           const time = this.formatTime(conv.updatedAt || conv.createdAt);
           const messages = conv.messages || [];
           const isSelected = this.batchOperations.selectedIds.has(conv.id);
@@ -1195,7 +1179,7 @@ class Dashboard {
                 <div class="conv-list-title">${this.escapeHtml(conv.name || '未命名会话')}</div>
                 <div class="conv-list-meta">
                   <span class="conv-list-mode ${modeInfo.class}">${modeInfo.text}</span>
-                  ${models.length > 0 ? `<span class="conv-list-models">${models.slice(0, 2).map(m => this.escapeHtml(m.name)).join(', ')}${models.length > 2 ? '...' : ''}</span>` : ''}
+                  ${members.length > 0 ? `<span class="conv-list-models">${members.slice(0, 2).map(m => this.escapeHtml(m.name)).join(', ')}${members.length > 2 ? '...' : ''}</span>` : ''}
                 </div>
               </div>
               <div class="conv-list-stats">
@@ -1432,15 +1416,15 @@ class Dashboard {
 
     messagesList.innerHTML = conversation.messages.map(msg => {
       const isUser = msg.role === 'user';
-      const model = this.state.models.find(m => m.id === msg.modelId);
-      const modelName = model ? model.name : 'AI';
+      const member = conversation.members?.find(m => m.id === msg.memberId);
+      const memberName = member ? member.name : 'AI';
       const avatar = isUser ? '👤' : '🤖';
 
       return `
         <div class="message-item">
           <div class="message-avatar">${avatar}</div>
           <div class="message-content">
-            <div class="message-role">${isUser ? '用户' : modelName}</div>
+            <div class="message-role">${isUser ? '用户' : memberName}</div>
             <div class="message-text">${this.escapeHtml(msg.content || '')}</div>
             ${msg.timestamp ? `
               <div class="message-time">${this.formatTime(msg.timestamp)}</div>

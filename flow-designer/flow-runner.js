@@ -4,6 +4,8 @@ class FlowRunner {
     this.context = {};
     this.currentNode = null;
     this.isRunning = false;
+    this.nodeResults = new Map();
+    this.executingNodes = new Map();
   }
 
   async run() {
@@ -13,6 +15,8 @@ class FlowRunner {
 
     this.isRunning = true;
     this.context = {};
+    this.nodeResults.clear();
+    this.executingNodes.clear();
 
     try {
       const startNode = this.flowData.nodes.find(n => n.type === StandardNodeType.Start);
@@ -40,37 +44,72 @@ class FlowRunner {
   }
 
   async executeNode(node) {
-    this.currentNode = node;
-
-    switch (node.type) {
-      case StandardNodeType.Start:
-        await this.executeStartNode(node);
-        break;
-      case StandardNodeType.LLM:
-        await this.executeLLMNode(node);
-        break;
-      case StandardNodeType.Http:
-        await this.executeHttpNode(node);
-        break;
-      case StandardNodeType.Code:
-        await this.executeCodeNode(node);
-        break;
-      case StandardNodeType.If:
-        await this.executeIfNode(node);
-        break;
-      case StandardNodeType.Loop:
-        await this.executeLoopNode(node);
-        break;
-      case StandardNodeType.End:
-        await this.executeEndNode(node);
-        break;
-      default:
-        throw new Error(`未知节点类型: ${node.type}`);
+    if (this.executingNodes.has(node.id)) {
+      return await this.executingNodes.get(node.id);
     }
 
-    const nextNode = this.getNextNode(node.id);
-    if (nextNode) {
-      await this.executeNode(nextNode);
+    if (this.nodeResults.has(node.id)) {
+      return this.nodeResults.get(node.id);
+    }
+
+    const executionPromise = (async () => {
+      this.currentNode = node;
+
+      let nodeResult;
+      switch (node.type) {
+        case StandardNodeType.Start:
+          await this.executeStartNode(node);
+          nodeResult = { success: true };
+          break;
+        case StandardNodeType.LLM:
+          nodeResult = await this.executeLLMNode(node);
+          break;
+        case StandardNodeType.Http:
+          nodeResult = await this.executeHttpNode(node);
+          break;
+        case StandardNodeType.Code:
+          nodeResult = await this.executeCodeNode(node);
+          break;
+        case StandardNodeType.If:
+          nodeResult = await this.executeIfNode(node);
+          break;
+        case StandardNodeType.Loop:
+          nodeResult = await this.executeLoopNode(node);
+          break;
+        case StandardNodeType.End:
+          nodeResult = await this.executeEndNode(node);
+          break;
+        default:
+          throw new Error(`未知节点类型: ${node.type}`);
+      }
+
+      const result = { success: true, data: nodeResult };
+      this.nodeResults.set(node.id, result);
+      return result;
+    })();
+
+    this.executingNodes.set(node.id, executionPromise);
+    try {
+      await executionPromise;
+    } finally {
+      this.executingNodes.delete(node.id);
+    }
+
+    const nextNodes = this.getNextNodes(node.id);
+
+    if (nextNodes.length === 0) {
+      console.log(`[FlowRunner] 到达终点节点: ${node.data?.title}`);
+      return;
+    }
+
+    if (nextNodes.length > 1) {
+      console.log(`[FlowRunner] 并行执行 ${nextNodes.length} 个子节点`);
+
+      await Promise.all(
+        nextNodes.map(nextNode => this.executeNode(nextNode))
+      );
+    } else {
+      await this.executeNode(nextNodes[0]);
     }
   }
 
@@ -86,7 +125,7 @@ class FlowRunner {
     const data = node.data || {};
     const systemPrompt = this.replaceVariables(data.$$prompt_decorator$$?.systemPrompt || '');
     const prompt = this.replaceVariables(data.$$prompt_decorator$$?.prompt || '');
-    const modelType = data.model?.modelType || 'default';
+    const modelType = data.model?.name || data.model?.modelType || 'default';
 
     try {
       const response = await chrome.runtime.sendMessage({
@@ -97,7 +136,7 @@ class FlowRunner {
       });
 
       this.context[`${node.id}_output`] = response;
-      this.context.answer = response;
+      return response;
     } catch (error) {
       throw new Error(`LLM 调用失败: ${error.message}`);
     }
@@ -154,11 +193,15 @@ class FlowRunner {
     }
   }
 
-  getNextNode(nodeId) {
+  getNextNodes(nodeId) {
     const edges = this.flowData.edges || [];
-    const edge = edges.find(e => e.source === nodeId);
-    if (!edge) return null;
-    return this.flowData.nodes.find(n => n.id === edge.target);
+    const targetIds = edges
+      .filter(e => e.source === nodeId)
+      .map(e => e.target);
+
+    return targetIds
+      .map(id => this.flowData.nodes.find(n => n.id === id))
+      .filter(Boolean);
   }
 
   replaceVariables(text) {

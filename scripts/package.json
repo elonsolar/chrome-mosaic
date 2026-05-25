@@ -1,0 +1,26 @@
+{
+  "name": "free-ai-refactor-playwright-test",
+  "version": "1.0.0",
+  "description": "Playwright测试脚本，用于测试AI平台在后台标签页中的行为",
+  "main": "playwright-test.js",
+  "scripts": {
+    "test": "node playwright-test.js",
+    "test:headless": "node playwright-test.js --headless",
+    "install:playwright": "npx playwright install chromium"
+  },
+  "keywords": [
+    "playwright",
+    "testing",
+    "ai-platforms",
+    "anti-lazy-load"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "playwright": "^1.40.0"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

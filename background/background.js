@@ -324,9 +324,10 @@ class WebSocketManager {
         throw new Error(`会话不存在: ${model}。请先在插件中创建名为 "${model}" 的会话。`);
       }
 
-      console.log('[WS] 找到会话:', conversation.id, '成员:', conversation.memberIds);
+      const memberIds = conversation.members.map(m => m.id);
+      console.log('[WS] 找到会话:', conversation.id, '成员:', memberIds);
 
-      if (!conversation.memberIds || conversation.memberIds.length === 0) {
+      if (!conversation.members || conversation.members.length === 0) {
         throw new Error(`会话 "${model}" 没有配置成员。请在插件中为该会话添加成员。`);
       }
 
@@ -385,7 +386,7 @@ class AIMessageManager {
     this.senderFactory = senderFactory;
   }
 
-  async combineResponses(responses) {
+  async combineResponses(responses, conversation) {
     if (!responses || responses.length === 0) {
       return '';
     }
@@ -394,9 +395,8 @@ class AIMessageManager {
       return responses[0].content;
     }
 
-    const members = await StorageManager.getMembers();
     return responses.map((r, index) => {
-      const member = members.find(m => m.id === r.memberId);
+      const member = conversation.members.find(m => m.id === r.memberId);
       const memberName = member ? member.name : `成员 ${index + 1}`;
       return `[${memberName}] ${r.content}`;
     }).join('\n\n');
@@ -519,23 +519,23 @@ class AIMessageManager {
       }
     }
 
-    if (!conversation.memberIds || conversation.memberIds.length === 0) {
+    if (!conversation.members || conversation.members.length === 0) {
       throw new Error('会话没有关联的成员');
     }
 
     const sendMode = conversation.sendMode || 'parallel';
-    const members = await StorageManager.getMembers();
+    const memberIds = conversation.members.map(m => m.id);
 
     (async () => {
       try {
-        console.log('[AIMessageManager] IIFE 开始发送消息, 会话:', conversationId, '成员数:', conversation.memberIds.length);
+        console.log('[AIMessageManager] IIFE 开始发送消息, 会话:', conversationId, '成员数:', conversation.members.length);
         if (sendMode === 'sequential') {
-          await this.sendToMembersSequential(conversation, members, contextMode, useFloatWindow, conversationId);
+          await this.sendToMembersSequential(conversation, contextMode, useFloatWindow, conversationId);
         } else if (sendMode === 'random') {
-          await this.sendToMembersRandom(conversation, members, contextMode, useFloatWindow, conversationId);
+          await this.sendToMembersRandom(conversation, contextMode, useFloatWindow, conversationId);
         } else {
-          const sendPromises = conversation.memberIds.map(async (memberId) => {
-            return await this.sendMessageToMember(memberId, members, conversation, contextMode, useFloatWindow, conversationId);
+          const sendPromises = conversation.members.map(async (member) => {
+            return await this.sendMessageToMember(member.id, conversation, contextMode, useFloatWindow, conversationId);
           });
           await Promise.allSettled(sendPromises);
         }
@@ -548,9 +548,7 @@ class AIMessageManager {
     await new Promise(resolve => setTimeout(resolve, 500));
 
     const models = await modelManager.getModels();
-    const hasWebRole = conversation.memberIds.some(memberId => {
-      const member = members.find(r => r.id === memberId);
-      if (!member) return false;
+    const hasWebRole = conversation.members.some(member => {
       const modelConfig = models.find(m => m.provider === member.provider && m.model === member.model);
       return (modelConfig?.accessMethod || 'web') === 'web';
     });
@@ -569,8 +567,7 @@ class AIMessageManager {
 
   async executeDiscussionLoop(conversationId, question, rounds, contextMode, useFloatWindow) {
     const conversation = await this.conversationManager.getConversation(conversationId);
-    const members = await StorageManager.getMembers();
-    const order = conversation.memberOrder || conversation.memberIds;
+    const order = conversation.memberOrder || conversation.members.map(m => m.id);
 
     if (useFloatWindow) {
       await this.sendToFloatWindow('addMessage', {
@@ -599,7 +596,7 @@ class AIMessageManager {
 
       for (const memberId of order) {
         currentConv = await this.conversationManager.getConversation(conversationId);
-        await this.sendMessageToMember(memberId, members, currentConv, contextMode, useFloatWindow, conversationId);
+        await this.sendMessageToMember(memberId, currentConv, contextMode, useFloatWindow, conversationId);
       }
 
       await this.conversationManager.updateConversation(conversationId, {
@@ -697,8 +694,8 @@ class AIMessageManager {
     });
   }
 
-  async sendMessageToMember(memberId, members, conversation, contextMode, useFloatWindow, conversationId) {
-    const member = members.find(r => r.id === memberId);
+  async sendMessageToMember(memberId, conversation, contextMode, useFloatWindow, conversationId) {
+    const member = conversation.members.find(m => m.id === memberId);
     if (!member) return null;
 
     const roleSetting = conversation.memberSettings?.[memberId] || {};
@@ -738,15 +735,14 @@ class AIMessageManager {
 
         const isFirstTime = !lastMessageId;
         const nicknameMap = {};
-        members.forEach(r => {
-          const setting = conversation.memberSettings?.[r.id] || {};
-          nicknameMap[r.id] = setting.nickname || r.name;
+        conversation.members.forEach(member => {
+          const setting = conversation.memberSettings?.[member.id] || {};
+          nicknameMap[member.id] = setting.nickname || member.name;
         });
 
         if (isFirstTime) {
-          const nicknames = (conversation.memberIds || [])
-            .map(id => nicknameMap[id])
-            .filter(Boolean);
+          const memberIds = conversation.members.map(m => m.id);
+          const nicknames = memberIds.map(id => nicknameMap[id]).filter(Boolean);
           messageToSend += `当前我们在一个会话里，会话里有成员 user、${nicknames.join('、')}\n`;
           messageToSend += `你的当前会话名称是：${nickname}\n`;
 
@@ -856,21 +852,22 @@ class AIMessageManager {
     return includeUserMessages ? conversation.messages : conversation.messages.filter(m => m.isUser);
   }
 
-  async sendToMembersSequential(conversation, members, contextMode, useFloatWindow, conversationId) {
-    const memberOrder = conversation.memberOrder || conversation.memberIds;
+  async sendToMembersSequential(conversation, contextMode, useFloatWindow, conversationId) {
+    const memberOrder = conversation.memberOrder || conversation.members.map(m => m.id);
     for (let i = 0; i < memberOrder.length; i++) {
       const memberId = memberOrder[i];
-      await this.sendMessageToMember(memberId, members, conversation, contextMode, useFloatWindow, conversationId);
+      await this.sendMessageToMember(memberId, conversation, contextMode, useFloatWindow, conversationId);
       conversation = await this.conversationManager.getConversation(conversationId);
     }
   }
 
-  async sendToMembersRandom(conversation, members, contextMode, useFloatWindow, conversationId) {
-    const shuffledMemberIds = [...conversation.memberIds].sort(() => Math.random() - 0.5);
+  async sendToMembersRandom(conversation, contextMode, useFloatWindow, conversationId) {
+    const memberIds = conversation.members.map(m => m.id);
+    const shuffledMemberIds = [...memberIds].sort(() => Math.random() - 0.5);
 
     for (let i = 0; i < shuffledMemberIds.length; i++) {
       const memberId = shuffledMemberIds[i];
-      await this.sendMessageToMember(memberId, members, conversation, contextMode, useFloatWindow, conversationId);
+      await this.sendMessageToMember(memberId, conversation, contextMode, useFloatWindow, conversationId);
       conversation = await this.conversationManager.getConversation(conversationId);
     }
   }
@@ -920,11 +917,10 @@ class AIMessageManager {
     // 先删除各个平台的会话
     const deletedConversations = [];
     if (conversation.memberUrls && Object.keys(conversation.memberUrls).length > 0) {
-      const members = await StorageManager.getMembers();
       console.log(`[AIMessageManager] 准备删除平台会话，共 ${Object.keys(conversation.memberUrls).length} 个`);
 
       for (const [memberId, conversationUrl] of Object.entries(conversation.memberUrls)) {
-        const member = members.find(r => r.id === memberId);
+        const member = conversation.members.find(m => m.id === memberId);
         if (!member || !conversationUrl) continue;
 
         try {
@@ -990,20 +986,15 @@ class AIMessageManager {
 class StorageManager {
   static async getConversations() {
     const result = await chrome.storage.local.get('conversations');
-    return result.conversations || [];
+    const conversations = result.conversations || [];
+    console.log('[StorageManager] getConversations: 获取到', conversations.length, '个会话');
+    return conversations;
   }
 
   static async saveConversations(conversations) {
+    console.log('[StorageManager] saveConversations: 保存', conversations.length, '个会话');
     await chrome.storage.local.set({ conversations });
-  }
-
-  static async getMembers() {
-    const result = await chrome.storage.local.get('members');
-    return result.members || [];
-  }
-
-  static async saveMembers(members) {
-    await chrome.storage.local.set({ members });
+    console.log('[StorageManager] saveConversations: 保存完成');
   }
 
   static async getSettings() {
@@ -1192,46 +1183,78 @@ class ConversationManager {
     this.messageQueues = new Map();
   }
 
-  async createConversation(name, memberIds, mode, options = {}) {
-    console.log('[Background] createConversation - mode:', mode, 'options:', options);
-    const conversations = await StorageManager.getConversations();
+  async createConversation(name, members, mode, options = {}) {
+    console.log('[Background] createConversation - mode:', mode, 'members count:', members?.length);
 
-    const modeToContextMode = {
-      brainstorming: 'self',
-      discussion: 'full',
-      expertqa: 'self'
-    };
+    // 使用全局锁防止竞态条件
+    return withStorageLock(async () => {
+      const conversations = await StorageManager.getConversations();
 
-    const contextMode = modeToContextMode[mode] || (mode === 'self' || mode === 'full' ? mode : 'self');
-    const sendMode = mode === 'discussion' ? 'sequential' : 'parallel';
+      const modeToContextMode = {
+        brainstorming: 'self',
+        discussion: 'full',
+        expertqa: 'self'
+      };
 
-    const newConversation = {
-      id: this.generateId(),
-      name: name || `会话 ${conversations.length + 1}`,
-      mode: mode || 'brainstorming',
-      contextMode,
-      sendMode,
-      memberIds: memberIds || [],
-      memberSettings: options.memberSettings || {},
-      memberOrder: options.memberOrder || null,
-      expertId: options.expertId || null,
-      memberUrls: {},
-      memberLastMessageIds: {},
-      messages: [],
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    };
+      const contextMode = modeToContextMode[mode] || (mode === 'self' || mode === 'full' ? mode : 'self');
+      const sendMode = mode === 'discussion' ? 'sequential' : 'parallel';
 
-    conversations.push(newConversation);
-    await StorageManager.saveConversations(conversations);
+      // 从 members 数组提取 ID
+      const memberIds = members?.map(m => m.id) || [];
 
-    return newConversation;
+      const newConversation = {
+        id: this.generateId(),
+        name: name || `会话 ${conversations.length + 1}`,
+        mode: mode || 'brainstorming',
+        contextMode,
+        sendMode,
+        members: members || [],
+        memberSettings: options.memberSettings || {},
+        memberOrder: options.memberOrder || memberIds,
+        expertId: options.expertId || null,
+        memberUrls: {},
+        memberLastMessageIds: {},
+        messages: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+
+      conversations.push(newConversation);
+      await StorageManager.saveConversations(conversations);
+
+      console.log('[Background] 会话创建完成，ID:', newConversation.id, '成员数:', newConversation.members?.length);
+
+      // 验证保存是否成功（重试机制）
+      let verified = null;
+      for (let i = 0; i < 5; i++) {
+        await new Promise(resolve => setTimeout(resolve, 50)); // 等待 50ms
+        const saved = await StorageManager.getConversations();
+        verified = saved.find(c => c.id === newConversation.id);
+        if (verified) {
+          console.log('[Background] 验证成功：会话已正确保存到 storage (尝试', i + 1, ')');
+          break;
+        }
+      }
+
+      if (!verified) {
+        console.error('[Background] 严重错误：会话创建后无法从 storage 读取！ID:', newConversation.id);
+        throw new Error(`会话创建后无法验证：${newConversation.id}`);
+      }
+
+      return newConversation;
+    });
   }
 
   async deleteConversation(conversationId) {
-    let conversations = await StorageManager.getConversations();
-    conversations = conversations.filter(c => c.id !== conversationId);
-    await StorageManager.saveConversations(conversations);
+    return withStorageLock(async () => {
+      const conversations = await StorageManager.getConversations();
+      const index = conversations.findIndex(c => c.id === conversationId);
+      if (index === -1) {
+        throw new Error(`会话不存在: ${conversationId}`);
+      }
+      conversations.splice(index, 1);
+      await StorageManager.saveConversations(conversations);
+    });
   }
 
   async updateConversation(conversationId, updates) {
@@ -1313,52 +1336,16 @@ class ConversationManager {
 
   async getConversation(conversationId) {
     const conversations = await StorageManager.getConversations();
-    return conversations.find(c => c.id === conversationId) || null;
-  }
+    const found = conversations.find(c => c.id === conversationId) || null;
 
-  generateId() {
-    return Date.now().toString(36) + Math.random().toString(36).substr(2);
-  }
-}
-
-class MemberManager {
-  constructor(tabManager) {
-    this.tabManager = tabManager;
-  }
-
-  async createMember(name, provider, model, systemPrompt) {
-    const members = await StorageManager.getMembers();
-
-    const newMember = {
-      id: this.generateId(),
-      name,
-      provider,
-      model,
-      systemPrompt,
-      conversationUrl: null,
-      createdAt: Date.now()
-    };
-
-    members.push(newMember);
-    await StorageManager.saveMembers(members);
-
-    return newMember;
-  }
-
-  async updateMember(memberId, updates) {
-    const members = await StorageManager.getMembers();
-    const member = members.find(m => m.id === memberId);
-
-    if (member) {
-      Object.assign(member, updates);
-      await StorageManager.saveMembers(members);
+    if (!found) {
+      console.error('[Background] getConversation 找不到会话:', conversationId, '当前会话数:', conversations.length);
+      console.log('[Background] 当前所有会话ID:', conversations.map(c => c.id));
+    } else {
+      console.log('[Background] getConversation 找到会话:', conversationId, '成员数:', found.members?.length);
     }
-  }
 
-  async deleteMember(memberId) {
-    let members = await StorageManager.getMembers();
-    members = members.filter(m => m.id !== memberId);
-    await StorageManager.saveMembers(members);
+    return found;
   }
 
   generateId() {
@@ -1368,12 +1355,42 @@ class MemberManager {
 
 let tabManager;
 let conversationManager;
-let memberManager;
 let aiMessageManager;
 let senderFactory;
 const pendingResponses = new Map();
 const pollingIntervals = new Map();
 let wsManager = null;
+
+// 全局 storage 锁队列，防止并发修改
+const storageOperationQueue = [];
+let isProcessingStorage = false;
+
+async function withStorageLock(operation) {
+  return new Promise((resolve, reject) => {
+    storageOperationQueue.push({ operation, resolve, reject });
+    processStorageQueue();
+  });
+}
+
+async function processStorageQueue() {
+  if (isProcessingStorage || storageOperationQueue.length === 0) {
+    return;
+  }
+
+  isProcessingStorage = true;
+  const { operation, resolve, reject } = storageOperationQueue.shift();
+
+  try {
+    const result = await operation();
+    resolve(result);
+  } catch (error) {
+    reject(error);
+  } finally {
+    isProcessingStorage = false;
+    // 处理队列中的下一个操作
+    setTimeout(processStorageQueue, 0);
+  }
+}
 
 // 新架构管理器
 let promptManager;
@@ -1388,7 +1405,6 @@ let teamManager;
 async function init() {
   tabManager = new TabManager();
   conversationManager = new ConversationManager(tabManager);
-  memberManager = new MemberManager(tabManager);
   senderFactory = new SenderFactory(tabManager, pendingResponses);
   aiMessageManager = new AIMessageManager(tabManager, conversationManager, senderFactory);
   wsManager = new WebSocketManager(tabManager, pendingResponses);
@@ -1401,63 +1417,16 @@ async function init() {
   flowExecutor = new FlowExecutor(tabManager, conversationManager, senderFactory);
   teamManager = new TeamManager();
   expertManager = new ExpertManager();
-  flowTestRunner = new FlowTestRunner(conversationManager, senderFactory);
+  flowTestRunner = new FlowTestRunner(conversationManager, senderFactory, flowExecutor);
 
   // 确保模型已导入
   const models = await modelManager.getModels();
   console.log('[Init] 已加载', models.length, '个模型');
 
-
   // 加载设置并连接 WebSocket
   const settings = await StorageManager.getSettings();
   if (settings.wsEnabled && settings.wsUrl) {
     wsManager.connect(settings.wsUrl);
-  }
-
-  // 迁移 storage key 'roles' → 'members'
-  try {
-    const oldData = await chrome.storage.local.get('roles');
-    if (oldData.roles) {
-      await chrome.storage.local.set({ members: oldData.roles });
-      await chrome.storage.local.remove('roles');
-      console.log('[Init] 已迁移 storage key: roles → members');
-    }
-  } catch (e) {
-    console.warn('[Init] 迁移 roles → members 失败:', e);
-  }
-
-  // 迁移 conversation 字段 role* → member*
-  try {
-    const result = await chrome.storage.local.get('conversations');
-    const conversations = result.conversations || [];
-    let migrated = false;
-    for (const conv of conversations) {
-      const oldNames = ['roleIds', 'roleSettings', 'roleUrls', 'roleLastMessageIds', 'roleTabIds', 'roleOrder', 'discussionOrder'];
-      const newNames = ['memberIds', 'memberSettings', 'memberUrls', 'memberLastMessageIds', 'memberTabIds', 'memberOrder', 'memberOrder'];
-      for (let i = 0; i < oldNames.length; i++) {
-        if (conv[oldNames[i]] !== undefined) {
-          conv[newNames[i]] = conv[oldNames[i]];
-          delete conv[oldNames[i]];
-          migrated = true;
-        }
-      }
-      // Also migrate message-level roleId → memberId
-      if (conv.messages) {
-        for (const msg of conv.messages) {
-          if (msg.roleId !== undefined) {
-            msg.memberId = msg.roleId;
-            delete msg.roleId;
-            migrated = true;
-          }
-        }
-      }
-    }
-    if (migrated) {
-      await chrome.storage.local.set({ conversations });
-      console.log('[Init] 已迁移 conversation 字段: role* → member*');
-    }
-  } catch (e) {
-    console.warn('[Init] 迁移 conversation 字段失败:', e);
   }
 
   // 迁移 prompts: 移除 category 字段，语义融入 tags
@@ -1590,9 +1559,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             content: msg.content
           }));
 
-        console.log('[WS] 当前已响应成员数:', responses.length, '/', conversation.memberIds.length);
+        const memberIds = conversation.members.map(m => m.id);
+        console.log('[WS] 当前已响应成员数:', responses.length, '/', memberIds.length);
 
-        const allResponded = conversation.memberIds.every(memberId =>
+        const allResponded = memberIds.every(memberId =>
           conversation.messages.some((msg, index) =>
             !msg.isUser && msg.memberId === memberId && index > lastUserMessageIndex
           )
@@ -1605,7 +1575,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           wsManager.wsRequestQueue.delete(conversationId);
           stopPolling(conversationId);
 
-          const combinedContent = await wsManager.combineResponses(responses);
+          const conversation = await this.conversationManager.getConversation(conversationId);
+          const combinedContent = await wsManager.combineResponses(responses, conversation);
 
           wsManager.send({
             type: 'ai_response',
@@ -1677,7 +1648,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       console.log('[Background] 收到createConversation请求 - request.mode:', request.mode);
       conversationManager.createConversation(
         request.name,
-        request.modelIds || request.memberIds,
+        request.members || [],
         request.mode || 'brainstorming',
         {
           promptId: request.promptId,
@@ -1743,13 +1714,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case 'clearConversationPlatform':
       (async () => {
         try {
-          const memberUrls = request.memberUrls || {};
+          const conversation = await conversationManager.getConversation(request.conversationId);
+          const memberUrls = conversation.memberUrls || {};
           const deletedConversations = [];
 
           if (Object.keys(memberUrls).length > 0) {
-            const members = await StorageManager.getMembers();
             for (const [memberId, conversationUrl] of Object.entries(memberUrls)) {
-              const member = members.find(r => r.id === memberId);
+              const member = conversation.members.find(m => m.id === memberId);
               if (!member || !conversationUrl) continue;
               try {
                 await aiMessageManager.deletePlatformConversation(member.provider, conversationUrl);
@@ -1795,29 +1766,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case 'getConversation':
       conversationManager.getConversation(request.conversationId)
         .then(sendResponse);
-      return true;
-
-    case 'createMember':
-      memberManager.createMember(
-        request.name,
-        request.provider,
-        request.model,
-        request.systemPrompt
-      ).then(sendResponse);
-      return true;
-
-    case 'updateMember':
-      memberManager.updateMember(request.memberId, request.updates)
-        .then(() => sendResponse({ success: true }));
-      return true;
-
-    case 'deleteMember':
-      memberManager.deleteMember(request.memberId)
-        .then(() => sendResponse({ success: true }));
-      return true;
-
-    case 'getMembers':
-      StorageManager.getMembers().then(sendResponse);
       return true;
 
     case 'updateSettings':
@@ -2079,9 +2027,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case 'executeFlow':
       (async () => {
         try {
-          const flow = await flowManager.getFlowById(request.flowId);
-          if (!flow) {
-            throw new Error('流程不存在');
+          const flow = request.flow;
+          if (!flow || !flow.nodes || flow.nodes.length === 0) {
+            throw new Error('流程不存在或格式错误');
           }
 
           const result = await flowExecutor.executeFlow(
@@ -2352,7 +2300,6 @@ function startPolling(conversationId) {
         return;
       }
 
-      const members = await StorageManager.getMembers();
       const sendMode = conversation.sendMode || 'parallel';
       let pendingMemberIds = [];
 
@@ -2366,14 +2313,14 @@ function startPolling(conversationId) {
 
         const lastUserMessageIndex = conversation.messages.findIndex(m => m.id === lastUserMessage.id);
 
-        conversation.memberIds.forEach(memberId => {
+        conversation.members.forEach(member => {
           const hasResponse = conversation.messages.some((msg, index) =>
             !msg.isUser &&
-            msg.memberId === memberId &&
+            msg.memberId === member.id &&
             index > lastUserMessageIndex
           );
           if (!hasResponse) {
-            pendingMemberIds.push(memberId);
+            pendingMemberIds.push(member.id);
           }
         });
       } else if (sendMode === 'sequential') {
@@ -2386,7 +2333,7 @@ function startPolling(conversationId) {
 
         const lastUserMessageIndex = conversation.messages.findIndex(m => m.id === lastUserMessage.id);
 
-        const memberOrder = conversation.memberOrder || conversation.memberIds;
+        const memberOrder = conversation.memberOrder || conversation.members.map(m => m.id);
         for (const memberId of memberOrder) {
           const hasResponse = conversation.messages.some((msg, index) =>
             !msg.isUser &&
@@ -2409,7 +2356,7 @@ function startPolling(conversationId) {
 
       const models = await modelManager.getModels();
       const webPendingMemberIds = pendingMemberIds.filter(memberId => {
-        const member = members.find(r => r.id === memberId);
+        const member = conversation.members.find(m => m.id === memberId);
         if (!member) return false;
         const modelConfig = models.find(m => m.provider === member.provider && m.model === member.model);
         return (modelConfig?.accessMethod || 'web') === 'web';
@@ -2426,9 +2373,6 @@ function startPolling(conversationId) {
       const browserInfo = await getBrowserInfo();
       console.log(`[Background] 浏览器: ${browserInfo.name}, 待处理成员: ${webPendingMemberIds.map(id => members.find(r => r.id === id)?.name).join(', ')}`);
 
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      const originalActiveTab = tabs[0];
-
       for (const memberId of webPendingMemberIds) {
         const member = members.find(r => r.id === memberId);
         if (!member) continue;
@@ -2437,7 +2381,7 @@ function startPolling(conversationId) {
         const isBaseUrl = !memberUrl || memberUrl === provider?.baseUrl;
 
         try {
-          console.log(`[Background] 激活成员 ${member.name} (${member.provider}) 标签页`);
+          console.log(`[Background] 检查成员 ${member.name} (${member.provider}) 标签页状态`);
           let targetTab = null;
 
           if (isBaseUrl) {
@@ -2456,18 +2400,10 @@ function startPolling(conversationId) {
 
           if (!targetTab) {
             console.log(`[Background] 未找到标签页: member: ${member.name}, url=${memberUrl}, provider: ${member.provider}`);
-            continue;
           }
-
-          await chrome.tabs.update(targetTab.id, { active: true });
         } catch (error) {
-          console.error(`[Background] 激活 ${member.name} 标签页失败`, error);
+          console.error(`[Background] 检查 ${member.name} 标签页失败`, error);
         }
-      }
-
-      if (originalActiveTab) {
-        await chrome.tabs.update(originalActiveTab.id, { active: true });
-        console.log(`[Background] 已切回原始标签页`);
       }
     } catch (error) {
       console.error('[Background] 轮询检查失败', error);

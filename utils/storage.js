@@ -25,11 +25,11 @@ async function getConversation(conversationId) {
 }
 
 // 创建会话
-async function createConversation(name, memberIds) {
+async function createConversation(name, members) {
   return sendMessage({
     action: 'createConversation',
     name,
-    memberIds
+    members
   });
 }
 
@@ -50,44 +50,6 @@ async function addMessage(conversationId, memberId, content, isUser) {
     content,
     isUser
   });
-}
-
-// 获取所有成员
-async function getMembers() {
-  return sendMessage({ action: 'getMembers' });
-}
-
-// 创建成员
-async function createMember(name, provider, model, systemPrompt) {
-  return sendMessage({
-    action: 'createMember',
-    name,
-    provider,
-    model,
-    systemPrompt
-  });
-}
-
-// 更新成员
-async function updateMember(memberId, updates) {
-  return sendMessage({
-    action: 'updateMember',
-    memberId,
-    updates
-  });
-}
-
-// 删除成员
-async function deleteMember(memberId) {
-  return sendMessage({
-    action: 'deleteMember',
-    memberId
-  });
-}
-
-// 获取所有成员
-async function getMembers() {
-  return sendMessage({ action: 'getMembers' });
 }
 
 // 获取设置
@@ -168,10 +130,6 @@ if (typeof module !== 'undefined' && module.exports) {
     createConversation,
     deleteConversation,
     addMessage,
-    getMembers,
-    createMember,
-    updateMember,
-    deleteMember,
     getSettings,
     updateSettings,
     getTeams,

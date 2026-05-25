@@ -116,18 +116,12 @@ class WebMessageSender extends AbstractMessageSender {
         }, 300000);
       });
 
-      await new Promise(resolve => setTimeout(resolve, 100));
-
       try {
         await chrome.tabs.sendMessage(tab.id, {
           ...message,
           messageId: messageId,
           conversationId: conversationId
         });
-
-        try {
-          await chrome.tabs.update(tab.id, { active: false });
-        } catch (e) {}
       } catch (sendError) {
         this.pendingResponses.delete(messageId);
         throw sendError;
