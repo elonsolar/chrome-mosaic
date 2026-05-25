@@ -377,6 +377,28 @@ class WebSocketManager {
       });
     }
   }
+
+  updateStatus(connected, status, extra = {}) {
+    console.log('[WS] 状态更新:', { connected, status, ...extra });
+    
+    // 发送状态更新到所有相关的标签页
+    if (chrome.tabs && chrome.tabs.query) {
+      chrome.tabs.query({}, (tabs) => {
+        tabs.forEach(tab => {
+          if (tab.id && chrome.tabs.sendMessage) {
+            chrome.tabs.sendMessage(tab.id, {
+              type: 'ws_status_update',
+              connected,
+              status,
+              ...extra
+            }).catch(() => {
+              // 忽略发送失败（标签页可能关闭或不监听此消息）
+            });
+          }
+        });
+      });
+    }
+  }
 }
 
 class AIMessageManager {
