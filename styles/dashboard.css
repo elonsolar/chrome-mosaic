@@ -497,15 +497,9 @@ body.dark-mode .dashboard-sidebar .sidebar-footer-btn:hover {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-}
-
-.mode-showcase-card:hover {
-  border-color: var(--border-color-hover);
-  box-shadow: var(--shadow-md);
 }
 
 .mode-showcase-header {

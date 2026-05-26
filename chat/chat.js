@@ -2593,13 +2593,90 @@ async function handleContextMenuAction(action) {
     await deleteConversationFromSidebar(convId);
   } else if (action === 'export') {
     exportConversationFromSidebar(convId);
+  } else if (action === 'rename') {
+    await renameConversationFromSidebar(convId);
   }
+}
+
+// 重命名会话（内联编辑）
+async function renameConversationFromSidebar(convId) {
+  const conv = sidebarState.conversations.find(c => c.id === convId);
+  if (!conv) return;
+
+  const container = document.getElementById('sidebarConversations');
+  const item = container.querySelector(`[data-conv-id="${convId}"]`);
+  const nameEl = item?.querySelector('.sidebar-conv-name');
+  if (!nameEl) return;
+
+  const originalName = conv.name;
+  
+  nameEl.contentEditable = 'true';
+  nameEl.classList.add('editing');
+  nameEl.focus();
+  
+  // 选中文本
+  const range = document.createRange();
+  range.selectNodeContents(nameEl);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+
+  const saveAndReset = async () => {
+    const newName = nameEl.textContent.trim();
+    nameEl.contentEditable = 'false';
+    nameEl.classList.remove('editing');
+    
+    if (newName && newName !== originalName) {
+      try {
+        await chrome.runtime.sendMessage({
+          action: 'updateConversation',
+          conversationId: convId,
+          updates: { name: newName }
+        });
+
+        // 刷新列表
+        await loadSidebarConversations();
+
+        // 如果是当前会话，更新显示
+        if (convId === conversationId) {
+          const conversationName = document.getElementById('conversationName');
+          if (conversationName) {
+            conversationName.textContent = newName;
+            conversationName.title = newName;
+          }
+        }
+      } catch (error) {
+        console.error('[Sidebar] 重命名会话失败:', error);
+        nameEl.textContent = originalName;
+      }
+    } else {
+      nameEl.textContent = originalName;
+    }
+  };
+
+  const handleBlur = () => {
+    saveAndReset();
+    nameEl.removeEventListener('blur', handleBlur);
+    nameEl.removeEventListener('keydown', handleKeydown);
+  };
+
+  const handleKeydown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      nameEl.blur();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      nameEl.textContent = originalName;
+      nameEl.blur();
+    }
+  };
+
+  nameEl.addEventListener('blur', handleBlur);
+  nameEl.addEventListener('keydown', handleKeydown);
 }
 
 // 删除会话
 async function deleteConversationFromSidebar(convId) {
-  if (!confirm('确定要删除这个会话吗？')) return;
-
   try {
     // 获取会话数据以清理平台会话
     const conv = sidebarState.conversations.find(c => c.id === convId);
@@ -3004,13 +3081,9 @@ async function saveNewConvInlineMember() {
 
     newConvState.members.push(newMember);
     renderNewConvMemberList();
-    saveBtn.innerHTML = '<span>✓</span> 创建成功';
-    saveBtn.style.background = 'linear-gradient(135deg, #34c759 0%, #30b350 100%)';
-    setTimeout(() => {
-      const form = document.getElementById('convInlineMemberForm');
-      if (form) form.style.display = 'none';
-      resetInlineMemberForm();
-    }, 800);
+    const form = document.getElementById('convInlineMemberForm');
+    if (form) form.style.display = 'none';
+    resetInlineMemberForm();
   } catch (error) {
     console.error('[NewConvModal] 创建成员失败:', error);
     saveBtn.disabled = false;
@@ -3018,7 +3091,7 @@ async function saveNewConvInlineMember() {
     saveBtn.style.background = 'linear-gradient(135deg, #ff3b30 0%, #d63020 100%)';
     setTimeout(() => {
       saveBtn.disabled = false;
-      saveBtn.innerHTML = '<span>✨</span> 创建并添加';
+      saveBtn.innerHTML = '<span>✨</span> 添加';
       saveBtn.style.background = '';
     }, 2000);
   }
@@ -3034,7 +3107,7 @@ function resetInlineMemberForm() {
   if (nameInput) { nameInput.value = ''; nameInput.classList.remove('error', 'success'); }
   if (modelSelect) { modelSelect.value = ''; modelSelect.classList.remove('error', 'success'); }
   if (promptSelect) promptSelect.value = '';
-  if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = '<span>✨</span> 创建并添加'; saveBtn.style.background = ''; }
+  if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = '<span>✨</span> 添加'; saveBtn.style.background = ''; }
 }
 
 // 显示新建会话弹窗（带输入内容）
@@ -3159,53 +3232,162 @@ function clearDashboardAnimations() {
   // 重置状态
   dashboardState.modeCurrentIndex = { brainstorming: -1, discussion: -1, expertqa: -1 };
   dashboardState.modePlaying = {};
+
+  // 清空对话示例
+  elements.messagesContainer.innerHTML = '';
+
+  // 恢复 header 和输入框显示
+  const chatHeader = document.querySelector('.chat-header');
+  const inputContainer = document.querySelector('.input-container');
+  if (chatHeader) chatHeader.style.display = '';
+  if (inputContainer) inputContainer.style.display = '';
 }
 
 function renderDashboardWelcome() {
   console.log('[Chat] 渲染 dashboard welcome');
 
-  elements.messagesContainer.innerHTML = `
-    <div class="mode-showcase">
-      <div class="mode-showcase-card" data-mode="brainstorming">
-        <div class="mode-showcase-header">
-          <span class="mode-showcase-icon">💡</span>
-          <div>
-            <h3 class="mode-showcase-title">头脑风暴</h3>
-            <p class="mode-showcase-subtitle">排查问题 · 多方案对比 · 各给各的答案</p>
-          </div>
-        </div>
-        <div class="mode-showcase-examples" id="modeExamplesBrainstorming"></div>
-      </div>
+  // 初始化一个空的 conversation 对象
+  state.conversation = {
+    id: 'demo-showcase',
+    name: '演示会话',
+    mode: 'brainstorming',
+    contextMode: 'self',
+    sendMode: 'parallel',
+    members: [],
+    memberSettings: {},
+    memberOrder: [],
+    expertId: null,
+    memberUrls: {},
+    memberLastMessageIds: {},
+    messages: [],
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
 
-      <div class="mode-showcase-card" data-mode="discussion">
-        <div class="mode-showcase-header">
-          <span class="mode-showcase-icon">🪑</span>
-          <div>
-            <h3 class="mode-showcase-title">圆桌讨论</h3>
-            <p class="mode-showcase-subtitle">方案辩论 · 互相挑毛病 · 逐步深入</p>
-          </div>
-        </div>
-        <div class="mode-showcase-examples" id="modeExamplesDiscussion"></div>
-      </div>
+  // 开始轮播模式对话
+  startModeConversationCarousel();
+}
 
-      <div class="mode-showcase-card" data-mode="expertqa">
-        <div class="mode-showcase-header">
-          <span class="mode-showcase-icon">🎓</span>
-          <div>
-            <h3 class="mode-showcase-title">专家问答</h3>
-            <p class="mode-showcase-subtitle">系统设计 · 全面审计 · 分步骤协作</p>
-          </div>
-        </div>
-        <div class="mode-showcase-examples" id="modeExamplesExpertqa"></div>
-      </div>
-    </div>
-  `;
+function startModeConversationCarousel() {
+  const modes = ['brainstorming', 'discussion', 'expertqa'];
+  const modeToContextMode = {
+    brainstorming: 'self',
+    discussion: 'full',
+    expertqa: 'self'
+  };
+  const modeToSendMode = {
+    brainstorming: 'parallel',
+    discussion: 'sequential',
+    expertqa: 'sequential'
+  };
 
-  // 绑定点击事件
-  bindDashboardCardEvents();
+  let currentIndex = 0;
+  let isRunning = false;
 
-  // 启动卡片轮播（包含动画）
-  startShowcaseCarousel();
+  async function playModeConversation(mode) {
+    if (isRunning) return;
+    isRunning = true;
+
+    const examples = MODE_EXAMPLES[mode];
+    if (!examples || examples.length === 0) {
+      isRunning = false;
+      return;
+    }
+
+    const example = examples[Math.floor(Math.random() * examples.length)];
+
+    // 设置演示会话数据
+    state.conversation.mode = mode;
+    state.conversation.contextMode = modeToContextMode[mode];
+    state.conversation.sendMode = modeToSendMode[mode];
+    state.conversation.members = example.preview.ai.map((ai, i) => ({
+      id: `demo-${mode}-${i}`,
+      name: ai.name,
+      provider: 'demo',
+      platformName: ai.name,
+      color: '#667eea'
+    }));
+    state.conversation.memberOrder = state.conversation.members.map(m => m.id);
+    state.conversation.messages = [];
+
+    // 更新 UI
+    updateConversationName();
+    renderMembersTags();
+    renderModeBadge();
+    updateSendButtonState();
+    renderMessages();
+
+    await sleep(500);
+
+    // 模拟打字
+    const userText = example.preview.user;
+    elements.messageInput.value = '';
+    elements.messageInput.focus();
+
+    for (let i = 0; i < userText.length; i++) {
+      elements.messageInput.value += userText[i];
+      updateSendButtonState();
+      await sleep(50);
+    }
+
+    await sleep(300);
+
+    // 发送消息
+    addTempMessage(userText, true);
+    elements.messageInput.value = '';
+    updateSendButtonState();
+
+    await sleep(200);
+
+    // 显示 thinking indicator
+    showThinkingIndicator();
+
+    await sleep(800);
+
+    // 隐藏 thinking
+    hideThinkingIndicator();
+
+    // 添加 AI 回复
+    state.conversation.messages.push({
+      isUser: true,
+      content: userText,
+      timestamp: Date.now()
+    });
+
+    for (let i = 0; i < example.preview.ai.length; i++) {
+      const ai = example.preview.ai[i];
+      const memberId = `demo-${mode}-${i}`;
+
+      state.conversation.messages.push({
+        isUser: false,
+        memberId: memberId,
+        content: ai.text,
+        timestamp: Date.now() + i + 1
+      });
+
+      renderMessages();
+      await sleep(400);
+    }
+
+    await sleep(2000);
+    isRunning = false;
+  }
+
+  // 清除之前的定时器
+  if (dashboardState.showcaseTimer) {
+    clearInterval(dashboardState.showcaseTimer);
+  }
+
+  // 立即播放第一个模式
+  playModeConversation(modes[0]);
+
+  // 轮播切换
+  dashboardState.showcaseTimer = setInterval(() => {
+    if (!isRunning) {
+      currentIndex = (currentIndex + 1) % modes.length;
+      playModeConversation(modes[currentIndex]);
+    }
+  }, 8000);
 }
 
 function startDashboardAnimations() {
