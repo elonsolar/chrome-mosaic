@@ -31,3 +31,7 @@ build/
 # Temporary files
 tmp/
 temp/
+*.png
+*.txt
+*.yml
+!icons/*.png
