@@ -10,18 +10,29 @@ class FlowDesignerApp {
     this.currentNodeIdForVar = null;
     this.testRunLocked = false;
     this.connectionManager = null;
+    this.models = [];
     this.init();
   }
 
-  init() {
+  async init() {
     this.loadFlowData();
     this.ensureDefaultNodes();
     this.saveFlowData();
     this.connectionManager = new ConnectionManager(this.canvasId, this);
     this.syncEdgesToConnections();
+    await this.loadModels();
     this.bindEvents();
     this.bindChromeMessages();
     this.render();
+  }
+
+  async loadModels() {
+    try {
+      const models = await chrome.runtime.sendMessage({ action: 'getModels' });
+      this.models = models || [];
+    } catch (error) {
+      console.error('加载模型列表失败:', error);
+    }
   }
 
   syncEdgesToConnections() {
@@ -408,7 +419,7 @@ class FlowDesignerApp {
               action: 'executeFlow',
               flow: tempFlow,
               userInput,
-              context: { maxIterations: 1 }
+              context: {}
             }, (resp) => {
               if (chrome.runtime.lastError) {
                 reject(new Error(chrome.runtime.lastError.message));
@@ -1210,10 +1221,14 @@ class FlowDesignerApp {
     const data = node.data || {};
     const systemPrompt = data.$$prompt_decorator$$?.systemPrompt || '';
     const prompt = data.$$prompt_decorator$$?.prompt || '';
-    const currentModel = data.model || {};
+    const storedModel = data.model || {};
     const inputParams = data.$$input_decorator$$?.inputParameters || [];
     const outputs = data.outputs || [];
     const chatHistory = data.$$input_decorator$$?.chatHistorySetting || {};
+
+    // 实时查找模型（向后兼容旧格式：storedModel.id）
+    const modelId = storedModel.modelId || storedModel.id;
+    const selectedModel = modelId ? (this.models.find(m => m.id === modelId) || null) : null;
 
     const outputRows = outputs.map((o, i) => `
       <div class="var-input-row">
@@ -1229,9 +1244,9 @@ class FlowDesignerApp {
 
     const enableMem = chatHistory.enableChatHistory ? 'checked' : '';
 
-    const modelDisplay = currentModel.name ? 
-      `${currentModel.name} (${currentModel.accessMethod || 'web'})` : 
-      '选择模型';
+    const modelDisplay = selectedModel
+      ? `${selectedModel.platformName || ''} - ${selectedModel.code || ''}`
+      : '选择模型';
 
     return `
       <div class="config-section">
@@ -1273,10 +1288,8 @@ class FlowDesignerApp {
             <div class="model-loading">加载模型列表...</div>
           </div>
         </div>
-        <input type="hidden" id="llm-model-id" value="${this.escHtml(currentModel.id || '')}" />
-        <input type="hidden" id="llm-model-provider" value="${this.escHtml(currentModel.provider || '')}" />
-        <input type="hidden" id="llm-model-model" value="${this.escHtml(currentModel.model || '')}" />
-        <input type="hidden" id="llm-model-access-method" value="${this.escHtml(currentModel.accessMethod || 'web')}" />
+        <input type="hidden" id="llm-model-platform-id" value="${this.escHtml(storedModel.platformId || '')}" />
+        <input type="hidden" id="llm-model-id" value="${this.escHtml(modelId || '')}" />
       </div>
       <div class="config-section">
         <div class="config-section-title">系统提示词</div>
@@ -1461,16 +1474,16 @@ class FlowDesignerApp {
           // Load models from system
           try {
             const models = await chrome.runtime.sendMessage({ action: 'getModels' });
+            this.models = models || [];
             const enabledModels = models ? models.filter(m => m.enabled) : [];
             
             if (enabledModels.length === 0) {
               modelDropdown.innerHTML = '<div class="model-loading">暂无可用模型</div>';
             } else {
               modelDropdown.innerHTML = enabledModels.map(m => `
-                <div class="model-option" data-model-id="${this.escHtml(m.id)}">
-                  <div class="model-option-name">${this.escHtml(m.name)}</div>
+                <div class="model-option" data-model-id="${this.escHtml(m.id)}" data-platform-id="${this.escHtml(m.platformId || '')}">
+                  <div class="model-option-name">${this.escHtml(m.platformName || '')} - ${this.escHtml(m.code || '')}</div>
                   <div class="model-option-details">
-                    <span class="model-provider">${this.escHtml(m.provider || 'unknown')}</span>
                     <span class="model-access">${this.escHtml(m.accessMethod || 'web')}</span>
                   </div>
                 </div>
@@ -1481,22 +1494,16 @@ class FlowDesignerApp {
                 opt.addEventListener('click', (e) => {
                   e.stopPropagation();
                   const modelId = opt.dataset.modelId;
+                  const platformId = opt.dataset.platformId;
                   const selectedModel = enabledModels.find(m => m.id === modelId);
                   if (selectedModel) {
-                    modelDisplay.textContent = `${selectedModel.name} (${selectedModel.accessMethod || 'web'})`;
+                    modelDisplay.textContent = `${selectedModel.platformName || ''} - ${selectedModel.code || ''}`;
                     modelDropdown.style.display = 'none';
                     const n = this.nodes.find(n2 => n2.id === node.id);
                     if (n) {
                       n.data.model = {
-                        id: selectedModel.id,
-                        name: selectedModel.name,
-                        modelType: selectedModel.name,
-                        provider: selectedModel.provider,
-                        model: selectedModel.model,
-                        accessMethod: selectedModel.accessMethod || 'web',
-                        baseUrl: selectedModel.baseUrl,
-                        apiKey: selectedModel.apiKey,
-                        thinking: selectedModel.thinking
+                        platformId: platformId,
+                        modelId: modelId
                       };
                       this.saveFlowData();
                       this.render();

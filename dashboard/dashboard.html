@@ -3,9 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Free AI</title>
+  <title>FreeAI</title>
   <link rel="icon" type="image/svg+xml" href="../icons/icon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../styles/dashboard.css">
+  <link rel="stylesheet" href="../styles/models-tab.css">
 </head>
 <body>
   <div class="dashboard-layout">
@@ -17,38 +21,72 @@
             <rect width="22" height="22" rx="6" fill="#3964FE"/>
             <path d="M11 5C11 5 12 10 15.5 11C12 12 11 17 11 17C11 17 10 12 6.5 11C10 10 11 5 11 5Z" fill="white"/>
           </svg>
-          <span class="sidebar-logo-text">Free AI</span>
+          <span class="sidebar-logo-text">FreeAI</span>
         </div>
         <p class="sidebar-subtitle"></p>
       </div>
 
       <div class="sidebar-nav">
         <a href="#prompts" class="nav-item active" data-page="prompts">
-          <span class="nav-icon">📝</span>
+          <span class="nav-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+            </svg>
+          </span>
           <span class="nav-label">提示词</span>
         </a>
 
         <a class="nav-item" href="#models" data-page="models">
-          <span class="nav-icon">🤖</span>
+          <span class="nav-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+              <line x1="12" y1="22.08" x2="12" y2="12"/>
+            </svg>
+          </span>
           <span class="nav-label">模型</span>
         </a>
         <a class="nav-item" href="#experts" data-page="experts">
-          <span class="nav-icon">🎓</span>
+          <span class="nav-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+          </span>
           <span class="nav-label">专家</span>
         </a>
         <a href="#settings" class="nav-item" data-page="settings">
-          <span class="nav-icon">⚙️</span>
+          <span class="nav-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </span>
           <span class="nav-label">设置</span>
         </a>
       </div>
 
       <div class="sidebar-footer">
+        <button class="sidebar-footer-btn" id="themeToggleBtn" title="切换主题">
+          <div class="sidebar-footer-avatar">
+            <svg class="theme-icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2"/>
+              <path d="M12 2V4M12 20V22M4.22 4.22L5.64 5.64M18.36 18.36L19.78 19.78M2 12H4M20 12H22M4.22 19.78L5.64 18.36M18.36 5.64L19.78 4.22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <svg class="theme-icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:none;">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <span class="sidebar-footer-name">主题</span>
+        </button>
         <button class="sidebar-footer-btn" id="backToChatBtn" title="返回对话">
           <div class="sidebar-footer-avatar">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M2.99997 8.00001C2.99997 8.18959 3.07927 8.37081 3.21954 8.50001L6.96954 11.87C7.26244 12.1334 7.71328 12.11 7.97669 11.8171C8.2401 11.5242 8.21669 11.0734 7.92379 10.81L5.44354 8.60001H12.3333C12.7359 8.60001 13.0622 8.30453 13.0622 7.94001C13.0622 7.57549 12.7359 7.28001 12.3333 7.28001H5.44354L7.92379 5.07001C8.21669 4.80666 8.2401 4.35582 7.97669 4.06292C7.71328 3.77002 7.26244 3.7466 6.96954 4.01001L3.21954 7.38001C3.07927 7.50921 2.99997 7.69043 2.99997 7.88001V8.00001Z" fill="currentColor"/></svg>
           </div>
           <span class="sidebar-footer-name">返回对话</span>
-          <svg class="sidebar-footer-arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M12.9999 8.00001C12.9999 7.81044 12.9206 7.62921 12.7803 7.50001L9.03032 4.13001C8.73742 3.86659 8.28658 3.89001 8.02317 4.18292C7.75976 4.47582 7.78317 4.92666 8.07608 5.19001L10.5563 7.40001H3.66657C3.26396 7.40001 2.93768 7.69549 2.93768 8.06001C2.93768 8.42454 3.26396 8.72001 3.66657 8.72001H10.5563L8.07608 10.93C7.78317 11.1934 7.75976 11.6442 8.02317 11.9371C8.28658 12.23 8.73742 12.2534 9.03032 11.99L12.7803 8.62001C12.9206 8.49081 12.9999 8.30959 12.9999 8.12001V8.00001Z" fill="currentColor"></path></svg>
+          <svg class="sidebar-footer-arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M12.9999 8.00001C12.9999 7.81044 12.9206 7.62921 12.7803 7.50001L9.03032 4.13001C8.73742 3.86659 8.28658 3.89001 8.02317 4.18292C7.75976 4.47582 7.78317 4.92666 8.07608 5.19001L10.5563 7.40001H3.66657C3.26396 7.40001 2.93768 7.69549 2.93768 8.06001C2.93768 8.42454 3.26396 8.72001H3.66657 8.72001H10.5563L8.07608 10.93C7.78317 11.1934 7.75976 11.6442 8.02317 11.9371C8.28658 12.23 8.73742 12.2534 9.03032 11.99L12.7803 8.62001C12.9206 8.49081 12.9999 8.30959 12.9999 8.12001V8.00001Z" fill="currentColor"></path></svg>
         </button>
       </div>
     </nav>
@@ -56,89 +94,63 @@
     <main class="main-content">
       <!-- 专家管理页面 -->
       <div class="page-content" id="page-experts">
-      <div class="experts-page-header">
-        <div class="experts-header-left">
-          <div class="experts-title">
-            <span class="experts-icon">🎓</span>
-            <h2>专家</h2>
+        <div class="experts-container-wrapper">
+          <div class="page-toolbar">
+            <div class="page-toolbar-left">
+              <div class="search-box">
+                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" id="expertSearchInput" placeholder="搜索专家...">
+                <button class="clear-btn" id="clearExpertSearch" style="display: none;">&times;</button>
+              </div>
+            </div>
+            <div class="page-toolbar-right">
+              <button class="btn btn-primary" id="createExpertBtn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>新增专家</span>
+              </button>
+              <div class="view-toggle" id="expertsViewToggle">
+                <button class="view-btn" data-view="list" title="列表视图">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <rect x="2" y="3" width="12" height="2" rx="1"/>
+                    <rect x="2" y="7" width="12" height="2" rx="1"/>
+                    <rect x="2" y="11" width="12" height="2" rx="1"/>
+                  </svg>
+                </button>
+                <button class="view-btn active" data-view="grid" title="网格视图">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <rect x="2" y="2" width="5" height="5" rx="1"/>
+                    <rect x="9" y="2" width="5" height="5" rx="1"/>
+                    <rect x="2" y="9" width="5" height="5" rx="1"/>
+                    <rect x="9" y="9" width="5" height="5" rx="1"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
           </div>
-          <div class="experts-stats">
-            <span class="expert-stat-badge">
-              <strong id="expertCount">0</strong>
-              <span>个专家</span>
-            </span>
+
+          <div class="experts-container" id="expertsContainer">
           </div>
-        </div>
-        <div class="view-toggle" id="expertsViewToggle">
-          <button class="view-btn" data-view="list" title="列表视图">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <rect x="2" y="3" width="12" height="2" rx="1"/>
-              <rect x="2" y="7" width="12" height="2" rx="1"/>
-              <rect x="2" y="11" width="12" height="2" rx="1"/>
-            </svg>
-          </button>
-          <button class="view-btn active" data-view="grid" title="网格视图">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <rect x="2" y="2" width="5" height="5" rx="1"/>
-              <rect x="9" y="2" width="5" height="5" rx="1"/>
-              <rect x="2" y="9" width="5" height="5" rx="1"/>
-              <rect x="9" y="9" width="5" height="5" rx="1"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-
-        <div class="experts-container" id="expertsContainer">
-        </div>
-
-        <!-- 浮动操作按钮 -->
-        <div class="fab-container" id="expertsFab">
-          <button class="fab fab-main" data-action="createExpert" title="创建专家">
-            <svg class="fab-icon fab-icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-          </button>
         </div>
       </div>
 
       <!-- 提示词管理页面 -->
       <div class="page-content" id="page-prompts">
-        <iframe src="../sidepanel/tabs/prompts.html" class="page-iframe" id="promptsIframe"></iframe>
-
-        <!-- 浮动操作按钮 -->
-        <div class="fab-container" id="promptsFab">
-          <button class="fab fab-main" data-action="createPrompt" title="创建提示词">
-            <svg class="fab-icon fab-icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-          </button>
-        </div>
+        <iframe src="components/prompts.html" class="page-iframe" id="promptsIframe"></iframe>
       </div>
 
       <!-- 模型管理页面 -->
       <div class="page-content" id="page-models">
-        <iframe src="../sidepanel/tabs/models.html" class="page-iframe" id="modelsIframe"></iframe>
-
-        <!-- 浮动操作按钮 -->
-        <div class="fab-container" id="modelsFab">
-          <button class="fab fab-main" data-action="createModel" title="创建模型">
-            <svg class="fab-icon fab-icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-          </button>
-        </div>
+        <div id="modelsTabContainer"></div>
       </div>
 
       <div class="page-content" id="page-settings">
         <div class="settings-page">
-          <div class="settings-header">
-            <h2>系统设置</h2>
-            <p class="settings-subtitle">配置您的 Free AI 使用偏好</p>
-          </div>
-
           <div class="settings-group">
             <div class="settings-group-title">
               <span class="title-icon" aria-hidden="true">🔌</span>
@@ -384,10 +396,11 @@
   </div>
 
   <!-- 加载scripts -->
-  <script src="../config/providers.config.js"></script>
   <script src="../utils/storage.js"></script>
+  <script src="../utils/theme-manager.js"></script>
   <script src="dashboard.js"></script>
   <script src="components/settings-manager.js"></script>
+  <script src="components/models-tab.js"></script>
 
 
 </body>

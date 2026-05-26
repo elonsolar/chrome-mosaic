@@ -1,0 +1,156 @@
+class ConversationMessageService {
+  constructor(
+    conversationManager,
+    entityFactory,
+    progressTracker,
+    progressNotifier,
+    floatWindowService
+  ) {
+    this.conversationManager = conversationManager;
+    this.entityFactory = entityFactory;
+    this.progressTracker = progressTracker;
+    this.progressNotifier = progressNotifier;
+    this.floatWindowService = floatWindowService;
+  }
+
+  async processUserMessage(conversationId, userMessage) {
+    console.log('[ConversationMessageService] 处理用户消息:', conversationId);
+
+    const conversation = await this.conversationManager.getConversation(conversationId);
+    if (!conversation) {
+      throw new Error('会话不存在');
+    }
+
+    const settings = { floatWindow: false };
+    try {
+      const result = await chrome.storage.local.get('settings');
+      Object.assign(settings, result.settings || {});
+    } catch (error) {
+      console.warn('[ConversationMessageService] 获取设置失败，使用默认值:', error);
+    }
+
+    conversation.useFloatWindow = settings.floatWindow !== false;
+
+    const context = new ConversationContext(conversation);
+
+    await this._showUserMessage(userMessage, context);
+
+    await this.conversationManager.addMessage(conversationId, null, userMessage, true);
+
+    const entities = await this.entityFactory.createEntitiesFromConversation(conversation);
+
+    entities.forEach(entity => entity.setProgressTracker(this.progressTracker));
+
+    this.progressTracker.reset();
+
+    const unsubscribe = this.progressTracker.onProgress((progress) => {
+      this.progressNotifier.notify(conversationId, progress);
+    });
+
+    try {
+      const results = await this._executeEntities(entities, userMessage, context);
+
+      await this._saveResults(conversationId, results);
+
+      await this._updateConversationContext(conversationId, context);
+
+      await this._showCompletionMessage(results, context);
+
+      return await this.conversationManager.getConversation(conversationId);
+
+    } finally {
+      unsubscribe();
+    }
+  }
+
+  async _executeEntities(entities, input, context) {
+    if (!input || input.trim().length === 0) {
+      throw new Error('输入内容不能为空');
+    }
+
+    const sendMode = context.conversationMode === 'discussion' ? 'sequential' : 'parallel';
+
+    if (sendMode === 'sequential') {
+      const results = [];
+      for (const entity of entities) {
+        try {
+          const result = await entity.execute(input, context);
+          results.push({ status: 'fulfilled', value: result });
+        } catch (error) {
+          results.push({
+            status: 'rejected',
+            reason: error
+          });
+        }
+      }
+      return results;
+    } else {
+      const promises = entities.map(entity => entity.execute(input, context));
+      return Promise.allSettled(promises);
+    }
+  }
+
+  async _saveResults(conversationId, results) {
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        const data = result.value;
+        if (data.success && data.content) {
+          await this.conversationManager.addMessage(
+            conversationId,
+            data.memberId || data.expertId,
+            data.content,
+            false
+          );
+        }
+      } else if (result.status === 'rejected') {
+        console.error('[ConversationMessageService] 实体执行失败:', result.reason);
+      }
+    }
+  }
+
+  async _updateConversationContext(conversationId, context) {
+    const updates = context.toSerializable();
+    await this.conversationManager.updateConversation(conversationId, updates);
+  }
+
+  async _showUserMessage(content, context) {
+    if (context.useFloatWindow) {
+      await this.floatWindowService.addMessage({
+        role: '用户',
+        content: content,
+        isUser: true,
+        isError: false
+      });
+    }
+  }
+
+  async _showCompletionMessage(results, context) {
+    if (!context.useFloatWindow) return;
+
+    const successCount = results.filter(r => 
+      r.status === 'fulfilled' && r.value && r.value.success
+    ).length;
+    const totalCount = results.length;
+    const errorCount = totalCount - successCount;
+
+    let message = `执行完成: ${successCount}/${totalCount} 个任务成功`;
+    if (errorCount > 0) {
+      message += ` (${errorCount} 个失败)`;
+    }
+
+    try {
+      await this.floatWindowService.addMessage({
+        role: '系统',
+        content: message,
+        isUser: false,
+        isError: false
+      });
+    } catch (error) {
+      console.error('[ConversationMessageService] 完成消息发送失败:', error);
+    }
+  }
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = ConversationMessageService;
+}

@@ -68,7 +68,7 @@ class TemporarySessionPool {
             const member = conversation.members.find(m => m.id === memberId);
             if (member && conversationUrl) {
               try {
-                await aiMessageManager.deletePlatformConversation(member.provider, conversationUrl);
+                await aiMessageManager.deletePlatformConversation(conversationUrl);
               } catch (e) {
                 console.error(`[SessionPool] 删除平台会话失败:`, e);
               }

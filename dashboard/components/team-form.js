@@ -218,15 +218,11 @@ class TeamForm {
   populateModelSelector() {
     if (!this.elements.inlineMemberModel) return;
 
-    // 只显示普通模型（非虚拟模型）
-    const regularModels = this.models.filter(m => !m.isVirtual);
-
     this.elements.inlineMemberModel.innerHTML = `
       <option value="">请选择模型</option>
-      ${regularModels.map(model => {
-        const provider = window.PROVIDERS ? window.PROVIDERS[model.provider] : null;
-        const providerName = provider ? provider.name : model.provider;
-        return `<option value="${model.id}">${this.escapeHtml(providerName)} - ${this.escapeHtml(model.model)}</option>`;
+      ${this.models.map(model => {
+        const platformName = model.platformName || '未知平台';
+        return `<option value="${model.id}">${this.escapeHtml(platformName)} - ${this.escapeHtml(model.code || model.id)}</option>`;
       }).join('')}
     `;
   }
@@ -260,9 +256,8 @@ class TeamForm {
     this.elements.teamMembersList.innerHTML = members.map((member, index) => {
       const flow = this.flows.find(f => f.id === member.flowId);
       const model = this.models.find(m => m.id === member.modelId);
-      const provider = model ? window.PROVIDERS?.[model.provider] : null;
-      const providerName = provider ? provider.name : (model?.provider || '未知');
-      const modelName = model?.model || '未知';
+      const providerName = model?.platformName || model?.code || '未知';
+      const modelName = model?.code || '未知';
       const displayName = member.name || (flow?.name || '未命名');
 
       return `

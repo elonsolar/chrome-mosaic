@@ -6,14 +6,13 @@ class WebMessageSender extends AbstractMessageSender {
   }
 
   async send(content, options = {}) {
-    const { provider, conversationUrl, conversationId, conversation } = options;
+    const { conversationUrl, conversationId, conversation, webUrl } = options;
 
     const response = await this.sendToPlatform(
-      provider,
       'sendMessage',
       { content, conversationId: conversation },
       false,
-      conversationUrl
+      conversationUrl || webUrl
     );
 
     return {
@@ -47,8 +46,12 @@ class WebMessageSender extends AbstractMessageSender {
     ]);
   }
 
-  async sendToPlatform(platform, messageType, data = {}, forceNewTab = false, targetUrl = null) {
-    const tab = await this.tabManager.openPlatformTab(platform, forceNewTab, targetUrl);
+  async sendToPlatform(messageType, data = {}, forceNewTab = false, url) {
+    if (!url) {
+      throw new Error('没有配置目标 URL');
+    }
+
+    const tab = await this.tabManager.openPlatformTab(url, forceNewTab);
 
     try {
       await chrome.tabs.update(tab.id, { active: false });
@@ -80,7 +83,7 @@ class WebMessageSender extends AbstractMessageSender {
             });
             await this.sleep(3000);
           } catch (injectError) {
-            console.warn(`注入content script到${platform}失败:`, injectError.message);
+            console.warn(`注入content script到 ${url} 失败:`, injectError.message);
           }
         } else {
           await this.sleep(2000);
@@ -102,7 +105,7 @@ class WebMessageSender extends AbstractMessageSender {
     };
 
     if (messageType === 'sendMessage') {
-      const messageId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${platform}`;
+      const messageId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${url}`;
       const conversationId = data.conversationId || null;
 
       const responsePromise = new Promise((resolve, reject) => {
@@ -131,18 +134,6 @@ class WebMessageSender extends AbstractMessageSender {
     } else {
       return await this.sendToTab(tab.id, message);
     }
-  }
-
-  async newChat(platform) {
-    return await this.sendToPlatform(platform, 'newChat');
-  }
-
-  async getChatHistory(platform) {
-    return await this.sendToPlatform(platform, 'getChatHistory');
-  }
-
-  async getPlatformInfo(platform) {
-    return await this.sendToPlatform(platform, 'getPageInfo');
   }
 
   sleep(ms) {

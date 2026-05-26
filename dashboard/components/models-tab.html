@@ -1,0 +1,65 @@
+<!-- 平台管理页面 -->
+<div class="platforms-page">
+  <div class="page-toolbar">
+    <div class="page-toolbar-left">
+      <div class="search-box">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text" id="platformSearchInput" placeholder="搜索平台...">
+        <button class="clear-btn" id="clearPlatformSearch" style="display: none;">&times;</button>
+      </div>
+    </div>
+    <div class="page-toolbar-right">
+      <button class="btn btn-primary" id="createPlatformBtn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+        <span>新增平台</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="platforms-header">
+    <div class="platforms-title">
+      <span class="platforms-icon">🤖</span>
+      <h2>模型管理</h2>
+    </div>
+    <div class="platforms-stats">
+      <span class="platform-stat-badge">
+        <strong id="platformCount">0</strong>
+        <span>个平台</span>
+      </span>
+      <span class="platform-stat-badge">
+        <strong id="modelCount">0</strong>
+        <span>个模型</span>
+      </span>
+    </div>
+  </div>
+
+  <div class="platforms-layout">
+    <!-- 平台列表 -->
+    <div class="platforms-list-section">
+      <div class="platforms-list-header">
+        <h3>平台列表</h3>
+      </div>
+      <div class="platforms-list" id="platformsList">
+        <!-- 平台列表项将在这里动态生成 -->
+      </div>
+    </div>
+
+    <!-- 平台详情 -->
+    <div class="platforms-detail-section">
+      <div class="platforms-detail-header">
+        <h3 id="platformDetailTitle">选择平台</h3>
+      </div>
+      <div class="platforms-detail-content" id="platformsDetail">
+        <div class="empty-state">
+          <p>请从左侧选择一个平台查看详情</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -512,8 +512,7 @@ class FloatingWindow {
         console.log(`[FloatingWindow] 点击跳转到 ${provider} (${role})`);
         // 发送消息给background激活标签页
         chrome.runtime.sendMessage({
-          type: 'activatePlatformTab',
-          provider: provider
+          action: 'activatePlatformTab'
         });
       });
     }

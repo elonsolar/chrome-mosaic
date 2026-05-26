@@ -86,20 +86,42 @@ class PromptsTab {
     this.elements = {
       promptsList: document.getElementById('promptsList'),
       newPromptBtn: document.getElementById('newPromptBtn'),
+      createPromptBtn: document.getElementById('createPromptBtn'),
       promptModal: document.getElementById('promptModal'),
       promptName: document.getElementById('promptName'),
       promptContent: document.getElementById('promptContent'),
       promptTags: document.getElementById('promptTags'),
       tagsCloud: document.getElementById('tagsCloud'),
-      viewToggle: document.getElementById('viewToggle')
+      viewToggle: document.getElementById('viewToggle'),
+      searchInput: document.getElementById('promptSearchInput'),
+      clearSearchBtn: document.getElementById('clearPromptSearch')
     };
   }
 
   bindEvents() {
-    // 新建提示词
-    if (this.elements.newPromptBtn) {
-      this.elements.newPromptBtn.addEventListener('click', () => {
+    // 新建提示词按钮
+    const createBtn = this.elements.createPromptBtn || this.elements.newPromptBtn;
+    if (createBtn) {
+      createBtn.addEventListener('click', () => {
         this.showPromptModal();
+      });
+    }
+
+    // 搜索输入
+    if (this.elements.searchInput) {
+      this.elements.searchInput.addEventListener('input', (e) => {
+        const keyword = e.target.value.trim();
+        this.elements.clearSearchBtn.style.display = keyword ? 'block' : 'none';
+        this.filterPrompts(keyword);
+      });
+    }
+
+    // 清除搜索
+    if (this.elements.clearSearchBtn) {
+      this.elements.clearSearchBtn.addEventListener('click', () => {
+        this.elements.searchInput.value = '';
+        this.elements.clearSearchBtn.style.display = 'none';
+        this.filterPrompts('');
       });
     }
 
@@ -224,7 +246,11 @@ class PromptsTab {
 
   render() {
     this.updateTagsCloud();
-    this.updatePromptCount();
+    this.renderPromptsList();
+  }
+
+  filterPrompts(keyword) {
+    this.state.searchKeyword = keyword;
     this.renderPromptsList();
   }
 
@@ -262,18 +288,21 @@ class PromptsTab {
     });
   }
 
-  updatePromptCount() {
-    const promptCountEl = document.getElementById('promptCount');
-    if (promptCountEl) {
-      promptCountEl.textContent = this.state.prompts.length;
-    }
-  }
-
   renderPromptsList() {
     const list = this.elements.promptsList;
     if (!list) return;
 
     let prompts = [...this.state.prompts];
+
+    // 搜索过滤
+    if (this.state.searchKeyword) {
+      const keyword = this.state.searchKeyword.toLowerCase();
+      prompts = prompts.filter(p => 
+        p.name.toLowerCase().includes(keyword) ||
+        (p.content && p.content.toLowerCase().includes(keyword)) ||
+        (p.tags && p.tags.some(tag => tag.toLowerCase().includes(keyword)))
+      );
+    }
 
     // 标签过滤
     if (this.state.selectedTag !== 'all') {

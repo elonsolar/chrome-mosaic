@@ -5,7 +5,6 @@
   "description": "集成多个大模型，支持提示词管理和会话管理的AI对话助手",
   "permissions": [
     "storage",
-    "sidePanel",
     "activeTab",
     "webNavigation",
     "tabs",
@@ -81,9 +80,6 @@
       ]
     }
   ],
-  "side_panel": {
-    "default_path": "sidepanel/sidepanel.html"
-  },
   "action": {
     "default_icon": {
       "16": "icons/icon16.png",
@@ -130,8 +126,7 @@
         "dashboard/dashboard.html",
         "dashboard/dashboard.js",
         "dashboard/components/*.js",
-        "styles/dashboard.css",
-        "config/providers.config.js"
+        "styles/dashboard.css"
       ],
       "matches": ["<all_urls>"]
     }

@@ -676,7 +676,8 @@ class FlowDesignerPage {
             this.models.forEach(model => {
               const option = document.createElement('option');
               option.value = model.id;
-              option.textContent = model.name;
+              const platformName = model.platformName || '未知平台';
+              option.textContent = `${platformName} - ${model.code || model.id}`;
               if (config.modelId === model.id) {
                 option.selected = true;
               }

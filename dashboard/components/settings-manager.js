@@ -100,7 +100,8 @@ class SettingsManager {
         enabledModels.forEach(model => {
           const option = document.createElement('option');
           option.value = model.id;
-          option.textContent = model.name || model.model;
+          const platformName = model.platformName || '未知平台';
+          option.textContent = `${platformName} - ${model.code || model.id}`;
           this.elements.helperModelSelect.appendChild(option);
         });
       }

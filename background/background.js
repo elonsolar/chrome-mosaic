@@ -1,7 +1,6 @@
-importScripts('../config/providers.config.js');
 importScripts('./managers/prompt-manager.js');
 importScripts('./managers/prompt-folder-manager.js');
-importScripts('./managers/model-manager.js');
+importScripts('./managers/platform-manager.js');
 importScripts('./managers/flow-manager.js');
 importScripts('./managers/flow-executor.js');
 importScripts('./managers/temporary-session-pool.js');
@@ -12,6 +11,14 @@ importScripts('./senders/web-message-sender.js');
 importScripts('./senders/api-message-sender.js');
 importScripts('./senders/sender-factory.js');
 importScripts('./flow-test-runner.js');
+importScripts('./core/base-entity.js');
+importScripts('./core/conversation-context.js');
+importScripts('./core/progress-tracker.js');
+importScripts('./entities/member-entity.js');
+importScripts('./entities/expert-entity.js');
+importScripts('./entities/entity-factory.js');
+importScripts('./services/progress-notification-service.js');
+importScripts('./services/conversation-message-service.js');
 
 /**
  * 检测浏览器信息
@@ -425,217 +432,27 @@ class AIMessageManager {
   }
 
   async processUserMessage(conversationId, userMessage) {
-    let conversation = await this.conversationManager.getConversation(conversationId);
+    return await conversationMessageService.processUserMessage(conversationId, userMessage);
+  }
+
+  async executeDiscussionLoop(conversationId, question, rounds, contextMode, useFloatWindow) {
+    if (rounds && rounds > 1) {
+      console.warn('[AIMessageManager] 多轮讨论功能暂未实现，将执行单轮讨论。rounds 参数被忽略。');
+    }
+
+    const conversation = await this.conversationManager.getConversation(conversationId);
     if (!conversation) {
       throw new Error('会话不存在');
     }
 
-    const settings = await StorageManager.getSettings();
-    const contextMode = conversation.contextMode || settings.contextMode || 'self';
-    const useFloatWindow = settings.floatWindow !== false;
+    const updates = {
+      mode: 'discussion',
+      contextMode: contextMode
+    };
 
-    if (useFloatWindow) {
-      await this.sendToFloatWindow('addMessage', {
-        role: '用户',
-        content: userMessage,
-        isUser: true,
-        isError: false
-      });
-    }
+    await this.conversationManager.updateConversation(conversationId, updates);
 
-    await this.conversationManager.addMessage(conversationId, null, userMessage, true);
-
-    conversation = await this.conversationManager.getConversation(conversationId);
-
-    if (conversation.flowId) {
-      console.log('[AIMessageManager] 会话使用流程执行模式, flowId:', conversation.flowId);
-      
-      const flow = await flowManager.getFlowById(conversation.flowId);
-      if (!flow) {
-        throw new Error('流程不存在');
-      }
-
-      try {
-        const result = await flowExecutor.executeFlow(flow, userMessage, {
-          maxIterations: 3,
-          onProgress: async (progress) => {
-            console.log('[AIMessageManager] 流程执行进度:', progress);
-            
-            if (useFloatWindow) {
-              await this.sendToFloatWindow('addMessage', {
-                role: '系统',
-                content: `执行进度：第${progress.iteration}/${progress.maxIterations}轮`,
-                isUser: false,
-                isError: false
-              });
-            }
-            
-            const tabs = await chrome.tabs.query({});
-            for (const tab of tabs) {
-              if (tab.url && tab.url.includes('chat/chat.html')) {
-                chrome.tabs.sendMessage(tab.id, {
-                  type: 'flowExecutionProgress',
-                  progress: progress
-                }).catch(() => {});
-              }
-            }
-          }
-        });
-
-        if (!result || !result.content) {
-          console.error('[AIMessageManager] 流程返回无效结果:', result);
-          throw new Error('流程执行返回无效结果');
-        }
-
-        const finalContent = result.content;
-        
-        await this.conversationManager.addMessage(conversationId, null, finalContent, false);
-
-        if (useFloatWindow) {
-          await this.sendToFloatWindow('addMessage', {
-            role: 'AI',
-            content: finalContent,
-            isUser: false,
-            isError: false
-          });
-        }
-
-        const tabs = await chrome.tabs.query({});
-        for (const tab of tabs) {
-          if (tab.url && tab.url.includes('chat/chat.html')) {
-            chrome.tabs.sendMessage(tab.id, {
-              type: 'flowExecutionComplete',
-              result: finalContent,
-              conversationId: conversationId
-            }).catch(() => {});
-          }
-        }
-
-        return await this.conversationManager.getConversation(conversationId);
-      } catch (error) {
-        console.error('[AIMessageManager] 流程执行失败:', error);
-        
-        const errorMessage = `流程执行失败: ${error.message}`;
-        await this.conversationManager.addMessage(conversationId, null, errorMessage, false);
-        
-        if (useFloatWindow) {
-          await this.sendToFloatWindow('addMessage', {
-            role: '系统',
-            content: errorMessage,
-            isUser: false,
-            isError: true
-          });
-        }
-        
-        const tabs = await chrome.tabs.query({});
-        for (const tab of tabs) {
-          if (tab.url && tab.url.includes('chat/chat.html')) {
-            chrome.tabs.sendMessage(tab.id, {
-              type: 'flowExecutionError',
-              error: error.message
-            }).catch(() => {});
-          }
-        }
-        
-        return await this.conversationManager.getConversation(conversationId);
-      }
-    }
-
-    if (!conversation.members || conversation.members.length === 0) {
-      throw new Error('会话没有关联的成员');
-    }
-
-    const sendMode = conversation.sendMode || 'parallel';
-    const memberIds = conversation.members.map(m => m.id);
-
-    (async () => {
-      try {
-        console.log('[AIMessageManager] IIFE 开始发送消息, 会话:', conversationId, '成员数:', conversation.members.length);
-        if (sendMode === 'sequential') {
-          await this.sendToMembersSequential(conversation, contextMode, useFloatWindow, conversationId);
-        } else if (sendMode === 'random') {
-          await this.sendToMembersRandom(conversation, contextMode, useFloatWindow, conversationId);
-        } else {
-          const sendPromises = conversation.members.map(async (member) => {
-            return await this.sendMessageToMember(member.id, conversation, contextMode, useFloatWindow, conversationId);
-          });
-          await Promise.allSettled(sendPromises);
-        }
-        console.log('[AIMessageManager] IIFE 所有消息发送完成');
-      } catch (error) {
-        console.error('[AIMessageManager] 发送消息到成员时出错:', error);
-      }
-    })();
-
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    const models = await modelManager.getModels();
-    const hasWebRole = conversation.members.some(member => {
-      const modelConfig = models.find(m => m.provider === member.provider && m.model === member.model);
-      return (modelConfig?.accessMethod || 'web') === 'web';
-    });
-
-    if (hasWebRole) {
-      setTimeout(() => {
-        console.log(`[AIMessageManager] 启动轮询监控: ${conversationId}`);
-        startPolling(conversationId);
-      }, 2500);
-    } else {
-      console.log(`[AIMessageManager] 所有成员均为 API 模式，跳过轮询: ${conversationId}`);
-    }
-
-    return await this.conversationManager.getConversation(conversationId);
-  }
-
-  async executeDiscussionLoop(conversationId, question, rounds, contextMode, useFloatWindow) {
-    const conversation = await this.conversationManager.getConversation(conversationId);
-    const order = conversation.memberOrder || conversation.members.map(m => m.id);
-
-    if (useFloatWindow) {
-      await this.sendToFloatWindow('addMessage', {
-        role: '用户',
-        content: `/loop ${question} ${rounds}`,
-        isUser: true,
-        isError: false
-      });
-    }
-
-    await this.conversationManager.addMessage(conversationId, null, question, true);
-
-    let currentConv = await this.conversationManager.getConversation(conversationId);
-
-    for (let round = 0; round < rounds; round++) {
-      console.log(`[DiscussionLoop] 第${round + 1}/${rounds}轮`);
-
-      if (useFloatWindow) {
-        await this.sendToFloatWindow('addMessage', {
-          role: '系统',
-          content: `── 第${round + 1}轮讨论 ──`,
-          isUser: false,
-          isError: false
-        });
-      }
-
-      for (const memberId of order) {
-        currentConv = await this.conversationManager.getConversation(conversationId);
-        await this.sendMessageToMember(memberId, currentConv, contextMode, useFloatWindow, conversationId);
-      }
-
-      await this.conversationManager.updateConversation(conversationId, {
-        discussionRounds: (currentConv.discussionRounds || 0) + 1
-      });
-    }
-
-    if (useFloatWindow) {
-      await this.sendToFloatWindow('addMessage', {
-        role: '系统',
-        content: `讨论结束（${rounds}轮完成）`,
-        isUser: false,
-        isError: false
-      });
-    }
-
-    return await this.conversationManager.getConversation(conversationId);
+    return await conversationMessageService.processUserMessage(conversationId, question);
   }
 
   async executeExpertQA(conversation, userMessage, useFloatWindow) {
@@ -681,12 +498,11 @@ class AIMessageManager {
     }
 
     const result = await flowExecutor.executeFlow(flow, userMessage, {
-      maxIterations: 3,
       onProgress: async (progress) => {
         if (useFloatWindow) {
           await this.sendToFloatWindow('addMessage', {
             role: '系统',
-            content: `【专家问答】第${progress.iteration}/${progress.maxIterations}轮执行中...`,
+            content: `【专家问答】执行中... (${progress.current || 0}/${progress.total || 0}节点)`,
             isUser: false,
             isError: false
           });
@@ -699,7 +515,7 @@ class AIMessageManager {
     if (useFloatWindow) {
       await this.sendToFloatWindow('addMessage', {
         role: '专家问答',
-        content: `【${result.metadata?.iterations || 1}轮迭代完成】\n\n${finalContent}`,
+        content: finalContent,
         isUser: false,
         isError: false
       });
@@ -714,184 +530,6 @@ class AIMessageManager {
     await this.conversationManager.updateConversation(conversation.id, {
       flowHistory: conversation.flowHistory
     });
-  }
-
-  async sendMessageToMember(memberId, conversation, contextMode, useFloatWindow, conversationId) {
-    const member = conversation.members.find(m => m.id === memberId);
-    if (!member) return null;
-
-    const roleSetting = conversation.memberSettings?.[memberId] || {};
-    const nickname = roleSetting.nickname || member.name;
-    const additionalPrompt = roleSetting.additionalPrompt || '';
-
-    try {
-      let messageToSend = '';
-
-      if (contextMode === 'self') {
-        const lastMessageId = conversation.memberLastMessageIds?.[memberId];
-        const messagesToSend = this.getMessagesToSend(conversation, lastMessageId, false);
-
-        if (messagesToSend.length === 0) {
-          return null;
-        }
-
-        messageToSend = messagesToSend.map(msg => msg.content).join('\n\n');
-
-        let fullPrompt = member.systemPrompt || '';
-        if (additionalPrompt) {
-          fullPrompt = fullPrompt ? `${fullPrompt}\n\n${additionalPrompt}` : additionalPrompt;
-        }
-
-        if (fullPrompt) {
-          messageToSend = `${fullPrompt}\n\n${messageToSend}`;
-        }
-
-        messageToSend += '\n\n**严格遵守**：在你的回复最后必须添加 [[<<>>]] 标记，表示回复结束。';
-      } else {
-        const lastMessageId = conversation.memberLastMessageIds?.[memberId];
-        const messagesToSend = this.getMessagesToSend(conversation, lastMessageId, true);
-
-        if (messagesToSend.length === 0) {
-          return null;
-        }
-
-        const isFirstTime = !lastMessageId;
-        const nicknameMap = {};
-        conversation.members.forEach(member => {
-          const setting = conversation.memberSettings?.[member.id] || {};
-          nicknameMap[member.id] = setting.nickname || member.name;
-        });
-
-        if (isFirstTime) {
-          const memberIds = conversation.members.map(m => m.id);
-          const nicknames = memberIds.map(id => nicknameMap[id]).filter(Boolean);
-          messageToSend += `当前我们在一个会话里，会话里有成员 user、${nicknames.join('、')}\n`;
-          messageToSend += `你的当前会话名称是：${nickname}\n`;
-
-          let fullPrompt = member.systemPrompt || '';
-          if (additionalPrompt) {
-            fullPrompt = fullPrompt ? `${fullPrompt}\n\n${additionalPrompt}` : additionalPrompt;
-          }
-
-          if (fullPrompt) {
-            messageToSend += `你的成员设定：${fullPrompt}\n`;
-          }
-          messageToSend += `\n请注意：你只能扮演${nickname}，不可以扮演其他成员。\n\n`;
-          messageToSend += '下面是当前会话的历史内容：\n\n';
-        }
-
-        messagesToSend.forEach(msg => {
-          if (msg.isUser) {
-            messageToSend += `User: ${msg.content}\n\n`;
-          } else {
-            messageToSend += `${nicknameMap[msg.memberId] || 'Assistant'}: ${msg.content}\n\n`;
-          }
-        });
-
-        messageToSend = messageToSend.trim() + '\n\n重要：请在你的回复最后必须添加 [[<<>>]] 标记，表示回复结束。';
-      }
-
-      const conversationUrl = conversation.memberUrls?.[memberId];
-
-      const models = await modelManager.getModels();
-      const modelConfig = models.find(m => m.provider === member.provider && m.model === member.model);
-      const accessMethod = modelConfig?.accessMethod || 'web';
-      const baseUrl = modelConfig?.baseUrl || '';
-      const apiKey = modelConfig?.apiKey || '';
-
-      const sender = this.senderFactory.getSender(accessMethod);
-
-        console.log(`[AIMessageManager] 开始发送消息到成员 ${member.name} (${member.provider}), accessMethod: ${accessMethod}, 会话URL: ${conversationUrl}`);
-      const response = await sender.send(messageToSend, {
-        provider: member.provider,
-        model: member.model,
-        conversationUrl,
-        conversationId,
-        conversation,
-        memberId,
-        baseUrl,
-        apiKey
-      });
-      console.log(`[AIMessageManager] 成员 ${member.name} 响应成功`);
-
-      const content = response.content || '';
-
-      if (response.conversationUrl) {
-        if (!conversation.memberUrls) {
-          conversation.memberUrls = {};
-        }
-
-        if (conversation.memberUrls[memberId] !== response.conversationUrl) {
-          conversation.memberUrls[memberId] = response.conversationUrl;
-        }
-      }
-
-      const savedMessage = await this.conversationManager.addMessage(conversationId, memberId, content, false);
-
-      if (savedMessage) {
-        if (!conversation.memberLastMessageIds) {
-          conversation.memberLastMessageIds = {};
-        }
-        conversation.memberLastMessageIds[memberId] = savedMessage.id;
-      }
-
-      await this.conversationManager.updateConversation(conversationId, {
-        memberUrls: conversation.memberUrls,
-        memberTabIds: conversation.memberTabIds,
-        memberLastMessageIds: conversation.memberLastMessageIds
-      });
-
-      if (useFloatWindow) {
-        await this.sendToFloatWindow('addMessage', {
-          role: nickname,
-          content: content,
-          isUser: false,
-          isError: false,
-          provider: member.provider
-        });
-      }
-
-      return true;
-    } catch (error) {
-      console.error(`发送到 ${member.provider} 失败:`, error);
-    }
-
-    return false;
-  }
-
-  getMessagesToSend(conversation, lastMessageId, includeUserMessages = true) {
-    if (!lastMessageId) {
-      return includeUserMessages ? conversation.messages : conversation.messages.filter(m => m.isUser);
-    }
-
-    const lastMessageIndex = conversation.messages.findIndex(m => m.id === lastMessageId);
-
-    if (lastMessageIndex >= 0) {
-      const newMessages = conversation.messages.slice(lastMessageIndex + 1);
-      return includeUserMessages ? newMessages : newMessages.filter(m => m.isUser);
-    }
-
-    return includeUserMessages ? conversation.messages : conversation.messages.filter(m => m.isUser);
-  }
-
-  async sendToMembersSequential(conversation, contextMode, useFloatWindow, conversationId) {
-    const memberOrder = conversation.memberOrder || conversation.members.map(m => m.id);
-    for (let i = 0; i < memberOrder.length; i++) {
-      const memberId = memberOrder[i];
-      await this.sendMessageToMember(memberId, conversation, contextMode, useFloatWindow, conversationId);
-      conversation = await this.conversationManager.getConversation(conversationId);
-    }
-  }
-
-  async sendToMembersRandom(conversation, contextMode, useFloatWindow, conversationId) {
-    const memberIds = conversation.members.map(m => m.id);
-    const shuffledMemberIds = [...memberIds].sort(() => Math.random() - 0.5);
-
-    for (let i = 0; i < shuffledMemberIds.length; i++) {
-      const memberId = shuffledMemberIds[i];
-      await this.sendMessageToMember(memberId, conversation, contextMode, useFloatWindow, conversationId);
-      conversation = await this.conversationManager.getConversation(conversationId);
-    }
   }
 
   async sendToFloatWindow(action, data) {
@@ -945,13 +583,14 @@ class AIMessageManager {
         const member = conversation.members.find(m => m.id === memberId);
         if (!member || !conversationUrl) continue;
 
+        const providerKey = member.modelCode || member.provider;
         try {
-          console.log(`[AIMessageManager] 开始删除 ${member.provider} 平台的会话: ${conversationUrl}`);
-          await this.deletePlatformConversation(member.provider, conversationUrl);
-          deletedConversations.push({ provider: member.provider, url: conversationUrl });
-          console.log(`[AIMessageManager] ✓ ${member.provider} 平台会话删除成功`);
+          console.log(`[AIMessageManager] 开始删除会话: ${conversationUrl}`);
+          await this.deletePlatformConversation(conversationUrl);
+          deletedConversations.push({ url: conversationUrl });
+          console.log(`[AIMessageManager] ✓ 会话删除成功`);
         } catch (error) {
-          console.error(`[AIMessageManager] ❌ ${member.provider} 平台会话删除失败:`, error.message);
+          console.error(`[AIMessageManager] ❌ ${providerKey} 平台会话删除失败:`, error.message);
         }
       }
     }
@@ -963,9 +602,9 @@ class AIMessageManager {
     return { ...result, deletedConversations };
   }
 
-  async deletePlatformConversation(provider, conversationUrl) {
+  async deletePlatformConversation(conversationUrl) {
     try {
-      const tab = await this.tabManager.openPlatformTab(conversationUrl);
+      const tab = await this.tabManager.openPlatformTab(conversationUrl, true);
       
       await new Promise(resolve => setTimeout(resolve, 2000));
 
@@ -996,10 +635,10 @@ class AIMessageManager {
         throw new Error(response?.error || '删除失败');
       }
 
-      console.log(`[AIMessageManager] ${provider} 平台会话删除成功`);
+      console.log(`[AIMessageManager] 平台会话删除成功`);
       return true;
     } catch (error) {
-      console.error(`[AIMessageManager] 删除 ${provider} 平台会话失败:`, error);
+      console.error(`[AIMessageManager] 删除平台会话失败:`, error);
       throw error;
     }
   }
@@ -1035,84 +674,39 @@ class StorageManager {
 }
 
 class TabManager {
-  constructor() {
-    this.tabs = new Map();
-  }
-
-  async openPlatformTab(platform, forceNew = false, targetUrl = null) {
-    const provider = PROVIDERS[platform];
-    if (!provider) {
-      throw new Error(`不支持的平台: ${platform}`);
+  async openPlatformTab(url, forceNew = false) {
+    if (!url) {
+      throw new Error('没有配置 URL');
     }
 
-    const url = provider.baseUrl;
-
     if (!forceNew) {
-      if (targetUrl) {
-        const exactTab = await this.findTabByUrl(targetUrl);
-        if (exactTab) {
-          console.log(`[TabManager] 复用已存在的标签页(URL匹配): ${platform}`);
-          await chrome.tabs.update(exactTab.id, { active: false });
-          await this.sleep(1000);
-          return exactTab;
-        }
-      } else {
-        const existingTab = await this.findPlatformTab(platform);
-        if (existingTab) {
-          console.log(`[TabManager] 复用已存在的标签页: ${platform}`);
-          await chrome.tabs.update(existingTab.id, { active: false });
-          await this.sleep(2000);
-          return existingTab;
-        }
+      const existingTab = await this.findTabByUrl(url);
+      if (existingTab) {
+        console.log(`[TabManager] 复用已存在的标签页`);
+        await chrome.tabs.update(existingTab.id, { active: false });
+        await this.sleep(2000);
+        return existingTab;
       }
     }
 
-    const openUrl = targetUrl || url;
-    console.log(`[TabManager] 创建新标签页: ${platform} -> ${openUrl}`);
+    console.log(`[TabManager] 创建新标签页 -> ${url}`);
     const tab = await chrome.tabs.create({
-      url: openUrl,
+      url: url,
       active: false
     });
 
-    this.tabs.set(platform, tab.id);
     await this.waitForTabReady(tab.id);
-
     await chrome.tabs.update(tab.id, { active: false });
 
     return tab;
   }
 
-  async findPlatformTab(platform) {
-    const provider = PROVIDERS[platform];
-    if (!provider) return null;
-
-    const domain = provider.domain;
-
-    const tabId = this.tabs.get(platform);
-    if (tabId) {
-      try {
-        const tab = await chrome.tabs.get(tabId);
-        if (tab.url && tab.url.includes(domain)) {
-          return tab;
-        } else {
-          this.tabs.delete(platform);
-        }
-      } catch (e) {
-        this.tabs.delete(platform);
-      }
-    }
-
+  async findTabByUrlPrefix(webUrl) {
+    if (!webUrl) return null;
     const allTabs = await chrome.tabs.query({});
-    const platformTab = allTabs.find(tab =>
-      tab.url && tab.url.includes(domain) && !tab.pendingUrl
-    );
-
-    if (platformTab) {
-      this.tabs.set(platform, platformTab.id);
-      return platformTab;
-    }
-
-    return null;
+    return allTabs.find(tab =>
+      tab.url && tab.url.startsWith(webUrl) && !tab.pendingUrl
+    ) || null;
   }
 
   async findTabByUrl(targetUrl) {
@@ -1148,47 +742,33 @@ class TabManager {
     });
   }
 
-  async closePlatformTab(platform) {
-    const tabId = this.tabs.get(platform);
-    if (tabId) {
-      await chrome.tabs.remove(tabId);
-      this.tabs.delete(platform);
-    }
-  }
-
   async closeTabByUrl(url) {
     const tab = await this.findTabByUrl(url);
     if (!tab) return;
-    for (const [platform, tabId] of this.tabs) {
-      if (tabId === tab.id) {
-        this.tabs.delete(platform);
-        break;
-      }
-    }
     await chrome.tabs.remove(tab.id);
   }
 
-  async activatePlatformTab(platform) {
-    const existingTab = await this.findPlatformTab(platform);
+  async activatePlatformTab(targetUrl) {
+    const existingTab = await this.findTabByUrlPrefix(targetUrl);
 
     if (existingTab) {
       await chrome.tabs.update(existingTab.id, { active: true });
       return true;
     } else {
-      const tab = await this.openPlatformTab(platform, true);
+      const tab = await this.openPlatformTab(targetUrl, true);
       await chrome.tabs.update(tab.id, { active: true });
       return true;
     }
   }
 
-  async openPlatformConversation(platform) {
-    const existingTab = await this.findPlatformTab(platform);
+  async openPlatformConversation(targetUrl) {
+    const existingTab = await this.findTabByUrlPrefix(targetUrl);
 
     if (existingTab) {
       await chrome.tabs.update(existingTab.id, { active: true });
       return { success: true, tabId: existingTab.id };
     } else {
-      const tab = await this.openPlatformTab(platform, true);
+      const tab = await this.openPlatformTab(targetUrl, true);
       await chrome.tabs.update(tab.id, { active: true });
       return { success: true, tabId: tab.id };
     }
@@ -1357,14 +937,16 @@ class ConversationManager {
   }
 
   async getConversation(conversationId) {
+    if (!conversationId || typeof conversationId !== 'string') {
+      console.error('[Background] getConversation 无效参数:', conversationId, typeof conversationId);
+      return null;
+    }
+
     const conversations = await StorageManager.getConversations();
     const found = conversations.find(c => c.id === conversationId) || null;
 
     if (!found) {
-      console.error('[Background] getConversation 找不到会话:', conversationId, '当前会话数:', conversations.length);
-      console.log('[Background] 当前所有会话ID:', conversations.map(c => c.id));
-    } else {
-      console.log('[Background] getConversation 找到会话:', conversationId, '成员数:', found.members?.length);
+      console.error('[Background] getConversation 找不到会话:', conversationId);
     }
 
     return found;
@@ -1417,7 +999,6 @@ async function processStorageQueue() {
 // 新架构管理器
 let promptManager;
 let promptFolderManager;
-let modelManager;
 let expertManager;
 let flowManager;
 let flowExecutor;
@@ -1434,15 +1015,56 @@ async function init() {
   // 初始化新架构管理器
   promptManager = new PromptManager();
   promptFolderManager = new PromptFolderManager();
-  modelManager = new ModelManager();
+  platformManager = new PlatformManager();
+  await platformManager.initialize();
   flowManager = new FlowManager();
-  flowExecutor = new FlowExecutor(tabManager, conversationManager, senderFactory);
+  flowExecutor = new FlowExecutor(tabManager, conversationManager, senderFactory, platformManager);
   teamManager = new TeamManager();
   expertManager = new ExpertManager();
   flowTestRunner = new FlowTestRunner(conversationManager, senderFactory, flowExecutor);
 
+  const floatWindowService = {
+    addMessage: async (message) => {
+      try {
+        const tabs = await chrome.tabs.query({});
+        for (const tab of tabs) {
+          const isAIPlatform = tab.url && (
+            tab.url.includes('deepseek.com') ||
+            tab.url.includes('doubao.com') ||
+            tab.url.includes('qianwen.com') ||
+            tab.url.includes('moonshot.cn')
+          );
+          if (isAIPlatform) {
+            chrome.tabs.sendMessage(tab.id, {
+              type: 'addMessage',
+              message: message
+            }).catch(() => {});
+          }
+        }
+      } catch (error) {
+        console.error('[FloatWindowService] 发送消息失败:', error);
+      }
+    }
+  };
+
+  progressTracker = new ProgressTracker();
+  progressNotificationService = new ProgressNotificationService(floatWindowService);
+  entityFactory = new EntityFactory(
+    platformManager,
+    senderFactory,
+    flowExecutor,
+    progressNotificationService
+  );
+  conversationMessageService = new ConversationMessageService(
+    conversationManager,
+    entityFactory,
+    progressTracker,
+    progressNotificationService,
+    floatWindowService
+  );
+
   // 确保模型已导入
-  const models = await modelManager.getModels();
+  const models = await platformManager.getAllModels();
   console.log('[Init] 已加载', models.length, '个模型');
 
   // 加载设置并连接 WebSocket
@@ -1484,30 +1106,31 @@ async function init() {
 }
 
 async function conversationOneShot(modelId, content, systemPrompt) {
-  const model = await modelManager.getModelById(modelId);
+  const model = await platformManager.getModelById(modelId);
   if (!model) throw new Error('模型不存在');
 
   const accessMethod = model.accessMethod || 'web';
   const sender = senderFactory.getSender(accessMethod);
 
   let response;
-  if (accessMethod === 'api') {
-    const messages = [];
-    if (systemPrompt) {
-      messages.push({ role: 'system', content: systemPrompt });
+    const provider = model.code || model.provider;
+    if (accessMethod === 'api') {
+      const messages = [];
+      if (systemPrompt) {
+        messages.push({ role: 'system', content: systemPrompt });
+      }
+      messages.push({ role: 'user', content });
+      response = await sender.send(messages, {
+        model: model.code,
+        baseUrl: model.baseUrl,
+        apiKey: model.apiKey
+      });
+    } else {
+      response = await sender.send(content, {
+        model: model.code,
+        webUrl: model.webUrl
+      });
     }
-    messages.push({ role: 'user', content });
-    response = await sender.send(messages, {
-      provider: model.provider,
-      model: model.model,
-      baseUrl: model.baseUrl,
-      apiKey: model.apiKey
-    });
-  } else {
-    response = await sender.send(content, {
-      provider: model.provider
-    });
-  }
 
   return {
     success: true,
@@ -1744,11 +1367,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             for (const [memberId, conversationUrl] of Object.entries(memberUrls)) {
               const member = conversation.members.find(m => m.id === memberId);
               if (!member || !conversationUrl) continue;
+              const providerKey = member.modelCode || member.provider;
               try {
-                await aiMessageManager.deletePlatformConversation(member.provider, conversationUrl);
-                deletedConversations.push({ provider: member.provider, url: conversationUrl });
+                await aiMessageManager.deletePlatformConversation(conversationUrl);
+                deletedConversations.push({ url: conversationUrl });
               } catch (error) {
-                console.error(`[AIMessageManager] ❌ ${member.provider} 平台会话删除失败:`, error.message);
+                console.error(`[AIMessageManager] ❌ ${providerKey} 平台会话删除失败:`, error.message);
               }
             }
           }
@@ -1796,7 +1420,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
 
     case 'activatePlatformTab':
-      tabManager.activatePlatformTab(request.provider, request.targetUrl)
+      tabManager.activatePlatformTab(request.targetUrl)
         .then(() => sendResponse({ success: true }))
         .catch(error => sendResponse({ error: error.message }));
       return true;
@@ -1861,43 +1485,62 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     // ========== 新架构：模型管理 ==========
     case 'getModels':
-      modelManager.getModels().then(sendResponse);
-      return true;
-
-    case 'getModelById':
-      modelManager.getModelById(request.modelId).then(sendResponse);
-      return true;
-
-    case 'getModelsByProvider':
-      modelManager.getModelsByProvider(request.provider).then(sendResponse);
-      return true;
-
-    case 'createModel':
-      modelManager.createModel(request.data).then(sendResponse).catch(error => sendResponse({ error: error.message }));
-      return true;
-
-    case 'updateModel':
-      modelManager.updateModel(request.modelId, request.data).then(sendResponse).catch(error => sendResponse({ error: error.message }));
-      return true;
-
-    case 'deleteModel':
-      modelManager.deleteModel(request.modelId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
-      return true;
-
-    case 'setDefaultModel':
-      modelManager.setDefaultModel(request.modelId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
-      return true;
-
-    case 'getDefaultModel':
-      modelManager.getDefaultModel().then(sendResponse);
-      return true;
-
-    case 'toggleModelEnabled':
-      modelManager.toggleModelEnabled(request.modelId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      platformManager.getAllModels().then(sendResponse);
       return true;
 
     case 'getEnabledModels':
-      modelManager.getEnabledModels().then(sendResponse);
+      platformManager.getAllModels().then(models => models.filter(m => m.enabled)).then(sendResponse);
+      return true;
+
+    // ========== 新架构：平台管理 ==========
+    case 'getPlatforms':
+      platformManager.getPlatforms().then(async (platforms) => {
+        if (platforms.length === 0) {
+          await platformManager.initialize();
+          platforms = await platformManager.getPlatforms();
+        }
+        sendResponse({ success: true, data: platforms });
+      });
+      return true;
+
+    case 'getPlatform':
+      platformManager.getPlatform(request.platformId).then(platform => sendResponse({ success: true, platform }));
+      return true;
+
+    case 'createPlatform':
+      platformManager.createPlatform(request.data).then(platform => sendResponse({ success: true, platform })).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'updatePlatform':
+      platformManager.updatePlatform(request.platformId, request.data).then(platform => sendResponse({ success: true, platform })).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'deletePlatform':
+      platformManager.deletePlatform(request.platformId).then(() => sendResponse({ success: true })).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'addModel':
+      platformManager.addModel(request.platformId, request.data).then(model => sendResponse({ success: true, model })).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'updateModel':
+      platformManager.updateModel(request.platformId, request.modelId, request.data).then(model => sendResponse({ success: true, model })).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'deleteModel':
+      platformManager.deleteModel(request.platformId, request.modelId).then(() => sendResponse({ success: true })).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'toggleModelEnabled':
+      platformManager.toggleModelEnabled(request.platformId, request.modelId).then(model => sendResponse({ success: true, model })).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'getAllModels':
+      platformManager.getAllModels().then(sendResponse);
+      return true;
+
+    case 'getModelById':
+      platformManager.getModelById(request.modelId).then(sendResponse);
       return true;
 
     // ========== 新架构：流程管理 ==========
@@ -1995,7 +1638,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
 
     case 'getModel':
-      modelManager.getModelById(request.modelId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      platformManager.getModelById(request.modelId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
       return true;
 
     case 'openFlowDesigner':
@@ -2017,34 +1660,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       })();
       return true;
 
-    // ========== 新架构：虚拟模型（统一在ModelManager中） ==========
-    case 'getVirtualModels':
-      modelManager.getVirtualModels().then(sendResponse);
-      return true;
-
-    case 'createVirtualModel':
-      modelManager.createModel({
-        ...request.data,
-        isVirtual: true
-      }).then(sendResponse).catch(error => sendResponse({ error: error.message }));
-      return true;
-
-    case 'getVirtualModelWithFlow':
-      (async () => {
-        const model = await modelManager.getModelById(request.virtualModelId);
-        if (!model || !model.isVirtual) {
-          sendResponse({ error: '虚拟模型不存在' });
-          return;
-        }
-        const flow = await flowManager.getFlowById(model.flowId);
-        sendResponse({ ...model, flow });
-      })();
-      return true;
-
-    case 'deleteVirtualModel':
-      modelManager.deleteModel(request.virtualModelId).then(sendResponse).catch(error => sendResponse({ error: error.message }));
-      return true;
-
     // ========== 新架构：流程执行 ==========
     case 'executeFlow':
       (async () => {
@@ -2061,102 +1676,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           );
 
           sendResponse({ success: true, result });
-        } catch (error) {
-          sendResponse({ success: false, error: error.message });
-        }
-      })();
-      return true;
-
-    case 'executeVirtualModel':
-      (async () => {
-        try {
-          const model = await modelManager.getModelById(request.virtualModelId);
-          if (!model || !model.isVirtual) {
-            throw new Error('虚拟模型不存在');
-          }
-
-          const flow = await flowManager.getFlowById(model.flowId);
-          if (!flow) {
-            throw new Error('流程不存在');
-          }
-
-          const result = await flowExecutor.executeFlow(
-            flow,
-            request.userInput,
-            request.context || {}
-          );
-
-          sendResponse({ success: true, result });
-        } catch (error) {
-          sendResponse({ success: false, error: error.message });
-        }
-      })();
-      return true;
-
-    case 'validateFlow':
-      (async () => {
-        try {
-          const flow = await flowManager.getFlowById(request.flowId);
-          const validation = flowExecutor.validateFlow(flow);
-          sendResponse(validation);
-        } catch (error) {
-          sendResponse({ valid: false, errors: [error.message] });
-        }
-      })();
-      return true;
-
-    // ========== 新架构：混合执行（普通模型+虚拟模型） ==========
-    case 'executeMixedModels':
-      (async () => {
-        try {
-          const { modelIds, userInput, context } = request;
-
-          const results = await Promise.allSettled(
-            modelIds.map(async (modelId) => {
-              const model = await modelManager.getModelById(modelId);
-              if (!model) {
-                return { modelId, modelName: '未知', isVirtual: false, success: false, error: '模型不存在' };
-              }
-
-              if (model.isVirtual) {
-                try {
-                  const flow = await flowManager.getFlowById(model.flowId);
-                  const result = await flowExecutor.executeFlow(flow, userInput, context);
-                  return {
-                    modelId: model.id,
-                    modelName: model.name,
-                    isVirtual: true,
-                    success: true,
-                    result
-                  };
-                } catch (error) {
-                  return { modelId: model.id, modelName: model.name, isVirtual: true, success: false, error: error.message };
-                }
-              } else {
-                try {
-                  const accessMethod = model.accessMethod || 'web';
-                  const sender = senderFactory.getSender(accessMethod);
-                  const response = await sender.send(userInput, {
-                    provider: model.provider,
-                    model: model.model,
-                    baseUrl: model.baseUrl || '',
-                    apiKey: model.apiKey || ''
-                  });
-                  return {
-                    modelId: model.id,
-                    modelName: model.name,
-                    isVirtual: false,
-                    success: true,
-                    result: { success: true, content: response.content, conversationUrl: response.conversationUrl }
-                  };
-                } catch (error) {
-                  return { modelId: model.id, modelName: model.name, isVirtual: false, success: false, error: error.message };
-                }
-              }
-            })
-          );
-
-          sendResponse({ success: true, results: results.map(r => r.value || r.reason) });
         } catch (error) {
           sendResponse({ success: false, error: error.message });
         }
@@ -2243,9 +1762,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       (async () => {
         try {
           const sender = senderFactory.getSender('web');
-          const response = await sender.send('测试连接', {
-            provider: request.platform
-          });
+          const response = await sender.send('测试连接');
           sendResponse({
             success: true,
             info: {
@@ -2268,7 +1785,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             const conversation = await conversationManager.getConversation(request.conversationId);
             targetUrl = conversation?.memberUrls?.[request.memberId] || null;
           }
-          const result = await tabManager.openPlatformConversation(request.provider, targetUrl);
+          const result = await tabManager.openPlatformConversation(targetUrl);
           sendResponse(result);
         } catch (error) {
           sendResponse({ error: error.message });
@@ -2376,12 +1893,15 @@ function startPolling(conversationId) {
         return;
       }
 
-      const models = await modelManager.getModels();
+      const models = await platformManager.getAllModels();
       const webPendingMemberIds = pendingMemberIds.filter(memberId => {
         const member = conversation.members.find(m => m.id === memberId);
         if (!member) return false;
-        const modelConfig = models.find(m => m.provider === member.provider && m.model === member.model);
-        return (modelConfig?.accessMethod || 'web') === 'web';
+        // 新架构：直接使用 accessMethod 字段判断
+        const modelConfig = member.modelId
+          ? models.find(m => m.id === member.modelId)
+          : null;
+        return (member.accessMethod || modelConfig?.accessMethod || 'web') === 'web';
       });
 
       if (webPendingMemberIds.length === 0) {
@@ -2398,12 +1918,14 @@ function startPolling(conversationId) {
       for (const memberId of webPendingMemberIds) {
         const member = members.find(r => r.id === memberId);
         if (!member) continue;
-        const provider = PROVIDERS[member.provider];
+        // 新架构：web 模型的 modelCode 就是 providerId
+        const providerKey = member.modelCode || member.provider;
+        const baseUrl = member.webUrl || '';
         const memberUrl = conversation.memberUrls?.[memberId];
-        const isBaseUrl = !memberUrl || memberUrl === provider?.baseUrl;
+        const isBaseUrl = !memberUrl || memberUrl === baseUrl;
 
         try {
-          console.log(`[Background] 检查成员 ${member.name} (${member.provider}) 标签页状态`);
+          console.log(`[Background] 检查成员 ${member.name} 标签页状态`);
           let targetTab = null;
 
           if (isBaseUrl) {
@@ -2421,7 +1943,7 @@ function startPolling(conversationId) {
           }
 
           if (!targetTab) {
-            console.log(`[Background] 未找到标签页: member: ${member.name}, url=${memberUrl}, provider: ${member.provider}`);
+            console.log(`[Background] 未找到标签页: member: ${member.name}, url=${memberUrl}, providerKey: ${providerKey}`);
           }
         } catch (error) {
           console.error(`[Background] 检查 ${member.name} 标签页失败`, error);

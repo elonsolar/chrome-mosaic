@@ -1,8 +1,9 @@
 class FlowExecutor {
-  constructor(tabManager, conversationManager, senderFactory) {
+  constructor(tabManager, conversationManager, senderFactory, platformManager) {
     this.tabManager = tabManager;
     this.conversationManager = conversationManager;
     this.senderFactory = senderFactory;
+    this.platformManager = platformManager;
   }
 
   async executeFlow(flow, userInput, context = {}) {
@@ -13,39 +14,18 @@ class FlowExecutor {
       throw new Error('流程没有节点');
     }
 
-    const maxIterations = context.maxIterations || 3;
     const onProgress = context.onProgress || null;
     const sessionPool = new TemporarySessionPool(this.conversationManager);
 
     const executionGraph = this.buildExecutionGraph(flow);
     console.log('[FlowExecutor] 执行图构建完成，节点数:', executionGraph.nodes.length);
 
-    let currentInput = userInput;
-    let iteration = 0;
-    let finalResult = null;
-
     try {
-      while (iteration < maxIterations) {
-        iteration++;
-        console.log(`[FlowExecutor] ========== 第${iteration}轮执行开始 ==========`);
-
-        if (onProgress) {
-          onProgress({ iteration, maxIterations, currentResult: null });
-        }
-
-        const roundResult = await this.executeGraph(executionGraph, currentInput, context, sessionPool);
-        finalResult = roundResult;
-
-        if (iteration < maxIterations && this.detectDisagreement(roundResult)) {
-          console.log('[FlowExecutor] 检测到分歧，准备下一轮');
-          currentInput = this.prepareNextIterationInput(roundResult);
-
-          await sessionPool.cleanup();
-          console.log('[FlowExecutor] 已清理临时会话，准备下一轮');
-        } else {
-          break;
-        }
+      if (onProgress) {
+        onProgress({ current: 0, total: executionGraph.nodes.size });
       }
+
+      const finalResult = await this.executeGraph(executionGraph, userInput, context, sessionPool);
 
       console.log('[FlowExecutor] ========== 流程执行完成 ==========');
       return {
@@ -53,8 +33,8 @@ class FlowExecutor {
         content: finalResult ? finalResult.content : '',
         nodeResults: finalResult?.nodeResults || [],
         metadata: {
-          iterations: iteration,
-          converged: !this.detectDisagreement(finalResult)
+          totalNodes: executionGraph.nodes.size,
+          totalDuration: finalResult?.metadata?.totalDuration || 0
         }
       };
     } finally {
@@ -63,38 +43,6 @@ class FlowExecutor {
       this.pendingExecutions?.clear();
       this.nodeResults?.clear();
     }
-  }
-
-  detectDisagreement(roundResult) {
-    if (!roundResult || !roundResult.metadata || !roundResult.metadata.results) {
-      return false;
-    }
-
-    const results = roundResult.metadata.results;
-    if (results.length < 2) return false;
-
-    const lengths = results.map(r => (r.content || '').length);
-    const avgLength = lengths.reduce((a, b) => a + b, 0) / lengths.length;
-    if (avgLength === 0) return false;
-
-    const variance = lengths.reduce((sum, len) =>
-      sum + Math.pow(len - avgLength, 2), 0
-    ) / lengths.length;
-
-    return variance > 10000;
-  }
-
-  prepareNextIterationInput(roundResult) {
-    const results = roundResult.metadata?.results;
-    if (!results || results.length < 2) {
-      return roundResult.content || '';
-    }
-
-    return `以下是不同AI的观点，请综合讨论并给出统一答案：\n\n${
-      results.map((r, i) =>
-        `【观点${i + 1}】（来自${r.model || 'AI' + (i + 1)}）：\n${r.content}`
-      ).join('\n\n---\n\n')
-    }\n\n请综合以上观点，给出统一的答案。`;
   }
 
   buildExecutionGraph(flow) {
@@ -383,105 +331,12 @@ class FlowExecutor {
     });
   }
 
-  async sendToModel(model, input, context) {
-    console.log('[FlowExecutor] 发送到模型:', model.name);
-
-    try {
-      const accessMethod = model.accessMethod || 'web';
-      const sender = this.senderFactory.getSender(accessMethod);
-      const response = await sender.send(input, {
-        provider: model.provider,
-        model: model.model,
-        baseUrl: model.baseUrl || '',
-        apiKey: model.apiKey || ''
-      });
-
-      return {
-        success: true,
-        content: response.content,
-        model: model.name,
-        timestamp: Date.now()
-      };
-    } catch (error) {
-      console.error('[FlowExecutor] 模型调用失败:', error);
-      return {
-        success: false,
-        content: '',
-        error: error.message,
-        model: model.name,
-        timestamp: Date.now()
-      };
-    }
-  }
-
-  async sendToModelViaTempSession(model, input, tempConvId) {
-    console.log('[FlowExecutor] 通过临时会话发送到模型:', model.name, '临时会话ID:', tempConvId);
-
-    try {
-      const tempConv = await this.conversationManager.getConversation(tempConvId);
-
-      if (!tempConv) {
-        console.error('[FlowExecutor] 临时会话不存在，tempConvId:', tempConvId);
-        throw new Error(`临时会话不存在: ${tempConvId}`);
-      }
-
-      if (!tempConv.members || tempConv.members.length === 0) {
-        console.error('[FlowExecutor] 临时会话没有成员，tempConv:', tempConv);
-        throw new Error('临时会话没有成员');
-      }
-
-      const member = tempConv.members[0];
-      console.log('[FlowExecutor] 使用临时会话成员:', member.name, member.id);
-
-      const inputWithMarker = input + '\n\n**严格遵守**：在你的回复最后必须添加 [[<<>>]] 标记，表示回复结束。';
-
-      const accessMethod = model.accessMethod || 'web';
-      const sender = this.senderFactory.getSender(accessMethod);
-      const conversationUrl = tempConv.memberUrls?.[member.id];
-      const response = await sender.send(inputWithMarker, {
-        provider: member.provider,
-        model: member.model,
-        conversationUrl,
-        conversationId: tempConvId,
-        conversation: tempConv,
-        memberId: member.id,
-        baseUrl: model.baseUrl || '',
-        apiKey: model.apiKey || ''
-      });
-
-      const content = response.content;
-
-      if (response.conversationUrl) {
-        if (!tempConv.memberUrls) tempConv.memberUrls = {};
-        tempConv.memberUrls[member.id] = response.conversationUrl;
-        await this.conversationManager.updateConversation(tempConvId, {
-          memberUrls: tempConv.memberUrls
-        });
-      }
-
-      return {
-        success: true,
-        content: content,
-        model: model.name,
-        timestamp: Date.now()
-      };
-    } catch (error) {
-      console.error('[FlowExecutor] 临时会话模型调用失败:', error);
-      return {
-        success: false,
-        content: '',
-        error: error.message,
-        model: model.name,
-        timestamp: Date.now()
-      };
-    }
-  }
-
   async executeLLMNode(node, input, sessionPool, context, executionContext) {
     console.log('[FlowExecutor] 执行LLM节点:', node.name || node.data?.title, '节点ID:', node.id);
 
-    const model = node.data?.model;
-    if (!model?.id) {
+    const storedModel = node.data?.model;
+    const modelId = storedModel?.modelId || storedModel?.id;
+    if (!modelId) {
       return {
         success: false,
         content: '',
@@ -490,7 +345,17 @@ class FlowExecutor {
       };
     }
 
-    // 解析输入参数（变量引用 → 实际值）
+    // 实时查找最新模型配置
+    const model = await this.platformManager.getModelById(modelId);
+    if (!model) {
+      return {
+        success: false,
+        content: '',
+        error: '模型配置不存在或已被删除',
+        timestamp: Date.now()
+      };
+    }
+
     const inputParams = node.data?.$$input_decorator$$?.inputParameters || [];
     const resolvedInputs = {};
     inputParams.forEach(param => {
@@ -499,36 +364,68 @@ class FlowExecutor {
       console.log('[FlowExecutor] 解析输入参数:', param.name, '=', String(inputValue).substring(0, 50));
     });
 
-    // 获取提示词模板
     let prompt = node.data?.$$prompt_decorator$$?.prompt || '';
     let systemPrompt = node.data?.$$prompt_decorator$$?.systemPrompt || '';
 
-    // 第一步：替换 {{nodeId.varName}} 变量引用
     prompt = this.replaceVariableReferences(prompt, executionContext);
     systemPrompt = this.replaceVariableReferences(systemPrompt, executionContext);
 
-    // 第二步：替换 {{paramName}} 输入参数占位符
     Object.keys(resolvedInputs).forEach(inputName => {
       const regex = new RegExp(`\\{\\{${inputName}\\}\\}`, 'g');
       systemPrompt = systemPrompt.replace(regex, resolvedInputs[inputName]);
       prompt = prompt.replace(regex, resolvedInputs[inputName]);
     });
 
-    // 构建最终输入
-    // 有输入参数时，值已通过变量替换注入 prompt，不再追加 raw input
-    // 无输入参数时，追加内容作为兜底
-    const fullInput = inputParams.length > 0
-      ? (systemPrompt ? `[系统]\n${systemPrompt}\n\n[用户]\n${prompt}` : prompt)
-      : (systemPrompt ? `[系统]\n${systemPrompt}\n\n[用户]\n${prompt}\n\n${input}` : `${prompt}\n\n${input}`);
+    const sender = this.senderFactory.getSender(model.accessMethod || 'web');
 
-    if (sessionPool) {
-      console.log('[FlowExecutor] 使用临时会话池执行节点:', node.name || node.data?.title);
-      const tempConvId = await sessionPool.getSessionForNode(node);
-      console.log('[FlowExecutor] 获取到临时会话ID:', tempConvId);
-      return await this.sendToModelViaTempSession(model, fullInput, tempConvId);
+    let message;
+    if (model.accessMethod === 'api') {
+      message = [];
+
+      if (systemPrompt) {
+        message.push({ role: 'system', content: systemPrompt });
+      }
+
+      const userContent = inputParams.length > 0 ? prompt : `${prompt}\n\n${input}`;
+      message.push({ role: 'user', content: userContent });
     } else {
-      console.log('[FlowExecutor] 使用上下文执行节点:', node.name || node.data?.title);
-      return await this.sendToModel(model, fullInput, context);
+      const safeSystemPrompt = systemPrompt || '';
+      const safePrompt = prompt || '';
+      const safeInput = input || '';
+
+      if (inputParams.length > 0) {
+        message = safeSystemPrompt
+          ? `[系统]\n${safeSystemPrompt}\n\n[用户]\n${safePrompt}`
+          : safePrompt;
+      } else {
+        message = safeSystemPrompt
+          ? `[系统]\n${safeSystemPrompt}\n\n[用户]\n${safePrompt}\n\n${safeInput}`
+          : `${safePrompt}\n\n${safeInput}`;
+      }
+    }
+
+    try {
+      const response = await sender.send(message, {
+        model: model.code,
+        baseUrl: model.baseUrl || '',
+        apiKey: model.apiKey || '',
+        conversationId: context?.conversationId,
+        memberId: context?.memberId
+      });
+
+      return {
+        success: true,
+        content: response.content,
+        timestamp: Date.now()
+      };
+    } catch (error) {
+      console.error('[FlowExecutor] LLM节点执行失败:', error);
+      return {
+        success: false,
+        content: '',
+        error: error.message,
+        timestamp: Date.now()
+      };
     }
   }
 
@@ -629,7 +526,6 @@ class FlowExecutor {
 
     const result = await this.executeFlow(flow, userInput, {
       onProgress,
-      maxIterations: 1,
       startNodeInputs,
       flowData
     });

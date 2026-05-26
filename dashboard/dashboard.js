@@ -33,6 +33,7 @@ class Dashboard {
     this.convInlineFormModels = [];
     this.convInlineFormPrompts = [];
     this.expertsViewMode = 'grid';
+    this.modelsTab = null;
   }
 
   async init() {
@@ -59,6 +60,12 @@ class Dashboard {
       await window.settingsManager.init();
     }
 
+    // 初始化模型管理标签页
+    if (window.ModelsTab) {
+      this.modelsTab = new ModelsTab(this);
+      await this.modelsTab.init();
+    }
+
     // 加载专家视图模式
     chrome.storage.local.get('expertsViewMode', (result) => {
       this.expertsViewMode = result.expertsViewMode || 'grid';
@@ -69,24 +76,14 @@ class Dashboard {
   }
 
   initTheme() {
-    // 从存储中读取主题设置
-    chrome.storage.local.get('theme', (result) => {
-      const theme = result.theme || 'light';
-      if (theme === 'dark') {
-        document.body.classList.add('dark-mode');
-      }
-    });
+    // 主题已由 ThemeManager 在加载时自动初始化
+    // 这里不需要做任何操作
   }
 
   toggleTheme() {
-    const isDark = document.body.classList.toggle('dark-mode');
-    const theme = isDark ? 'dark' : 'light';
-    chrome.storage.local.set({ theme });
-
-    // 更新主题图标
-    const themeIcon = document.querySelector('.theme-icon');
-    if (themeIcon) {
-      themeIcon.textContent = isDark ? '☀️' : '🌙';
+    // 使用 ThemeManager 切换主题
+    if (window.themeManager) {
+      window.themeManager.toggle();
     }
   }
 
@@ -163,8 +160,8 @@ class Dashboard {
       });
     }
 
-    // FAB 按钮事件
-    this.initFabButtons();
+    // 专家搜索和新增按钮事件
+    this.initExpertsToolbar();
 
     // 会话创建模态框事件
     this.initConversationModalEvents();
@@ -233,39 +230,44 @@ class Dashboard {
     });
   }
 
-  initFabButtons() {
-    document.querySelectorAll('.fab-main').forEach(fab => {
-      fab.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const action = fab.dataset.action;
-        if (action) {
-          this.handleFabAction(action);
-        }
+  initExpertsToolbar() {
+    // 搜索输入
+    const searchInput = document.getElementById('expertSearchInput');
+    const clearBtn = document.getElementById('clearExpertSearch');
+    
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        const keyword = e.target.value.trim();
+        clearBtn.style.display = keyword ? 'block' : 'none';
+        this.filterExperts(keyword);
       });
-    });
+    }
+
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        searchInput.value = '';
+        clearBtn.style.display = 'none';
+        this.filterExperts('');
+      });
+    }
+
+    // 新增专家按钮
+    const createBtn = document.getElementById('createExpertBtn');
+    if (createBtn) {
+      createBtn.addEventListener('click', () => {
+        this.showExpertModal();
+      });
+    }
   }
 
-  handleFabAction(action) {
-    switch (action) {
-      case 'createExpert':
-        this.showExpertModal();
-        break;
-      case 'createConversation':
-        this.showCreateConversationModal();
-        break;
-      case 'createPrompt':
-        const promptsIframe = document.getElementById('promptsIframe');
-        if (promptsIframe && promptsIframe.contentWindow) {
-          promptsIframe.contentWindow.postMessage({ action: 'createPrompt' }, '*');
-        }
-        break;
-      case 'createModel':
-        const modelsIframe = document.getElementById('modelsIframe');
-        if (modelsIframe && modelsIframe.contentWindow) {
-          modelsIframe.contentWindow.postMessage({ action: 'createModel' }, '*');
-        }
-        break;
-    }
+  filterExperts(keyword) {
+    const filtered = keyword
+      ? this.experts.filter(expert => 
+          expert.name.toLowerCase().includes(keyword.toLowerCase()) ||
+          (expert.description && expert.description.toLowerCase().includes(keyword.toLowerCase()))
+        )
+      : this.experts;
+    this.renderExperts(filtered);
   }
 
   initConversationFilters() {
@@ -439,6 +441,12 @@ class Dashboard {
     // 页面特定逻辑
     if (page === 'experts') {
       this.renderExpertsPage();
+    } else if (page === 'models') {
+      // 渲染模型管理页面
+      if (this.modelsTab) {
+        this.modelsTab.render();
+        this.modelsTab.loadPlatforms();
+      }
     } else if (page === 'settings') {
       if (window.settingsManager) {
         window.settingsManager.loadHelperModels();
@@ -758,7 +766,7 @@ class Dashboard {
     });
 
     // 底部提示
-    const hintSvg = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const hintSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>';
     const hint = document.createElement('div');
     hint.className = 'mode-example-hint';
     hint.innerHTML = `点击开始类似对话 ${hintSvg}`;
@@ -944,7 +952,10 @@ class Dashboard {
     const usedModels = new Set();
     this.state.conversations.forEach(conv => {
       (conv.members || []).forEach(member => {
-        const model = this.state.models.find(m => m.provider === member.provider && m.model === member.model);
+        // 新架构：用 modelId 查找；旧架构回退到 provider+model
+        const model = member.modelId
+          ? this.state.models.find(m => m.id === member.modelId)
+          : this.state.models.find(m => m.provider === member.provider && m.model === member.model);
         if (model) {
           usedModels.add(model);
         }
@@ -1001,7 +1012,10 @@ class Dashboard {
         if (!conv.members || conv.members.length === 0) return false;
         return conv.members.some(member => {
           if (!selectedModel) return false;
-          return member.provider === selectedModel.provider && member.model === selectedModel.model;
+          // 新架构：用 modelId 匹配；旧架构回退到 provider+model
+          return member.modelId
+            ? member.modelId === selectedModel.id
+            : member.provider === selectedModel.provider && member.model === selectedModel.model;
         });
       });
     }
@@ -1486,10 +1500,8 @@ class Dashboard {
 
     // 显示已创建的成员（名称+模型+提示词组合），所有成员默认参加会话
     this.elements.convModelSelector.innerHTML = this.convMembers.map((member, index) => {
-      const provider = window.PROVIDERS ? window.PROVIDERS[member.provider] : null;
-      const providerName = provider ? provider.name : member.provider;
-      const model = this.state.models.find(m => m.id === member.model || m.model === member.model);
-      const modelName = model ? model.name : member.model;
+      const platformName = member.platformName || '';
+      const modelCode = member.modelCode || '';
       const prompt = this.state.prompts?.find(p => p.content === member.systemPrompt);
       const promptName = prompt ? prompt.name : (member.systemPrompt ? '自定义提示词' : '');
 
@@ -1500,10 +1512,11 @@ class Dashboard {
           <div class="member-option-info">
             <div class="member-option-name">${this.escapeHtml(member.name)}</div>
             <div class="member-option-meta">
-              <span>${this.escapeHtml(providerName)} - ${this.escapeHtml(modelName)}</span>
+              <span>${this.escapeHtml(platformName)} - ${this.escapeHtml(modelCode)}</span>
               ${promptName ? `<span style="margin-left: 8px;">📝 ${this.escapeHtml(promptName)}</span>` : ''}
             </div>
           </div>
+          <button class="remove-member-btn" data-member-id="${member.id}">×</button>
         </div>
       `;
     }).join('');
@@ -1634,8 +1647,8 @@ class Dashboard {
       if (modelSelect) {
         modelSelect.innerHTML = '<option value="">请选择模型...</option>' +
           this.convInlineFormModels.map(model => {
-            const provider = window.PROVIDERS ? window.PROVIDERS[model.provider] : null;
-            const displayName = provider ? `${provider.name} - ${model.name || model.model}` : (model.name || model.model);
+            const platformName = model.platformName || '未知平台';
+            const displayName = `${platformName} - ${model.id}`;
             return `<option value="${model.id}">${this.escapeHtml(displayName)}</option>`;
           }).join('');
       }
@@ -1710,13 +1723,23 @@ class Dashboard {
         if (prompt) systemPrompt = prompt.content || '';
       }
 
-      const newMember = await chrome.runtime.sendMessage({
-        action: 'createMember',
+      // 直接创建 Member 对象，使用新架构的数据结构
+      const newMember = {
+        id: `member_${Date.now().toString(36)}_${Math.random().toString(36).substr(2)}`,
         name: memberName,
-        provider: model.provider,
-        model: model.model || model.id,
-        systemPrompt
-      });
+        platformId: model.platformId,
+        modelId: model.id,
+        modelCode: model.code,
+        platformName: model.platformName,
+        accessMethod: model.accessMethod,
+        color: model.color || '#667eea',
+        systemPrompt: systemPrompt
+      };
+
+      if (model.accessMethod === 'api') {
+        newMember.baseUrl = model.baseUrl || '';
+        newMember.apiKey = model.apiKey || '';
+      }
 
       if (newMember) {
         this.convMembers.push(newMember);
@@ -1878,8 +1901,6 @@ class Dashboard {
     if (!container) return;
 
     const experts = this.state.experts || [];
-
-    document.getElementById('expertCount').textContent = experts.length;
 
     if (experts.length === 0) {
       container.className = 'experts-container is-empty';

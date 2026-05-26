@@ -1,0 +1,19 @@
+Total messages: 17 (Errors: 0, Warnings: 0)
+
+[LOG] [Dashboard] 初始化 @ chrome-extension://anohnmmabfdpckoiidlibmiookpcldla/dashboard/dashboard.js:39
+[LOG] [Dashboard] 数据加载完成: {experts: 0, conversations: 0, models: 0, flows: 0, prompts: 6} @ chrome-extension://anohnmmabfdpckoiidlibmiookpcldla/dashboard/dashboard.js:397
+[LOG] [SettingsManager] 初始化 @ chrome-extension://anohnmmabfdpckoiidlibmiookpcldla/dashboard/components/settings-manager.js:17
+[LOG] [SettingsManager] 事件绑定完成 @ chrome-extension://anohnmmabfdpckoiidlibmiookpcldla/dashboard/components/settings-manager.js:150
+[LOG] [SettingsManager] 数据加载完成 {settings: Object, models: 0} @ chrome-extension://anohnmmabfdpckoiidlibmiookpcldla/dashboard/components/settings-manager.js:50
+[LOG] [SettingsManager] 初始化完成 @ chrome-extension://anohnmmabfdpckoiidlibmiookpcldla/dashboard/components/settings-manager.js:25
+[LOG] [ModelsTab] 初始化 @ chrome-extension://anohnmmabfdpckoiidlibmiookpcldla/dashboard/components/models-tab.js:13
+[LOG] [ModelsTab] 开始渲染平台管理页面 @ chrome-extension://anohnmmabfdpckoiidlibmiookpcldla/dashboard/components/models-tab.js:29
+[LOG] [ModelsTab] HTML 已插入到容器 @ chrome-extension://anohnmmabfdpckoiidlibmiookpcldla/dashboard/components/models-tab.js:53
+[LOG] [ModelsTab] 初始化 DOM 元素引用 @ chrome-extension://anohnmmabfdpckoiidlibmiookpcldla/dashboard/components/models-tab.js:66
+[LOG] [ModelsTab] DOM 元素引用初始化完成: {hasPlatformsList: true, hasPlatformsDetail: true, hasPlatformDetailTitle: true} @ chrome-extension://anohnmmabfdpckoiidlibmiookpcldla/dashboard/components/models-tab.js:74
+[LOG] [ModelsTab] 开始加载平台数据 @ chrome-extension://anohnmmabfdpckoiidlibmiookpcldla/dashboard/components/models-tab.js:128
+[LOG] [ModelsTab] 收到响应: {success: true, data: Array(1)} @ chrome-extension://anohnmmabfdpckoiidlibmiookpcldla/dashboard/components/models-tab.js:133
+[LOG] [ModelsTab] 平台数据已加载: [Object] @ chrome-extension://anohnmmabfdpckoiidlibmiookpcldla/dashboard/components/models-tab.js:137
+[LOG] [ModelsTab] 初始化完成 @ chrome-extension://anohnmmabfdpckoiidlibmiookpcldla/dashboard/components/models-tab.js:19
+[LOG] [Dashboard] 初始化完成 @ chrome-extension://anohnmmabfdpckoiidlibmiookpcldla/dashboard/dashboard.js:74
+[LOG] [SettingsManager] 辅助模型列表加载完成 {count: 0} @ chrome-extension://anohnmmabfdpckoiidlibmiookpcldla/dashboard/components/settings-manager.js:113
