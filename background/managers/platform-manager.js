@@ -5,7 +5,7 @@
 const BUILTIN_WEB_URLS = {
   deepseek: 'https://chat.deepseek.com/',
   doubao: 'https://www.doubao.com/chat/',
-  qianwen: 'https://www.qianwen.com/chat/',
+  qianwen: 'https://www.qianwen.com/chat',
   kimi: 'https://kimi.moonshot.cn/',
 };
 

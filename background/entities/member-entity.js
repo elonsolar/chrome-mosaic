@@ -104,19 +104,27 @@ class MemberEntity extends BaseEntity {
   _buildApiMessage(input, context) {
     const messages = [];
 
-    if (this.systemPrompt) {
+    if (this.systemPrompt || context.conversationMode === 'discussion') {
+      const discussionPrompt = this._buildDiscussionPrompt(context);
       const additionalPrompt = context.getMemberSetting(this.id, 'additionalPrompt', '');
-      const fullPrompt = additionalPrompt 
-        ? `${this.systemPrompt}\n\n${additionalPrompt}`
-        : this.systemPrompt;
+      const basePrompt = this.systemPrompt || '';
 
-      messages.push({ role: 'system', content: fullPrompt });
+      const fullPrompt = discussionPrompt
+        ? `${discussionPrompt}\n\n${basePrompt}${additionalPrompt ? '\n\n' + additionalPrompt : ''}`
+        : (additionalPrompt ? `${basePrompt}\n\n${additionalPrompt}` : basePrompt);
+
+      if (fullPrompt) {
+        messages.push({ role: 'system', content: fullPrompt });
+      }
     }
 
     const history = this._buildHistory(context);
     messages.push(...history);
 
-    messages.push({ role: 'user', content: input });
+    const hasUserInHistory = history.some(msg => msg.role === 'user');
+    if (!hasUserInHistory) {
+      messages.push({ role: 'user', content: input });
+    }
 
     return messages;
   }
@@ -124,13 +132,29 @@ class MemberEntity extends BaseEntity {
   _buildWebMessage(input, context) {
     let message = input;
 
-    if (this.systemPrompt) {
-      const additionalPrompt = context.getMemberSetting(this.id, 'additionalPrompt', '');
-      const fullPrompt = additionalPrompt 
-        ? `${this.systemPrompt}\n\n${additionalPrompt}`
-        : this.systemPrompt;
+    const lastMessageId = context.getLastMessageId(this.id);
+    const isFirstMessage = !lastMessageId;
 
-      message = `${fullPrompt}\n\n${input}`;
+    if (isFirstMessage && (this.systemPrompt || context.conversationMode === 'discussion')) {
+      const discussionPrompt = this._buildDiscussionPrompt(context);
+      const additionalPrompt = context.getMemberSetting(this.id, 'additionalPrompt', '');
+      const basePrompt = this.systemPrompt || '';
+
+      const fullPrompt = discussionPrompt
+        ? `${discussionPrompt}\n\n${basePrompt}${additionalPrompt ? '\n\n' + additionalPrompt : ''}`
+        : (additionalPrompt ? `${basePrompt}\n\n${additionalPrompt}` : basePrompt);
+
+      const historyText = this._buildHistoryText(context);
+
+      message = historyText
+        ? `${fullPrompt}\n\n${historyText}`
+        : `${fullPrompt}\n\n当前问题：${input}`;
+    } else {
+      const historyText = this._buildHistoryText(context);
+
+      message = historyText
+        ? historyText
+        : input;
     }
 
     message += '\n\n**严格遵守**：在你的回复最后必须添加 [[<<>>]] 标记，表示回复结束。';
@@ -138,24 +162,80 @@ class MemberEntity extends BaseEntity {
     return message;
   }
 
+  _buildDiscussionPrompt(context) {
+    if (context.conversationMode !== 'discussion') {
+      return '';
+    }
+
+    const members = context.conversation.members || [];
+    const memberNames = members.map(m => m.name).join('、');
+
+    return `当前会话成员：${memberNames}。\n你的名称是${this.name}。\n你不可以扮演别的成员，只能以${this.name}的身份回复。`;
+  }
+
+  _buildHistoryText(context) {
+    const messages = context.conversation.messages || [];
+    const contextMode = context.contextMode;
+    const lastMessageId = context.getLastMessageId(this.id);
+
+    let startIndex = 0;
+    if (lastMessageId) {
+      startIndex = messages.findIndex(msg => msg.id === lastMessageId) + 1;
+      if (startIndex === 0) {
+        startIndex = 0;
+      }
+    }
+
+    const incrementalMessages = messages.slice(startIndex);
+
+    let filteredMessages;
+    if (contextMode === 'self') {
+      filteredMessages = incrementalMessages.filter(msg => msg.isUser || msg.memberId === this.id);
+    } else {
+      filteredMessages = incrementalMessages.filter(msg => msg.memberId !== this.id);
+    }
+
+    if (filteredMessages.length === 0) {
+      return '';
+    }
+
+    return filteredMessages.map(msg => {
+      if (msg.isUser) {
+        return `用户：${msg.content}`;
+      } else {
+        const member = context.conversation.members.find(m => m.id === msg.memberId);
+        const memberName = member ? member.name : 'AI助手';
+        return `${memberName}：${msg.content}`;
+      }
+    }).join('\n\n');
+  }
+
   _buildHistory(context) {
     const messages = context.conversation.messages || [];
     const contextMode = context.contextMode;
+    const lastMessageId = context.getLastMessageId(this.id);
 
-    if (contextMode === 'self') {
-      return messages
-        .filter(msg => msg.isUser || msg.memberId === this.id)
-        .map(msg => ({
-          role: msg.isUser ? 'user' : 'assistant',
-          content: msg.content
-        }));
-    } else {
-      return messages
-        .map(msg => ({
-          role: msg.isUser ? 'user' : 'assistant',
-          content: msg.content
-        }));
+    let startIndex = 0;
+    if (lastMessageId) {
+      startIndex = messages.findIndex(msg => msg.id === lastMessageId) + 1;
+      if (startIndex === 0) {
+        startIndex = 0;
+      }
     }
+
+    const incrementalMessages = messages.slice(startIndex);
+
+    let filteredMessages;
+    if (contextMode === 'self') {
+      filteredMessages = incrementalMessages.filter(msg => msg.isUser || msg.memberId === this.id);
+    } else {
+      filteredMessages = incrementalMessages.filter(msg => msg.memberId !== this.id);
+    }
+
+    return filteredMessages.map(msg => ({
+      role: msg.isUser ? 'user' : 'assistant',
+      content: msg.content
+    }));
   }
 }
 

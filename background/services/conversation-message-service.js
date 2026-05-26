@@ -35,7 +35,8 @@ class ConversationMessageService {
 
     await this._showUserMessage(userMessage, context);
 
-    await this.conversationManager.addMessage(conversationId, null, userMessage, true);
+    const userMsg = await this.conversationManager.addMessage(conversationId, null, userMessage, true);
+    context.conversation.messages.push(userMsg);
 
     const entities = await this.entityFactory.createEntitiesFromConversation(conversation);
 
@@ -76,6 +77,25 @@ class ConversationMessageService {
         try {
           const result = await entity.execute(input, context);
           results.push({ status: 'fulfilled', value: result });
+
+          if (result.success && result.content) {
+            const message = await this.conversationManager.addMessage(
+              context.conversationId,
+              result.memberId,
+              result.content,
+              false
+            );
+
+            if (message && message.id) {
+              context.memberLastMessageIds[result.memberId] = message.id;
+              context.conversation.messages.push(message);
+              await this.conversationManager.updateConversation(context.conversationId, {
+                memberLastMessageIds: context.memberLastMessageIds
+              });
+            }
+
+            result.messageId = message.id;
+          }
         } catch (error) {
           results.push({
             status: 'rejected',
@@ -91,20 +111,43 @@ class ConversationMessageService {
   }
 
   async _saveResults(conversationId, results) {
+    const conversation = await this.conversationManager.getConversation(conversationId);
+    if (!conversation.memberLastMessageIds) {
+      conversation.memberLastMessageIds = {};
+    }
+
+    let needsUpdate = false;
     for (const result of results) {
       if (result.status === 'fulfilled') {
         const data = result.value;
+
+        if (data.messageId) {
+          continue;
+        }
+
         if (data.success && data.content) {
-          await this.conversationManager.addMessage(
+          const message = await this.conversationManager.addMessage(
             conversationId,
             data.memberId || data.expertId,
             data.content,
             false
           );
+
+          if (message && message.id) {
+            const memberId = data.memberId || data.expertId;
+            conversation.memberLastMessageIds[memberId] = message.id;
+            needsUpdate = true;
+          }
         }
       } else if (result.status === 'rejected') {
         console.error('[ConversationMessageService] 实体执行失败:', result.reason);
       }
+    }
+
+    if (needsUpdate) {
+      await this.conversationManager.updateConversation(conversationId, {
+        memberLastMessageIds: conversation.memberLastMessageIds
+      });
     }
   }
 

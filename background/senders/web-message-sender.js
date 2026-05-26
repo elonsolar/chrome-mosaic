@@ -8,10 +8,13 @@ class WebMessageSender extends AbstractMessageSender {
   async send(content, options = {}) {
     const { conversationUrl, conversationId, conversation, webUrl } = options;
 
+    const isNewConversation = !conversationUrl;
+    const forceNewTab = isNewConversation;
+
     const response = await this.sendToPlatform(
       'sendMessage',
       { content, conversationId: conversation },
-      false,
+      forceNewTab,
       conversationUrl || webUrl
     );
 

@@ -120,10 +120,8 @@ class QianwenAdapter extends BasePlatformAdapter {
       const response = await this.waitForAIResponse();
       console.log(`[${timestamp()}] [${this.platform}] ✓ 收到 AI 回复，长度:`, response?.length || 0);
 
-      // 等待 URL 更新（Qianwen 发送消息后会导航到新会话）
-      const conversationUrl = await this.waitForUrlUpdate();
-      console.log(`[${this.platform}] ✓ URL 已更新:`, conversationUrl);
 
+      this.waitForUrlUpdate
       // 使用重试机制发送响应
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
@@ -134,7 +132,7 @@ class QianwenAdapter extends BasePlatformAdapter {
               messageId: messageId,
               conversationId: conversationId,
               content: response,
-              conversationUrl: conversationUrl
+              conversationUrl: window.location.href
             }, (response) => {
               if (chrome.runtime.lastError) {
                 reject(new Error(chrome.runtime.lastError.message));
