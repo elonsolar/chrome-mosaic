@@ -45,13 +45,21 @@ class EntityFactory {
       const memberIds = conversation.memberOrder || conversation.members.map(m => m.id);
       const memberMap = new Map(conversation.members.map(m => [m.id, m]));
 
+      console.log('[EntityFactory] 创建成员 Entities, memberIds:', memberIds);
+      console.log('[EntityFactory] conversation.members:', conversation.members.map(m => ({ id: m.id, name: m.name })));
+
       for (const memberId of memberIds) {
         const member = memberMap.get(memberId);
         if (member) {
+          console.log(`[EntityFactory] 创建 Entity: ${member.name} (${memberId})`);
           const entity = await this.createMember(member);
           entities.push(entity);
+        } else {
+          console.warn(`[EntityFactory] 找不到成员: ${memberId}`);
         }
       }
+
+      console.log(`[EntityFactory] 总共创建 ${entities.length} 个 Entities`);
     }
 
     return entities;

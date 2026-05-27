@@ -48,10 +48,12 @@ class ConversationMessageService {
       this.progressNotifier.notify(conversationId, progress);
     });
 
+    const sendMode = context.conversationMode === 'discussion' ? 'sequential' : 'parallel';
+
     try {
       const results = await this._executeEntities(entities, userMessage, context);
 
-      await this._saveResults(conversationId, results);
+      await this._saveResults(conversationId, results, sendMode);
 
       await this._updateConversationContext(conversationId, context);
 
@@ -109,7 +111,7 @@ class ConversationMessageService {
     }
   }
 
-  async _saveResults(conversationId, results) {
+  async _saveResults(conversationId, results, sendMode) {
     const conversation = await this.conversationManager.getConversation(conversationId);
     if (!conversation.memberLastMessageIds) {
       conversation.memberLastMessageIds = {};

@@ -246,14 +246,34 @@ async function init() {
   await loadData();
 
   // 检查是否是新会话（没有消息且有成员），自动发送成员加入 Tip 提示
+  console.log('[Chat][Roundtable] 会话状态检查:', {
+    hasConversation: !!state.conversation,
+    hasMembers: !!state.conversation?.members,
+    memberCount: state.conversation?.members?.length || 0,
+    hasMessages: !!state.conversation?.messages,
+    messageCount: state.conversation?.messages?.length || 0,
+    mode: state.conversation?.mode
+  });
+
   if (state.conversation &&
       state.conversation.members &&
       state.conversation.members.length > 0 &&
       (!state.conversation.messages || state.conversation.messages.length === 0)) {
     console.log('[Chat] 检测到新会话，发送成员加入 Tip 提示');
-    setTimeout(() => {
-      sendMemberJoinTipMessages(conversationId, state.conversation.members);
+    setTimeout(async () => {
+      await sendMemberJoinTipMessages(conversationId, state.conversation.members);
+
+      // 圆桌讨论模式：发送模式介绍提示
+      console.log('[Chat][Roundtable] 检查是否为圆桌模式:', state.conversation.mode);
+      if (state.conversation.mode === 'discussion') {
+        const roundtableTip = `你正在【圆桌讨论】模式中。所有成员共享完整的对话上下文，按顺序依次发言。使用 <code>/loop 问题 次数</code> 可发起多轮讨论。`;
+        console.log('[Chat][Roundtable] 准备发送圆桌提示消息...');
+        await addTipMessage(conversationId, roundtableTip, 'roundtable_intro');
+        console.log('[Chat][Roundtable] 圆桌提示消息发送完成');
+      }
     }, 1000);
+  } else {
+    console.log('[Chat][Roundtable] 不满足新会话条件，跳过提示注入');
   }
 
   // 检查是否需要自动发送消息
@@ -366,6 +386,15 @@ async function loadData() {
     state.prompts = prompts || [];
     state.experts = experts || [];
 
+    // 如果提示词为空，触发初始化内置提示词
+    if (!state.prompts || state.prompts.length === 0) {
+      console.log('[Chat] 提示词为空，触发后台初始化');
+      await chrome.runtime.sendMessage({ action: 'initializeBuiltinPrompts' });
+      // 重新加载提示词
+      state.prompts = await chrome.runtime.sendMessage({ action: 'getPrompts' }).catch(() => []);
+      console.log('[Chat] 初始化后提示词数量:', state.prompts.length);
+    }
+
     if (!conversation) {
       showError('会话不存在');
     }
@@ -394,12 +423,31 @@ function bindEvents() {
         const candidates = getFilteredCommands(filter);
 
         if (candidates.length > 0) {
-          elements.messageInput.value = candidates[0].name + ' ';
+          const cmd = candidates[0];
           hideCommandSuggestions();
-          sendMessage();
+          // 如果输入已经是完整命令（带参数），直接发送
+          if (value.startsWith(cmd.name + ' ') || value === cmd.name) {
+            sendMessage();
+          } else {
+            // 否则补全命令名
+            elements.messageInput.value = cmd.name + ' ';
+            // 需要参数的命令不立即发送，等待用户输入参数
+            if (cmd.hasArgs) {
+              return;
+            }
+            sendMessage();
+          }
         } else {
-          showError('没有匹配的命令: ' + value);
-          hideCommandSuggestions();
+          // 尝试用命令名部分匹配（忽略参数）
+          const cmdName = '/' + filter.split(/\s+/)[0];
+          const exactCmd = availableCommands.find(c => c.name === cmdName);
+          if (exactCmd) {
+            hideCommandSuggestions();
+            sendMessage();
+          } else {
+            showError('没有匹配的命令: ' + value);
+            hideCommandSuggestions();
+          }
         }
         return;
       }
@@ -426,14 +474,6 @@ function bindEvents() {
       hideCommandSuggestions();
     }
   });
-
-  // 模式徽章点击打开模式选择器
-  const modeBadge = document.getElementById('modeBadge');
-  if (modeBadge) {
-    modeBadge.addEventListener('click', () => {
-      showModeSelector();
-    });
-  }
 
   // 成员标签点击事件
   elements.membersTags.addEventListener('click', (e) => {
@@ -655,13 +695,15 @@ async function addSingleMember() {
     };
 
     const updatedMembers = [...state.conversation.members, newMember];
+    const updatedMemberOrder = [...(state.conversation.memberOrder || state.conversation.members.map(m => m.id)), newMember.id];
 
     await new Promise((resolve, reject) => {
       chrome.runtime.sendMessage({
         action: 'updateConversation',
         conversationId: state.conversation.id,
         updates: {
-          members: updatedMembers
+          members: updatedMembers,
+          memberOrder: updatedMemberOrder
         }
       }, (response) => {
         if (chrome.runtime.lastError) {
@@ -677,11 +719,6 @@ async function addSingleMember() {
     renderConversationMembers();
 
     await sendMemberJoinTipMessages(state.conversation.id, [newMember]);
-
-    // 自动打开配置模态框让用户选择模型
-    setTimeout(() => {
-      openMemberConfigModal(newMember.id);
-    }, 500);
   } catch (error) {
     console.error('[Chat] 添加成员失败:', error);
     alert('添加成员失败: ' + (error.message || error));
@@ -1218,7 +1255,7 @@ function renderMessages() {
   }
 
   elements.messagesContainer.innerHTML = messages.map((msg, index) => {
-    // 系统提示消息（支持HTML，用于"修改模型"链接）
+    // 系统提示消息（支持HTML，用于"修改成员信息"链接）
     if (msg.type === 'tip') {
       return `
         <div class="message tip-message">
@@ -1229,7 +1266,8 @@ function renderMessages() {
 
     const member = state.conversation.members.find(m => m.id === msg.memberId);
     const roleSetting = state.conversation.memberSettings?.[msg.memberId] || {};
-    const displayName = roleSetting.nickname || member?.name || '未知成员';
+    // 优先使用消息快照中的成员名称，其次使用角色昵称，最后使用当前成员名称
+    const displayName = roleSetting.nickname || msg.memberName || member?.name || '未知成员';
     const platformName = member ? (member.platformName || '') : '';
     const modelCode = member ? (member.modelCode || member.provider) : null;
 
@@ -1289,7 +1327,7 @@ function renderMessages() {
   bindMemberClickEvents();
   addCodeCopyButtons(elements.messagesContainer);
 
-  // 绑定 Tip 消息中的"修改模型"链接点击事件
+  // 绑定 Tip 消息中的"修改成员信息"链接点击事件
   const tipLinks = elements.messagesContainer.querySelectorAll('.tip-link');
   tipLinks.forEach(link => {
     link.addEventListener('click', (e) => {
@@ -1402,8 +1440,8 @@ async function handleCommand(command) {
     case '/new':
       await handleNewCommand();
       break;
-    case '/mode':
-      await handleModeCommand();
+    case '/loop':
+      await handleLoopCommand(args);
       break;
     default:
       showError('未知命令: ' + cmd);
@@ -1414,7 +1452,9 @@ let newStatusTimeout = null;
 
 async function handleNewCommand() {
   try {
-    // Step 1: 清空本地会话 → 立即清除页面
+    elements.messageInput.disabled = true;
+    elements.sendBtn.disabled = true;
+
     const response = await chrome.runtime.sendMessage({
       action: 'clearConversationLocal',
       conversationId
@@ -1429,10 +1469,8 @@ async function handleNewCommand() {
     updateConversationName();
     console.log('[Chat] 本地会话已清除');
 
-    // 在标题附近显示状态：正在删除后台会话
     showNewStatus('deleting');
 
-    // Step 2: 把 memberUrls 快照传给平台删除（不 await）
     chrome.runtime.sendMessage({
       action: 'clearConversationPlatform',
       conversationId,
@@ -1442,6 +1480,8 @@ async function handleNewCommand() {
   } catch (error) {
     console.error('[Chat] 清除会话失败:', error);
     showNewStatus('failed');
+    elements.messageInput.disabled = false;
+    elements.sendBtn.disabled = false;
   }
 }
 
@@ -1476,6 +1516,15 @@ function attachMessageListener() {
     chrome.runtime.onMessage.addListener((request) => {
       if (request.type === 'clearComplete') {
         showNewStatus(request.success ? 'done' : 'failed');
+        elements.messageInput.disabled = false;
+        elements.sendBtn.disabled = false;
+      } else if (request.type === 'loopDiscussionProgress') {
+        showLoopProgress(request.currentRound, request.totalRounds);
+      } else if (request.type === 'loopDiscussionComplete') {
+        removeLoopProgress();
+        showSuccess(`多轮讨论完成（共 ${request.rounds} 轮）`);
+        elements.messageInput.disabled = false;
+        elements.sendBtn.disabled = false;
       } else if (request.type === 'flowExecutionProgress') {
         handleFlowExecutionProgress(request.progress);
       } else if (request.type === 'flowExecutionComplete') {
@@ -1489,6 +1538,30 @@ function attachMessageListener() {
 }
 
 attachMessageListener();
+
+function showLoopProgress(currentRound, totalRounds) {
+  removeLoopProgress();
+  
+  const progressDiv = document.createElement('div');
+  progressDiv.className = 'loop-progress';
+  progressDiv.id = 'loopProgressIndicator';
+  progressDiv.innerHTML = `
+    <div class="loop-progress-content">
+      <div class="loop-progress-spinner"></div>
+      <span class="loop-progress-text">多轮讨论中... 第 ${currentRound}/${totalRounds} 轮</span>
+    </div>
+  `;
+  
+  elements.messagesContainer.appendChild(progressDiv);
+  scrollToBottom();
+}
+
+function removeLoopProgress() {
+  const existing = document.getElementById('loopProgressIndicator');
+  if (existing) {
+    existing.remove();
+  }
+}
 
 function handleFlowExecutionProgress(progress) {
   console.log('[Chat] 流程执行进度:', progress);
@@ -1620,272 +1693,48 @@ function handleFlowExecutionError(error) {
 }
 
 
-async function handleModeCommand() {
-  showModeSelector();
-}
-
-function showModeSelector(focusOrder) {
-  const mode = state.conversation.mode;
-  
-  if (mode === 'brainstorming' || mode === 'discussion' || mode === 'expertqa') {
-    const modeInfo = {
-      brainstorming: { name: '头脑风暴', desc: '独享上下文 · 并行回复', icon: '💡' },
-      discussion: { name: '圆桌讨论', desc: '共享上下文 · 依次发言\n使用 /loop 问题 次数 进行多轮讨论', icon: '🪑' },
-      expertqa: { name: '专家问答', desc: '多AI协作 · 迭代求解', icon: '🎓' }
-    };
-
-    const info = modeInfo[mode];
-    const modal = document.createElement('div');
-    modal.className = 'mode-selector-modal';
-    modal.innerHTML = `
-      <div class="modal-overlay">
-        <div class="modal-content">
-          <h2>${info.icon} ${info.name}</h2>
-          <div class="mode-section">
-            <div class="mode-info-readonly">
-              <div class="mode-name">${info.name}</div>
-              <div class="mode-desc" style="white-space:pre-line;">${info.desc}</div>
-            </div>
-          </div>
-          <div class="modal-actions">
-            <button class="btn btn-primary" id="closeModeBtn">确定</button>
-          </div>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(modal);
-
-    document.getElementById('closeModeBtn').addEventListener('click', () => {
-      document.body.removeChild(modal);
-    });
-
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal || e.target.classList.contains('modal-overlay')) {
-        document.body.removeChild(modal);
-      }
-    });
+async function handleLoopCommand(args) {
+  if (state.conversation.mode !== 'discussion') {
+    showError('/loop 命令仅支持圆桌讨论模式');
     return;
   }
 
-  const currentContextMode = state.conversation.contextMode || 'self';
-  const currentSendMode = state.conversation.sendMode || (currentContextMode === 'self' ? 'parallel' : 'parallel');
-  const memberIds = state.conversation.members.map(m => m.id);
-  const currentOrder = state.conversation.memberOrder || memberIds || [];
+  const maxMatch = args.find(arg => arg.startsWith('--max='));
+  const maxIterations = maxMatch ? parseInt(maxMatch.split('=')[1]) : 3;
 
-  const contextModeNames = {
-    self: '独享模式',
-    full: '共享模式'
-  };
+  const problemDesc = args.filter(arg => !arg.startsWith('--max=')).join(' ').trim();
 
-  const sendModeNames = {
-    parallel: '并行模式',
-    sequential: '顺序模式',
-    random: '随机模式'
-  };
-
-  const modal = document.createElement('div');
-  modal.className = 'mode-selector-modal';
-  modal.innerHTML = `
-    <div class="modal-overlay">
-      <div class="modal-content">
-        <h2>会话模式设置</h2>
-
-        ${currentContextMode === 'self' ? `
-        <div class="mode-section">
-          <div class="mode-info-readonly">
-            <div class="mode-name">${contextModeNames[currentContextMode]}（并行）</div>
-            <div class="mode-desc">每个AI独立对话，互不干扰，使用各自的会话URL</div>
-          </div>
-        </div>
-        ` : `
-        <div class="mode-section">
-          <div class="mode-info-readonly">
-            <div class="mode-name">${contextModeNames[currentContextMode]}</div>
-            <div class="mode-desc">所有对话历史都发送给每个AI，每次打开新会话</div>
-          </div>
-        </div>
-
-        <div class="mode-section" id="sendModeSection">
-          <h3>执行策略</h3>
-          <div class="mode-options">
-            <label class="mode-option">
-              <input type="radio" name="sendMode" value="parallel" ${currentSendMode === 'parallel' ? 'checked' : ''}>
-              <div class="mode-info">
-                <div class="mode-name">并行</div>
-                <div class="mode-desc">所有成员同时收到消息并独立响应</div>
-              </div>
-            </label>
-            <label class="mode-option">
-              <input type="radio" name="sendMode" value="sequential" ${currentSendMode === 'sequential' ? 'checked' : ''}>
-              <div class="mode-info">
-                <div class="mode-name">串行</div>
-                <div class="mode-desc">按成员顺序依次发送，每个成员能看到之前成员的回复</div>
-              </div>
-            </label>
-            <label class="mode-option">
-              <input type="radio" name="sendMode" value="random" ${currentSendMode === 'random' ? 'checked' : ''}>
-              <div class="mode-info">
-                <div class="mode-name">随机</div>
-                <div class="mode-desc">随机选择一个成员响应</div>
-              </div>
-            </label>
-          </div>
-        </div>
-        `}
-        
-        <div class="mode-order-section" id="modeOrderSection">
-          <h3>成员顺序</h3>
-          <p class="mode-order-hint">拖动成员卡片调整顺序（用于串行模式）</p>
-          <div class="member-order-list" id="modeMemberOrderList">
-            ${currentOrder.map((memberId, index) => {
-              const member = state.conversation.members.find(m => m.id === memberId);
-              if (!member) return '';
-
-              // 使用新架构的数据结构
-              let platformName = member.platformName || '未知平台';
-              let color = '#667eea'; // 默认颜色
-
-              // 尝试从模型中获取颜色
-              if (member.modelId && state.models) {
-                const model = state.models.find(m => m.id === member.modelId);
-                if (model && model.color) {
-                  color = model.color;
-                }
-              }
-
-              return `
-                <div class="member-order-item" draggable="true" data-member-id="${memberId}">
-                  <div class="member-order-handle">⋮⋮</div>
-                  <div class="member-order-avatar" style="background:linear-gradient(135deg, ${color}, ${color}cc);">${escapeHtml(member.name.charAt(0))}</div>
-                  <div class="member-order-info">
-                    <div class="member-order-name">${escapeHtml(member.name)}</div>
-                    <div class="member-order-provider">
-                      <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${color};margin-right:4px;"></span>
-                      ${escapeHtml(platformName)}
-                    </div>
-                  </div>
-                  <div class="member-order-index" style="color:${color};">${index + 1}</div>
-                </div>
-              `;
-            }).join('')}
-          </div>
-        </div>
-        
-        <div class="modal-actions">
-          <button class="btn btn-secondary" id="cancelModeBtn">取消</button>
-          <button class="btn btn-primary" id="saveModeBtn">保存</button>
-        </div>
-      </div>
-    </div>
-  `;
-
-  document.body.appendChild(modal);
-
-  const sendModeRadios = modal.querySelectorAll('input[name="sendMode"]');
-  const sendModeSection = modal.querySelector('#sendModeSection');
-  const orderSection = modal.querySelector('#modeOrderSection');
-  const orderList = modal.querySelector('#modeRoleOrderList');
-
-  function updateSectionVisibility() {
-    if (!sendModeSection) return;
-
-    const selectedSendMode = modal.querySelector('input[name="sendMode"]:checked').value;
-
-    if (selectedSendMode === 'sequential') {
-      orderSection.style.display = 'block';
-    } else {
-      orderSection.style.display = 'none';
-    }
+  if (maxIterations < 1 || maxIterations > 10) {
+    showError('迭代次数必须在 1-10 之间');
+    return;
   }
 
-  if (sendModeRadios) {
-    sendModeRadios.forEach(radio => {
-      radio.addEventListener('change', updateSectionVisibility);
+  try {
+    elements.messageInput.disabled = true;
+    elements.sendBtn.disabled = true;
+
+    const response = await chrome.runtime.sendMessage({
+      action: 'startLoopDiscussion',
+      conversationId,
+      problemDesc,
+      maxIterations
     });
-  }
 
-  let draggedItem = null;
-  orderList.addEventListener('dragstart', (e) => {
-    if (e.target.classList.contains('member-order-item')) {
-      draggedItem = e.target;
-      e.target.style.opacity = '0.5';
+    if (!response || !response.success) {
+      throw new Error(response?.error || '启动多轮讨论失败');
     }
-  });
 
-  orderList.addEventListener('dragend', (e) => {
-    if (e.target.classList.contains('member-order-item')) {
-      e.target.style.opacity = '1';
-      draggedItem = null;
-      updateOrderIndices(orderList);
-    }
-  });
-
-  orderList.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    const afterElement = getDragAfterElement(orderList, e.clientY);
-    if (draggedItem) {
-      if (afterElement == null) {
-        orderList.appendChild(draggedItem);
-      } else {
-        orderList.insertBefore(draggedItem, afterElement);
-      }
-    }
-  });
-
-  updateSectionVisibility();
-
-  if (focusOrder && currentContextMode === 'full') {
-    setTimeout(() => {
-      if (orderSection && orderSection.style.display !== 'none') {
-        orderSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }, 100);
-  }
-
-  document.getElementById('cancelModeBtn').addEventListener('click', () => {
-    document.body.removeChild(modal);
-  });
-
-  document.getElementById('saveModeBtn').addEventListener('click', async () => {
-    const items = orderList.querySelectorAll('.member-order-item');
-    const newOrder = Array.from(items).map(item => item.getAttribute('data-member-id'));
-
-    const updates = {};
-
-    if (currentContextMode === 'full') {
-      const selectedSendMode = modal.querySelector('input[name="sendMode"]:checked').value;
-      updates.sendMode = selectedSendMode;
-      if (selectedSendMode === 'sequential') {
-        updates.memberOrder = newOrder;
-      } else {
-        updates.memberOrder = null;
-      }
+    if (problemDesc) {
+      showSuccess(`正在执行多轮讨论：${problemDesc}（${maxIterations} 轮）`);
     } else {
-      updates.sendMode = 'parallel';
+      showSuccess(`正在执行多轮讨论（${maxIterations} 轮）`);
     }
-
-    try {
-      const updatedConversation = await chrome.runtime.sendMessage({
-        action: 'updateConversation',
-        conversationId,
-        updates
-      });
-
-      if (updatedConversation) {
-        state.conversation = updatedConversation;
-        render();
-        if (currentContextMode === 'full') {
-          console.log('[Chat] 发送模式已更新');
-          console.log('[Chat] 成员顺序已更新:', newOrder);
-        }
-      }
-
-      document.body.removeChild(modal);
-    } catch (error) {
-      console.error('[Chat] 更新失败:', error);
-      showError('更新失败: ' + error.message);
-    }
-  });
+  } catch (error) {
+    console.error('[Chat] 启动多轮讨论失败:', error);
+    showError(error.message);
+    elements.messageInput.disabled = false;
+    elements.sendBtn.disabled = false;
+  }
 }
 
 function getDragAfterElement(container, y) {
@@ -2050,9 +1899,24 @@ async function sendMemberIntroMessages(conversationId, members) {
  */
 async function sendMemberJoinTipMessages(conversationId, members) {
   console.log('[Chat] 发送成员加入 Tip 提示，成员数:', members.length);
+  console.log('[Chat] state.prompts 数量:', state.prompts?.length || 0);
 
   for (const member of members) {
-    const tipContent = `${member.name} 加入会话，模型是 ${member.platformName} - ${member.modelCode}，<a href="#" class="tip-link" data-member-id="${member.id}">修改模型</a>`;
+    console.log('[Chat] 成员信息:', member.name, 'systemPrompt:', member.systemPrompt);
+
+    // 查找提示词名称
+    let promptInfo = '';
+    if (member.systemPrompt) {
+      const prompt = state.prompts.find(p => p.content === member.systemPrompt);
+      const promptName = prompt ? prompt.name : '自定义提示词';
+      promptInfo = `，提示词是 ${promptName}`;
+      console.log('[Chat] 找到提示词:', promptName);
+    } else {
+      console.log('[Chat] 成员没有设置提示词');
+    }
+
+    const tipContent = `${member.name} 加入会话，模型是 ${member.platformName} - ${member.modelCode}${promptInfo}，<a href="#" class="tip-link" data-member-id="${member.id}">修改成员信息</a>`;
+    console.log('[Chat] Tip 内容:', tipContent);
 
     try {
       await new Promise((resolve, reject) => {
@@ -2256,14 +2120,22 @@ function showSuccess(message) {
 
 const availableCommands = [
   { name: '/new', description: '清除所有会话内容和重置成员会话URL' },
-  { name: '/mode', description: '切换上下文模式和发送模式，调整成员顺序' }
+  { name: '/loop', description: '启动多轮讨论：/loop 问题描述 --max=5（问题可选，默认基于当前会话；max可选，默认3轮）', hasArgs: true }
 ];
 
 function getFilteredCommands(filter) {
-  if (!filter) {
-    return availableCommands;
+  const isDiscussionMode = state.conversation.mode === 'discussion';
+
+  let commands = availableCommands;
+
+  if (!isDiscussionMode) {
+    commands = commands.filter(cmd => cmd.name !== '/loop');
   }
-  return availableCommands.filter(cmd => cmd.name.toLowerCase().includes(filter));
+
+  if (!filter) {
+    return commands;
+  }
+  return commands.filter(cmd => cmd.name.toLowerCase().includes(filter));
 }
 
 function showCommandSuggestions(filter = '') {

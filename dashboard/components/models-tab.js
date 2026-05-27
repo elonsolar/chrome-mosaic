@@ -32,24 +32,13 @@ class ModelsTab {
     container.innerHTML = `
       <div class="platforms-page">
         <div class="page-toolbar">
-          <div class="page-toolbar-left">
-            <div class="search-box">
-              <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg>
-              <input type="text" id="platformSearchInput" placeholder="搜索平台...">
-              <button class="clear-btn" id="clearPlatformSearch" style="display: none;">&times;</button>
-            </div>
-          </div>
-          <div class="page-toolbar-right">
-            <button class="btn btn-primary" id="createPlatformBtn">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <line x1="12" y1="5" x2="12" y2="19"></line>
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-              </svg>
-              <span>新增平台</span>
-            </button>
+          <div class="search-box">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" id="platformSearchInput" placeholder="搜索平台...">
+            <button class="clear-btn" id="clearPlatformSearch" style="display: none;">&times;</button>
           </div>
         </div>
 
@@ -57,6 +46,13 @@ class ModelsTab {
           <div class="platforms-list-section">
             <div class="platforms-list" id="platformsList">
             </div>
+            <button class="platform-add-btn" id="createPlatformBtn" title="新增平台">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <span>添加平台</span>
+            </button>
           </div>
 
           <div class="platforms-detail-section">
@@ -206,9 +202,15 @@ class ModelsTab {
   }
 
   selectInitialPlatform() {
-    // 尝试从localStorage获取上次选择的平台
-    const lastSelectedPlatformId = localStorage.getItem('lastSelectedPlatformId');
+    // 默认选择网页平台
+    const webPlatform = this.platforms.find(p => p.isBuiltin || p.platformName === '网页');
+    if (webPlatform) {
+      this.selectPlatform(webPlatform.id);
+      return;
+    }
 
+    // 如果没有网页平台，尝试从localStorage获取上次选择的平台
+    const lastSelectedPlatformId = localStorage.getItem('lastSelectedPlatformId');
     if (lastSelectedPlatformId) {
       const platform = this.platforms.find(p => p.id === lastSelectedPlatformId);
       if (platform) {
@@ -217,10 +219,9 @@ class ModelsTab {
       }
     }
 
-    // 默认选择网页平台
-    const webPlatform = this.platforms.find(p => p.isBuiltin);
-    if (webPlatform) {
-      this.selectPlatform(webPlatform.id);
+    // 如果都没有，选择第一个平台
+    if (this.platforms.length > 0) {
+      this.selectPlatform(this.platforms[0].id);
     }
   }
 
@@ -308,7 +309,6 @@ class ModelsTab {
               <h5 class="config-form-title">使用提示</h5>
             </div>
             <div class="usage-tips">
-              <p><strong>重要提示：</strong></p>
               <ul>
                 <li>使用前请先在浏览器中登录对应的 AI 网站</li>
                 <li>插件会在后台打开 AI 网站标签页进行操作</li>
@@ -324,8 +324,13 @@ class ModelsTab {
             ${models && models.length > 0 ? models.map(model => `
               <div class="api-model-item" data-model-id="${model.id}">
                 <div class="api-model-info">
-                  <div class="api-model-avatar" style="background:${this.getModelColor(model.code)}">${this.getModelInitial(model.code)}</div>
-                  <div class="api-model-name">${this.escapeHtml(model.code)}</div>
+                  <div class="api-model-main">
+                    <div class="api-model-avatar" style="background:${this.getModelColor(model.code)}">${this.getModelInitial(model.code)}</div>
+                    <div class="api-model-name">${this.escapeHtml(model.code)}</div>
+                  </div>
+                  ${model.webUrl ? `
+                    <a href="${this.escapeHtml(model.webUrl)}" target="_blank" class="api-model-url" title="${this.escapeHtml(model.webUrl)}">${this.escapeHtml(model.webUrl)}</a>
+                  ` : ''}
                 </div>
                 <div class="api-model-actions">
                   <label class="switch toggle-model-switch">
@@ -377,8 +382,10 @@ class ModelsTab {
             ${models && models.length > 0 ? models.map(model => `
               <div class="api-model-item" data-model-id="${model.id}">
                 <div class="api-model-info">
-                  <div class="api-model-avatar" style="background:${this.getModelColor(model.code)}">${this.getModelInitial(model.code)}</div>
-                  <div class="api-model-name">${this.escapeHtml(model.code)}</div>
+                  <div class="api-model-main">
+                    <div class="api-model-avatar" style="background:${this.getModelColor(model.code)}">${this.getModelInitial(model.code)}</div>
+                    <div class="api-model-name">${this.escapeHtml(model.code)}</div>
+                  </div>
                 </div>
                 <div class="api-model-actions">
                   <label class="switch toggle-model-switch">
@@ -548,23 +555,19 @@ class ModelsTab {
     modal.className = 'modal';
     modal.id = 'createPlatformModal';
     modal.innerHTML = `
-      <div class="modal-content">
+      <div class="modal-content" style="max-width: 420px;">
         <div class="modal-header">
           <h3>添加平台</h3>
           <button class="close-btn" id="closeCreatePlatformModal">×</button>
         </div>
         <div class="modal-body">
-          <p style="margin-bottom: 16px; color: #666;">选择要添加的平台：</p>
-          <div class="platforms-grid" id="platformsGrid">
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label for="platformNameInput" style="display:block; margin-bottom: 8px; font-weight: 500;">平台名称</label>
+            <input type="text" id="platformNameInput" class="form-input" placeholder="例如：阿里百炼" style="width: 100%;">
           </div>
-          <div class="custom-platform-form" id="customPlatformForm" style="display:none; margin-top: 16px;">
-            <hr style="margin-bottom: 16px;">
-            <label for="customPlatformName" style="display:block; margin-bottom: 8px; font-weight: 500;">自定义平台名称：</label>
-            <div style="display:flex; gap:8px;">
-              <input type="text" id="customPlatformName" class="form-input" placeholder="例如：Google AI" style="flex:1;">
-              <button class="btn btn-primary" id="confirmCustomPlatform">添加</button>
-              <button class="btn" id="cancelCustomPlatform">取消</button>
-            </div>
+          <div style="display: flex; gap: 8px; justify-content: flex-end;">
+            <button class="btn" id="cancelCreatePlatform">取消</button>
+            <button class="btn btn-primary" id="confirmCreatePlatform">添加</button>
           </div>
         </div>
       </div>
@@ -572,98 +575,53 @@ class ModelsTab {
 
     document.body.appendChild(modal);
 
-    const availablePlatforms = this.getAvailablePlatforms();
-    const platformsGrid = modal.querySelector('#platformsGrid');
-    platformsGrid.innerHTML = availablePlatforms.map(platform => {
-      const isAdded = this.platforms.some(p => p.providerId === platform.id);
-      return `
-        <div class="platform-option ${isAdded ? 'disabled' : ''}" data-platform-id="${platform.id}">
-          <div class="platform-option-icon" style="background-color: ${platform.color}20;">
-            <span style="font-size: 24px;">${platform.id === 'custom' ? '➕' : '🤖'}</span>
-          </div>
-          <div class="platform-option-info">
-            <div class="platform-option-name">${this.escapeHtml(platform.name)}</div>
-            ${isAdded ? '<div class="platform-option-status">已添加</div>' : ''}
-          </div>
-        </div>
-      `;
-    }).join('');
+    const input = modal.querySelector('#platformNameInput');
+    const confirmBtn = modal.querySelector('#confirmCreatePlatform');
 
-    modal.querySelector('#closeCreatePlatformModal').addEventListener('click', () => {
-      modal.remove();
-    });
+    modal.querySelector('#closeCreatePlatformModal').addEventListener('click', () => modal.remove());
+    modal.querySelector('#cancelCreatePlatform').addEventListener('click', () => modal.remove());
 
     modal.addEventListener('click', (e) => {
-      if (e.target === modal) {
-        modal.remove();
-      }
+      if (e.target === modal) modal.remove();
     });
 
-    platformsGrid.querySelectorAll('.platform-option').forEach(option => {
-      if (!option.classList.contains('disabled')) {
-        option.addEventListener('click', () => {
-          const platformId = option.dataset.platformId;
-          if (platformId === 'custom') {
-            document.getElementById('customPlatformForm').style.display = 'block';
-          } else {
-            this.createPlatform(platformId);
-            modal.remove();
-          }
-        });
-      }
-    });
-
-    modal.querySelector('#confirmCustomPlatform').addEventListener('click', () => {
-      const name = document.getElementById('customPlatformName').value.trim();
+    const confirm = () => {
+      const name = input.value.trim();
       if (!name) {
         alert('请输入平台名称');
         return;
       }
-      this.createPlatform('custom', name);
+      this.createPlatform(name);
       modal.remove();
+    };
+
+    confirmBtn.addEventListener('click', confirm);
+    input.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') confirm();
     });
 
-    modal.querySelector('#cancelCustomPlatform').addEventListener('click', () => {
-      document.getElementById('customPlatformForm').style.display = 'none';
-    });
-
-    setTimeout(() => modal.classList.add('active'), 10);
+    setTimeout(() => {
+      modal.classList.add('active');
+      input.focus();
+    }, 10);
   }
 
-  getAvailablePlatforms() {
-    return [
-      { id: 'deepseek', name: 'DeepSeek', color: '#4f46e5' },
-      { id: 'doubao', name: '豆包', color: '#0891b2' },
-      { id: 'qianwen', name: '千问', color: '#7c3aed' },
-      { id: 'kimi', name: 'Kimi', color: '#6366f1' },
-      { id: 'openai', name: 'OpenAI', color: '#10a37f' },
-      { id: 'anthropic', name: 'Anthropic', color: '#d97706' },
-      { id: 'zhipu', name: '智谱', color: '#2563eb' },
-      { id: 'custom', name: '自定义', color: '#6b7280' }
-    ];
-  }
 
-  async createPlatform(providerId, customName) {
-    const platformConfig = this.getAvailablePlatforms().find(p => p.id === providerId);
-    if (!platformConfig && providerId !== 'custom') {
-      console.error('[ModelsTab] 平台配置不存在:', providerId);
-      return;
-    }
-    if (providerId === 'custom' && !customName) {
-      console.error('[ModelsTab] 自定义平台名称不能为空');
+
+  async createPlatform(name) {
+    if (!name) {
+      console.error('[ModelsTab] 平台名称不能为空');
       return;
     }
 
-    console.log('[ModelsTab] 创建平台:', providerId, customName || '');
+    console.log('[ModelsTab] 创建平台:', name);
 
     try {
-      const platformName = providerId === 'custom' ? customName : platformConfig.name;
-
       const response = await chrome.runtime.sendMessage({
         action: 'createPlatform',
         data: {
-          providerId,
-          platformName,
+          providerId: 'custom',
+          platformName: name,
           baseUrl: '',
           apiKey: ''
         }

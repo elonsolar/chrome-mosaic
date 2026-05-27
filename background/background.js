@@ -605,7 +605,7 @@ class AIMessageManager {
 
   async deletePlatformConversation(conversationUrl) {
     try {
-      const tab = await this.tabManager.openPlatformTab(conversationUrl, true);
+      const tab = await this.tabManager.openPlatformTab(conversationUrl, false);
       
       await new Promise(resolve => setTimeout(resolve, 2000));
 
@@ -637,6 +637,14 @@ class AIMessageManager {
       }
 
       console.log(`[AIMessageManager] 平台会话删除成功`);
+
+      try {
+        await chrome.tabs.remove(tab.id);
+        console.log(`[AIMessageManager] 已关闭删除操作标签页`);
+      } catch (closeError) {
+        console.warn(`[AIMessageManager] 关闭标签页失败（可能已被用户关闭）:`, closeError.message);
+      }
+
       return true;
     } catch (error) {
       console.error(`[AIMessageManager] 删除平台会话失败:`, error);
@@ -914,6 +922,15 @@ class ConversationManager {
       const conversation = conversations.find(c => c.id === conversationId);
 
       if (conversation) {
+        // 获取成员名称快照
+        let memberName = null;
+        if (memberId) {
+          const member = conversation.members.find(m => m.id === memberId);
+          if (member) {
+            memberName = member.name;
+          }
+        }
+
         const message = {
           id: this.generateId(),
           memberId,
@@ -921,13 +938,18 @@ class ConversationManager {
           timestamp: Date.now()
         };
 
-        // 根据 msgType 设置消息类型
+        // 保存成员名称快照（用于成员离开后显示历史消息）
+        if (memberName) {
+          message.memberName = memberName;
+        }
+
+        message.type = msgType;
+
         if (msgType === MessageType.USER) {
           message.isUser = true;
         } else if (msgType === MessageType.INTRO) {
           message.isIntro = true;
         } else if (msgType === MessageType.TIP) {
-          message.type = 'tip';
           message.isTip = true;
         }
 
@@ -1370,7 +1392,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       (async () => {
         try {
           const conversation = await conversationManager.getConversation(request.conversationId);
-          const memberUrls = conversation.memberUrls || {};
+          const memberUrls = request.memberUrls || conversation.memberUrls || {};
           const deletedConversations = [];
 
           if (Object.keys(memberUrls).length > 0) {
@@ -1403,6 +1425,112 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
       })();
       return false;
+
+    case 'startLoopDiscussion':
+      (async () => {
+        try {
+          const { problemDesc, maxIterations } = request;
+          const conversationId = request.conversationId;
+
+          console.log(`[Background] 启动多轮讨论: ${problemDesc || '(继续当前讨论)'}, 最多 ${maxIterations} 轮`);
+
+          const conversation = await conversationManager.getConversation(conversationId);
+
+          if (!conversation || conversation.members.length === 0) {
+            throw new Error('请先添加成员');
+          }
+
+          const hasUserMessages = conversation.messages && conversation.messages.some(msg => msg.type === MessageType.USER);
+
+          if (!problemDesc && !hasUserMessages) {
+            throw new Error('当前会话中没有用户消息，请提供问题描述');
+          }
+
+          sendResponse({
+            success: true,
+            message: problemDesc ? `多轮讨论已启动：${problemDesc}` : '多轮讨论已启动'
+          });
+
+          if (problemDesc) {
+            console.log(`[Background] 发送用户问题: ${problemDesc}`);
+            const userMsg = await conversationManager.addMessage(conversationId, null, problemDesc, MessageType.USER);
+            conversation.messages.push(userMsg);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+
+          const context = new ConversationContext(conversation);
+          const entities = await entityFactory.createEntitiesFromConversation(conversation);
+
+          for (let round = 1; round <= maxIterations; round++) {
+            console.log(`[Background] ========== 第 ${round} 轮开始 ==========`);
+
+            // 发送轮次进度消息到 chat
+            chrome.runtime.sendMessage({
+              type: 'loopDiscussionProgress',
+              conversationId,
+              currentRound: round,
+              totalRounds: maxIterations
+            });
+
+            for (const entity of entities) {
+              console.log(`[Background] 触发成员 ${entity.name} 发送消息`);
+              try {
+                const result = await entity.execute('INLOOP', context);
+
+                if (result.success && result.content) {
+                  const message = await conversationManager.addMessage(
+                    conversationId,
+                    result.memberId,
+                    result.content
+                  );
+
+                  if (message && message.id) {
+                    context.memberLastMessageIds[result.memberId] = message.id;
+                    conversation.messages.push(message);
+                    await conversationManager.updateConversation(conversationId, {
+                      memberLastMessageIds: context.memberLastMessageIds
+                    });
+                  }
+                }
+
+                await new Promise(resolve => setTimeout(resolve, 2000));
+              } catch (error) {
+                console.error(`[Background] 成员 ${entity.name} 发送消息失败:`, error);
+              }
+            }
+
+            console.log(`[Background] ========== 第 ${round} 轮完成 ==========`);
+
+            if (round < maxIterations) {
+              await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+          }
+
+          console.log(`[Background] ========== 多轮讨论完成（共 ${maxIterations} 轮）==========`);
+
+          chrome.runtime.sendMessage({
+            type: 'loopDiscussionComplete',
+            conversationId,
+            success: true,
+            rounds: maxIterations
+          });
+
+        } catch (error) {
+          console.error('[Background] 启动多轮讨论失败:', error);
+          sendResponse({
+            success: false,
+            error: error.message
+          });
+
+          chrome.runtime.sendMessage({
+            type: 'loopDiscussionComplete',
+            conversationId,
+            success: false,
+            error: error.message
+          });
+        }
+      })();
+      return true;
 
     case 'addMessage':
       aiMessageManager.processUserMessage(request.conversationId, request.content)
@@ -1459,6 +1587,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // ========== 新架构：提示词管理 ==========
     case 'getPrompts':
       promptManager.getPrompts().then(sendResponse);
+      return true;
+
+    case 'initializeBuiltinPrompts':
+      initializeBuiltinPrompts().then(() => sendResponse({ success: true }));
       return true;
 
     case 'getPromptById':
@@ -2030,6 +2162,84 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   } catch (error) {
     console.error('[Background] 清理 memberTabIds 失败:', error);
   }
+});
+
+// 内置提示词定义
+const BUILTIN_PROMPTS = [
+  {
+    id: 'builtin-code-review',
+    name: '代码审查',
+    content: '请审查以下代码，重点关注：\n1. 代码质量和可读性\n2. 潜在的 bug 和边界情况\n3. 性能优化机会\n4. 安全性问题\n5. 最佳实践建议\n\n请提供具体的改进建议，并说明理由。',
+    tags: ['代码审查', '质量', '编程'],
+    isBuiltin: true
+  },
+  {
+    id: 'builtin-writing-polish',
+    name: '文章润色',
+    content: '请帮我润色以下文本，使其更加清晰、准确、流畅。保持原意不变，优化表达方式和逻辑结构。提供修改前后的对比说明。',
+    tags: ['润色', '编辑', '写作'],
+    isBuiltin: true
+  },
+  {
+    id: 'builtin-translation',
+    name: '专业翻译',
+    content: '请将以下文本翻译成目标语言，确保：\n1. 准确传达原意\n2. 符合目标语言的表达习惯\n3. 保持原文的语气和风格\n4. 专业术语准确\n\n如有歧义，请提供多种翻译选项并说明差异。',
+    tags: ['翻译', '多语言'],
+    isBuiltin: true
+  },
+  {
+    id: 'builtin-analysis',
+    name: '逻辑分析',
+    content: '请对以下内容进行深入分析：\n1. 核心观点和论据\n2. 逻辑结构和推理过程\n3. 潜在的假设和偏见\n4. 优势和不足\n5. 改进建议\n\n提供客观、结构化的分析结果。',
+    tags: ['分析', '逻辑'],
+    isBuiltin: true
+  },
+  {
+    id: 'builtin-creative',
+    name: '创意写作',
+    content: '请基于以下主题进行创意写作。要求：\n1. 构思新颖，视角独特\n2. 情节或观点引人入胜\n3. 语言生动，富有感染力\n4. 结构完整，逻辑自洽\n\n发挥创造力，打破常规思维。',
+    tags: ['创意', '写作'],
+    isBuiltin: true
+  },
+  {
+    id: 'builtin-problem-solving',
+    name: '问题解决',
+    content: '请帮我分析并解决以下问题。步骤：\n1. 明确问题本质和目标\n2. 分析根本原因\n3. 提出多个解决方案\n4. 评估各方案的优劣\n5. 给出最佳方案和实施步骤\n\n请提供系统性的解决方案。',
+    tags: ['问题解决', '方法论'],
+    isBuiltin: true
+  }
+];
+
+// 初始化内置提示词
+async function initializeBuiltinPrompts() {
+  try {
+    const existingPrompts = await promptManager.getPrompts();
+    const existingBuiltinIds = existingPrompts.filter(p => p.isBuiltin).map(p => p.id);
+    
+    // 只添加不存在的内置提示词
+    for (const builtin of BUILTIN_PROMPTS) {
+      if (!existingBuiltinIds.includes(builtin.id)) {
+        await promptManager.createPrompt(builtin);
+        console.log('[Background] 初始化内置提示词:', builtin.name);
+      }
+    }
+  } catch (error) {
+    console.error('[Background] 初始化内置提示词失败:', error);
+  }
+}
+
+// 插件安装时初始化
+chrome.runtime.onInstalled.addListener(async (details) => {
+  if (details.reason === 'install') {
+    console.log('[Background] 插件首次安装，初始化内置提示词');
+    await initializeBuiltinPrompts();
+  }
+});
+
+// 启动时也检查一次（防止升级或其他情况）
+chrome.runtime.onStartup.addListener(async () => {
+  console.log('[Background] 插件启动，检查内置提示词');
+  await initializeBuiltinPrompts();
 });
 
 init();

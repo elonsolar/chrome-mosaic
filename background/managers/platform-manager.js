@@ -3,10 +3,10 @@
  * 管理AI平台配置（平台级：包含API配置、网页模型、API模型列表）
  */
 const BUILTIN_WEB_URLS = {
-  deepseek: 'https://chat.deepseek.com/',
-  doubao: 'https://www.doubao.com/chat/',
-  qianwen: 'https://www.qianwen.com/chat',
-  kimi: 'https://kimi.moonshot.cn/',
+  'deepseek': 'https://chat.deepseek.com/',
+  'doubao': 'https://www.doubao.com/chat/',
+  'qianwen': 'https://www.qianwen.com/chat',
+  'kimi': 'https://kimi.moonshot.cn/',
 };
 
 class PlatformManager {
@@ -22,6 +22,13 @@ class PlatformManager {
   }
 
   /**
+   * 生成平台提供商唯一ID
+   */
+  generateProviderId() {
+    return 'custom-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
+  }
+
+  /**
    * 生成模型唯一ID
    */
   generateModelId() {
@@ -34,12 +41,17 @@ class PlatformManager {
   getPlatformColor(platformName) {
     const colors = {
       '网页': '#10b981',        // green
+      '阿里百炼': '#f97316',    // orange
+      '智谱': '#2563eb',        // blue
+      '深度求索': '#4f46e5',    // indigo
+      '月之暗面': '#6366f1',    // violet
+      'Ollama': '#6b7280',      // gray
       'OpenAI': '#00a67e',      // green
+      'Anthropic': '#d97706',   // orange
       'DeepSeek': '#4f6ef7',    // blue
       'Kimi': '#6366f1',        // indigo
       '豆包': '#f59e0b',        // amber
       '千问': '#8b5cf6',        // purple
-      '智谱': '#ec4899',        // pink
       'Claude': '#d97706',      // orange
       'Gemini': '#06b6d4',      // cyan
       'default': '#667eea'      // default purple
@@ -116,14 +128,89 @@ class PlatformManager {
 
     const webPlatform = {
       id: this.generateId(),
+      providerId: 'web',
       platformName: '网页',
       isWeb: true,
+      isBuiltin: true,
       color: this.getPlatformColor('网页'),
       models: models
     };
 
-    await this.savePlatforms([webPlatform]);
     return webPlatform;
+  }
+
+  /**
+   * 创建内置API平台
+   */
+  createBuiltinAPIPlatforms() {
+    return [
+      {
+        id: this.generateId(),
+        providerId: 'ali-bailian',
+        platformName: '阿里百炼',
+        isWeb: false,
+        isBuiltin: true,
+        color: this.getPlatformColor('阿里百炼'),
+        baseUrl: '',
+        apiKey: '',
+        models: []
+      },
+      {
+        id: this.generateId(),
+        providerId: 'zhipu',
+        platformName: '智谱',
+        isWeb: false,
+        isBuiltin: true,
+        color: this.getPlatformColor('智谱'),
+        baseUrl: '',
+        apiKey: '',
+        models: []
+      },
+      {
+        id: this.generateId(),
+        providerId: 'deepseek',
+        platformName: '深度求索',
+        isWeb: false,
+        isBuiltin: true,
+        color: this.getPlatformColor('深度求索'),
+        baseUrl: '',
+        apiKey: '',
+        models: []
+      },
+      {
+        id: this.generateId(),
+        providerId: 'moonshot',
+        platformName: '月之暗面',
+        isWeb: false,
+        isBuiltin: true,
+        color: this.getPlatformColor('月之暗面'),
+        baseUrl: '',
+        apiKey: '',
+        models: []
+      },
+      {
+        id: this.generateId(),
+        providerId: 'ollama',
+        platformName: 'Ollama',
+        isWeb: false,
+        isBuiltin: true,
+        color: this.getPlatformColor('Ollama'),
+        baseUrl: 'http://localhost:11434/v1',
+        apiKey: '',
+        models: []
+      }
+    ];
+  }
+
+  /**
+   * 创建所有内置平台
+   */
+  async createBuiltinPlatforms() {
+    const webPlatform = await this.createBuiltinWebPlatform();
+    const apiPlatforms = this.createBuiltinAPIPlatforms();
+    const allPlatforms = [webPlatform, ...apiPlatforms];
+    await this.savePlatforms(allPlatforms);
+    return allPlatforms;
   }
 
   /**
@@ -132,8 +219,8 @@ class PlatformManager {
   async initialize() {
     const platforms = await this.getPlatforms();
     if (platforms.length === 0) {
-      console.log('[PlatformManager] 首次安装，创建内置网页平台');
-      await this.createBuiltinWebPlatform();
+      console.log('[PlatformManager] 首次安装，创建内置平台');
+      await this.createBuiltinPlatforms();
     } else {
       console.log('[PlatformManager] 平台数据已存在');
       // 数据迁移：确保所有平台都有有效的 models 字段
@@ -178,8 +265,8 @@ class PlatformManager {
    * 支持预定义平台和自定义平台
    */
   async createPlatform(data) {
-    const { providerId, providerName, baseUrl, apiKey } = data;
-    const name = providerName || providerId || '未命名平台';
+    const { providerId, platformName, baseUrl, apiKey } = data;
+    const name = platformName || providerId || '未命名平台';
 
     const platforms = await this.getPlatforms();
 
@@ -189,8 +276,14 @@ class PlatformManager {
       throw new Error('该平台已存在');
     }
 
+    // 如果是自定义平台或没有提供 providerId，则生成唯一的
+    const finalProviderId = (!providerId || providerId === 'custom')
+      ? this.generateProviderId()
+      : providerId;
+
     const newPlatform = {
       id: this.generateId(),
+      providerId: finalProviderId,
       platformName: name,
       isWeb: false,
       color: this.getPlatformColor(name),

@@ -1,5 +1,6 @@
 ﻿:root {
   --primary: #3B82F6;
+  --primary-color: #3B82F6;
   --primary-dark: #2563EB;
   --danger: #EF4444;
   --success: #10B981;
@@ -4492,4 +4493,48 @@ body.dark-mode .input-container {
   border-bottom-style: solid;
   opacity: 0.8;
 }
+
+/* ========== 多轮讨论进度 ========== */
+.loop-progress {
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+  margin: 8px 0;
+}
+
+.loop-progress-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.loop-progress-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border-color);
+  border-top: 2px solid var(--primary-color);
+  border-radius: 50%;
+  animation: loopSpin 1s linear infinite;
+}
+
+@keyframes loopSpin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.loop-progress-text {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
 
