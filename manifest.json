@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Free AI",
+  "name": "Mosaic",
   "version": "1.1.5",
-  "description": "集成多个大模型，支持提示词管理和会话管理的AI对话助手",
+  "description": "多平台 AI 模型协作工具，统一管理多个 AI 平台，支持多模型协作对话、流程编排和提示词管理",
   "permissions": [
     "storage",
     "activeTab",

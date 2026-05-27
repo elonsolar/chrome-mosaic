@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FreeAI</title>
+  <title>Mosaic</title>
   <link rel="icon" type="image/svg+xml" href="../icons/icon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../styles/dashboard.css">
-  <link rel="stylesheet" href="../styles/models-tab.css">
+  <link rel="stylesheet" href="../styles/dashboard.css?v=2">
+  <link rel="stylesheet" href="../styles/models-tab.css?v=2">
 </head>
 <body>
   <div class="dashboard-layout">
@@ -18,10 +18,24 @@
       <div class="sidebar-header">
         <div class="sidebar-logo">
           <svg class="sidebar-logo-icon" width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect width="22" height="22" rx="6" fill="#3964FE"/>
-            <path d="M11 5C11 5 12 10 15.5 11C12 12 11 17 11 17C11 17 10 12 6.5 11C10 10 11 5 11 5Z" fill="white"/>
+            <defs>
+              <linearGradient id="grad1-sm-dashboard" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+              </linearGradient>
+              <linearGradient id="grad2-sm-dashboard" x1="100%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" style="stop-color:#f093fb;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#f5576c;stop-opacity:1" />
+              </linearGradient>
+            </defs>
+            <rect width="22" height="22" rx="6" fill="#1a1a2e"/>
+            <rect x="2" y="2" width="8" height="8" rx="2" fill="url(#grad1-sm-dashboard)"/>
+            <rect x="12" y="2" width="8" height="8" rx="2" fill="url(#grad2-sm-dashboard)"/>
+            <rect x="2" y="12" width="8" height="8" rx="2" fill="#4facfe"/>
+            <rect x="12" y="12" width="8" height="8" rx="2" fill="#43e97b"/>
+            <path d="M11 5C11 5 12 10 15.5 11C12 12 11 17 11 17C11 17 10 12 6.5 11C10 10 11 5 11 5Z" fill="white" opacity="0.9"/>
           </svg>
-          <span class="sidebar-logo-text">FreeAI</span>
+          <span class="sidebar-logo-text">Mosaic</span>
         </div>
         <p class="sidebar-subtitle"></p>
       </div>
@@ -57,6 +71,7 @@
           </span>
           <span class="nav-label">专家</span>
         </a>
+        <!-- 设置菜单 - 暂时注释
         <a href="#settings" class="nav-item" data-page="settings">
           <span class="nav-icon">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -66,6 +81,7 @@
           </span>
           <span class="nav-label">设置</span>
         </a>
+        -->
       </div>
 
       <div class="sidebar-footer">

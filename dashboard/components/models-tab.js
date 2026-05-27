@@ -303,6 +303,22 @@ class ModelsTab {
     if (isWeb) {
       this.elements.platformsDetail.innerHTML = `
         <div class="platform-detail-section">
+          <div class="api-config-form">
+            <div class="config-form-header">
+              <h5 class="config-form-title">使用提示</h5>
+            </div>
+            <div class="usage-tips">
+              <p><strong>重要提示：</strong></p>
+              <ul>
+                <li>使用前请先在浏览器中登录对应的 AI 网站</li>
+                <li>插件会在后台打开 AI 网站标签页进行操作</li>
+                <li>请勿关闭 AI 网站标签页，否则无法发送消息</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="platform-detail-section">
           <h4>模型</h4>
           <div class="api-models-list">
             ${models && models.length > 0 ? models.map(model => `

@@ -135,10 +135,6 @@ body {
   flex-shrink: 0;
 }
 
-.sidebar-logo-icon rect {
-  fill: #3964FE;
-}
-
 .sidebar-logo-text {
   color: var(--text-primary);
   font-family: 'Quicksand', 'Nunito', 'PingFang SC', 'Microsoft YaHei', sans-serif;

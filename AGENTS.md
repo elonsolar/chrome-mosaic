@@ -1,4 +1,4 @@
-# Project Context: Free AI Extension Refactoring
+# Project Context: Mosaic Extension Refactoring
 
 ## Goal
 Refactor model configuration to platform-level architecture (baseUrl/apiKey configured once per platform, not per model)

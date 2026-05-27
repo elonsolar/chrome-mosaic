@@ -1,7 +1,7 @@
 {
-  "name": "open-chat-server",
+  "name": "mosaic-server",
   "version": "1.0.0",
-  "description": "WebSocket服务器，用于接收Edge浏览器插件的消息",
+  "description": "Mosaic WebSocket服务器，用于集成到开发工具",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -10,8 +10,9 @@
   },
   "keywords": [
     "websocket",
-    "edge-extension",
-    "ai-chat"
+    "browser-extension",
+    "ai-chat",
+    "mosaic"
   ],
   "author": "",
   "license": "MIT",

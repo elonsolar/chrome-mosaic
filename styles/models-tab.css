@@ -631,3 +631,35 @@ body.dark-mode .platform-detail-card {
   background: var(--bg-primary, #2a2a2a);
   border-color: var(--border-color, #3a3a3a);
 }
+
+/* ========== 使用提示 ========== */
+.usage-tips {
+  font-size: 13px;
+  color: #4B5563;
+  line-height: 1.6;
+}
+
+.usage-tips p {
+  margin: 0 0 12px;
+  color: #374151;
+}
+
+.usage-tips strong {
+  color: #111827;
+  font-weight: 600;
+}
+
+.usage-tips ul {
+  margin: 0;
+  padding-left: 20px;
+  list-style: disc;
+}
+
+.usage-tips li {
+  margin-bottom: 8px;
+  color: #6B7280;
+}
+
+.usage-tips li:last-child {
+  margin-bottom: 0;
+}

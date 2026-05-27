@@ -561,7 +561,7 @@ class PromptsTab {
 
     const a = document.createElement('a');
     a.href = url;
-    a.download = `free-ai-prompts-${Date.now()}.json`;
+    a.download = `mosaic-prompts-${Date.now()}.json`;
     a.click();
 
     URL.revokeObjectURL(url);
