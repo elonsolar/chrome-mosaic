@@ -1149,6 +1149,23 @@ body.dark-mode .input-container {
   opacity: 0.7;
 }
 
+/* 系统提示消息 - 类似微信 */
+.tip-message {
+  justify-content: center;
+  padding: 8px 24px;
+  margin: 16px 0;
+}
+
+.tip-content {
+  font-size: 12px;
+  color: #999;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 4px 12px;
+  border-radius: 4px;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .ai-message {
   padding-left: 24px;
 }
@@ -1478,6 +1495,118 @@ body.dark-mode .input-container {
     transform: scale(1);
     opacity: 1;
   }
+}
+
+/* ========== 专家模式进度条 ========== */
+
+/* 专家头像跳动动画 */
+.expert-avatar-thinking {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.9;
+  }
+}
+
+/* 执行中徽章 */
+.expert-status-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: #10B981;
+  color: white;
+  border-radius: 10px;
+  animation: badgePulse 2s ease-in-out infinite;
+}
+
+@keyframes badgePulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+/* 思考文本 + 动画 */
+.expert-thinking-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+.thinking-dots-inline {
+  display: flex;
+  gap: 4px;
+}
+
+.thinking-dots-inline .thinking-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--primary);
+  border-radius: 50%;
+  animation: dotBounce 1.4s ease-in-out infinite;
+}
+
+.thinking-dots-inline .thinking-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.thinking-dots-inline .thinking-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+.thinking-text {
+  font-size: 13px;
+  color: #6B7280;
+}
+
+/* 进度条容器 */
+.expert-progress-bar-wrapper {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.expert-progress-bar {
+  flex: 1;
+  height: 6px;
+  background: #E5E7EB;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.expert-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), #8B5CF6);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.expert-progress-text {
+  font-size: 11px;
+  color: #6B7280;
+  white-space: nowrap;
+}
+
+/* 错误状态样式 */
+.error-avatar {
+  background: #FEE2E2 !important;
+  color: #DC2626 !important;
+}
+
+.error-message-text {
+  background: #FEF2F2 !important;
+  border-color: #FECACA !important;
+  color: #DC2626;
 }
 
 .input-container {
@@ -4270,4 +4399,97 @@ body.dark-mode .input-container {
   margin-top: 8px;
 }
 
+
+/* ========== 会话信息面板 - 添加/移除成员按钮 ========== */
+
+.add-member-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  margin-top: 8px;
+  background: #F8F9FA;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.add-member-card:hover {
+  background: #F0F1F3;
+}
+
+.add-member-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #E5E7EB;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.add-member-card:hover .add-member-avatar {
+  background: #D1D5DB;
+  color: var(--primary-color);
+}
+
+.add-member-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.add-member-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.add-member-card:hover .add-member-name {
+  color: var(--primary-color);
+}
+
+.remove-member-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.remove-member-btn:hover {
+  background: #FEF2F2;
+  color: #DC2626;
+}
+
+.remove-member-btn:active {
+  transform: scale(0.95);
+}
+
+
+.tip-link {
+  color: var(--primary-color);
+  text-decoration: none;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 1px dashed var(--primary-color);
+  transition: all 0.2s ease;
+}
+
+.tip-link:hover {
+  color: var(--primary-color);
+  border-bottom-style: solid;
+  opacity: 0.8;
+}
 

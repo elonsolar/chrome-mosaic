@@ -192,44 +192,14 @@
           </div>
 
           <div class="form-group" id="memberGroup">
-            <div class="member-actions-header">
-              <div class="form-label">会话成员 <span style="color: #ff3b30;">*</span></div>
-              <button type="button" class="btn-link" id="convCreateMemberBtn">
-                <span class="btn-icon">+</span> 创建新成员
-              </button>
-            </div>
-            <div class="members-selector" id="convMemberSelector">
-              <div class="empty-state" style="padding: 16px; text-align: center; color: #86868b;">
-                <p style="margin: 0; font-size: 13px;">正在加载模型...</p>
+            <div class="form-label">成员数量 <span style="color: #ff3b30;">*</span></div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <input type="range" id="memberCountSlider" class="slider" min="1" max="6" value="3" style="flex: 1;">
+              <div style="background: #f5f5f7; padding: 8px 16px; border-radius: 8px; min-width: 60px; text-align: center; font-weight: 600; color: #1d1d1f;">
+                <span id="memberCountValue">3</span> 人
               </div>
             </div>
-
-            <div class="inline-form-container" id="convInlineMemberForm" style="display:none;">
-              <div class="inline-form-body">
-                <div class="form-group">
-                  <label for="convNewMemberName">成员名称 <span style="color: #ff3b30;">*</span></label>
-                  <input type="text" id="convNewMemberName" class="form-input" placeholder="例如：Python 专家助手" autocomplete="off">
-                </div>
-                <div class="form-group">
-                  <label for="convNewMemberModel">选择模型 <span style="color: #ff3b30;">*</span></label>
-                  <select id="convNewMemberModel" class="form-select">
-                    <option value="">请选择模型...</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label for="convNewMemberPrompt">选择提示词 <span class="optional">(可选)</span></label>
-                  <select id="convNewMemberPrompt" class="form-select">
-                    <option value="">无提示词</option>
-                  </select>
-                </div>
-                <div class="inline-form-actions">
-                  <button type="button" class="btn btn-secondary" id="convCancelInlineBtn">取消</button>
-                  <button type="button" class="btn btn-primary" id="convSaveInlineBtn">
-                    <span>✨</span> 添加
-                  </button>
-                </div>
-              </div>
-            </div>
+            <small class="form-hint">系统将自动生成成员并分配随机昵称和默认模型</small>
           </div>
         </form>
       </div>
@@ -275,6 +245,42 @@
     </div>
   </div>
 
+  <!-- 成员配置模态框 -->
+  <div class="modal-overlay" id="memberConfigModal">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2 id="memberConfigModalTitle">配置成员</h2>
+        <button class="modal-close" id="closeMemberConfigBtn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="memberConfigForm">
+          <div class="form-group">
+            <label for="memberConfigName">成员名称</label>
+            <input type="text" id="memberConfigName" class="form-input" placeholder="成员名称" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label for="memberConfigModel">选择模型</label>
+            <select id="memberConfigModel" class="form-select">
+              <option value="">请选择模型...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="memberConfigPrompt">选择提示词 <span class="optional">(可选)</span></label>
+            <select id="memberConfigPrompt" class="form-select">
+              <option value="">无提示词</option>
+            </select>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancelMemberConfigBtn">取消</button>
+        <button class="btn btn-primary" id="saveMemberConfigBtn">
+          <span>✓</span> 保存
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- 会话信息侧边栏 -->
   <div class="conversation-info-sidebar" id="conversationInfoSidebar">
     <div class="conversation-info-header">
@@ -285,6 +291,17 @@
       <div class="conversation-info-section">
         <h3>成员 (<span id="memberCount">0</span>)</h3>
         <div class="conversation-members-list" id="conversationMembersList">
+        </div>
+        <div class="add-member-card" id="addMemberBtn" title="添加成员">
+          <div class="add-member-avatar">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </div>
+          <div class="add-member-info">
+            <div class="add-member-name">添加成员</div>
+          </div>
         </div>
       </div>
     </div>

@@ -35,7 +35,7 @@ class ConversationMessageService {
 
     await this._showUserMessage(userMessage, context);
 
-    const userMsg = await this.conversationManager.addMessage(conversationId, null, userMessage, true);
+    const userMsg = await this.conversationManager.addMessage(conversationId, null, userMessage, MessageType.USER);
     context.conversation.messages.push(userMsg);
 
     const entities = await this.entityFactory.createEntitiesFromConversation(conversation);
@@ -82,8 +82,7 @@ class ConversationMessageService {
             const message = await this.conversationManager.addMessage(
               context.conversationId,
               result.memberId,
-              result.content,
-              false
+              result.content
             );
 
             if (message && message.id) {
@@ -129,8 +128,7 @@ class ConversationMessageService {
           const message = await this.conversationManager.addMessage(
             conversationId,
             data.memberId || data.expertId,
-            data.content,
-            false
+            data.content
           );
 
           if (message && message.id) {

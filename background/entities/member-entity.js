@@ -104,21 +104,28 @@ class MemberEntity extends BaseEntity {
   _buildApiMessage(input, context) {
     const messages = [];
 
-    if (this.systemPrompt || context.conversationMode === 'discussion') {
+    // 检查成员是否刚刚切换了模型
+    const member = context.conversation.members.find(m => m.id === this.id);
+    const modelSwitchedAt = member?.modelSwitchedAt;
+
+    // 判断是否是切换模型后的第一条消息
+    const isAfterModelSwitch = modelSwitchedAt && this._isFirstMessageAfterSwitch(context, modelSwitchedAt);
+
+    // 如果是第一次消息或刚切换模型，添加提示词
+    if ((this.systemPrompt || context.conversationMode === 'discussion') && (!context.getLastMessageId(this.id) || isAfterModelSwitch)) {
       const discussionPrompt = this._buildDiscussionPrompt(context);
       const additionalPrompt = context.getMemberSetting(this.id, 'additionalPrompt', '');
-      const basePrompt = this.systemPrompt || '';
 
       const fullPrompt = discussionPrompt
-        ? `${discussionPrompt}\n\n${basePrompt}${additionalPrompt ? '\n\n' + additionalPrompt : ''}`
-        : (additionalPrompt ? `${basePrompt}\n\n${additionalPrompt}` : basePrompt);
+        ? `${discussionPrompt}${additionalPrompt ? '\n\n' + additionalPrompt : ''}`
+        : '';
 
       if (fullPrompt) {
         messages.push({ role: 'system', content: fullPrompt });
       }
     }
 
-    const history = this._buildHistory(context);
+    const history = this._buildHistory(context, modelSwitchedAt);
     messages.push(...history);
 
     const hasUserInHistory = history.some(msg => msg.role === 'user');
@@ -135,25 +142,31 @@ class MemberEntity extends BaseEntity {
     const lastMessageId = context.getLastMessageId(this.id);
     const isFirstMessage = !lastMessageId;
 
-    if (isFirstMessage && (this.systemPrompt || context.conversationMode === 'discussion')) {
+    // 检查成员是否刚刚切换了模型
+    const member = context.conversation.members.find(m => m.id === this.id);
+    const modelSwitchedAt = member?.modelSwitchedAt;
+
+    // 判断是否是切换模型后的第一条消息
+    const isAfterModelSwitch = modelSwitchedAt && this._isFirstMessageAfterSwitch(context, modelSwitchedAt);
+
+    if ((isFirstMessage || isAfterModelSwitch) && (this.systemPrompt || context.conversationMode === 'discussion')) {
       const discussionPrompt = this._buildDiscussionPrompt(context);
       const additionalPrompt = context.getMemberSetting(this.id, 'additionalPrompt', '');
-      const basePrompt = this.systemPrompt || '';
 
       const fullPrompt = discussionPrompt
-        ? `${discussionPrompt}\n\n${basePrompt}${additionalPrompt ? '\n\n' + additionalPrompt : ''}`
-        : (additionalPrompt ? `${basePrompt}\n\n${additionalPrompt}` : basePrompt);
+        ? `${discussionPrompt}${additionalPrompt ? '\n\n' + additionalPrompt : ''}`
+        : '';
 
-      const historyText = this._buildHistoryText(context);
+      const historyText = this._buildHistoryText(context, modelSwitchedAt);
 
       message = historyText
-        ? `${fullPrompt}\n\n${historyText}`
+        ? `${fullPrompt}\n\n${historyText}\n\n当前问题：${input}`
         : `${fullPrompt}\n\n当前问题：${input}`;
     } else {
-      const historyText = this._buildHistoryText(context);
+      const historyText = this._buildHistoryText(context, modelSwitchedAt);
 
       message = historyText
-        ? historyText
+        ? `${historyText}\n\n当前问题：${input}`
         : input;
     }
 
@@ -167,19 +180,48 @@ class MemberEntity extends BaseEntity {
       return '';
     }
 
-    const members = context.conversation.members || [];
-    const memberNames = members.map(m => m.name).join('、');
-
-    return `当前会话成员：${memberNames}。\n你的名称是${this.name}。\n你不可以扮演别的成员，只能以${this.name}的身份回复。`;
+    return `你的姓名是${this.name}，你处于一个讨论群中，这个群的群主是 user，全体成员的首要目的是不遗余力的满足群主的需求，遵循他的一切指令。群里还有一些其他成员，你如果需要针对某个成员的话做出回应可以@某个它，但是你不得主动提及自己的名称角色，你的角色设定为：${this.systemPrompt}`;
   }
 
-  _buildHistoryText(context) {
+  /**
+   * 判断是否是模型切换后的第一条消息
+   */
+  _isFirstMessageAfterSwitch(context, modelSwitchedAt) {
+    const messages = context.conversation.messages || [];
+
+    // 查找切换后的第一条用户消息
+    for (const msg of messages) {
+      if (msg.isUser && msg.timestamp > modelSwitchedAt) {
+        // 检查是否已经有针对这条消息的回复
+        const hasReply = messages.some(m =>
+          m.memberId === this.id &&
+          m.timestamp > msg.timestamp &&
+          !m.isIntro &&
+          m.type !== 'tip'
+        );
+        return !hasReply; // 如果没有回复，说明是第一条
+      }
+    }
+
+    return false;
+  }
+
+  _buildHistoryText(context, modelSwitchedAt = null) {
     const messages = context.conversation.messages || [];
     const contextMode = context.contextMode;
     const lastMessageId = context.getLastMessageId(this.id);
 
     let startIndex = 0;
-    if (lastMessageId) {
+
+    // 如果有模型切换时间戳，从切换点开始
+    if (modelSwitchedAt) {
+      // 找到切换后的第一条消息索引
+      startIndex = messages.findIndex(msg => msg.timestamp > modelSwitchedAt);
+      if (startIndex === -1) {
+        startIndex = 0;
+      }
+    } else if (lastMessageId) {
+      // 否则使用lastMessageId
       startIndex = messages.findIndex(msg => msg.id === lastMessageId) + 1;
       if (startIndex === 0) {
         startIndex = 0;
@@ -188,11 +230,25 @@ class MemberEntity extends BaseEntity {
 
     const incrementalMessages = messages.slice(startIndex);
 
+    // 定义需要发送给 AI 的 Tip 子类型
+    const ALLOWED_TIP_SUBTYPES = ['join', 'leave', 'rename'];
+
     let filteredMessages;
     if (contextMode === 'self') {
-      filteredMessages = incrementalMessages.filter(msg => msg.isUser || msg.memberId === this.id);
+      filteredMessages = incrementalMessages.filter(msg => {
+        if (msg.isIntro) return false;
+        if (msg.isUser) return true;
+        if (msg.memberId === this.id) return true;
+        if (msg.type === 'tip' && ALLOWED_TIP_SUBTYPES.includes(msg.tipSubType)) return true;
+        return false;
+      });
     } else {
-      filteredMessages = incrementalMessages.filter(msg => msg.memberId !== this.id);
+      filteredMessages = incrementalMessages.filter(msg => {
+        if (msg.isIntro) return false;
+        if (msg.memberId !== this.id) return true;
+        if (msg.type === 'tip' && ALLOWED_TIP_SUBTYPES.includes(msg.tipSubType)) return true;
+        return false;
+      });
     }
 
     if (filteredMessages.length === 0) {
@@ -205,18 +261,58 @@ class MemberEntity extends BaseEntity {
       } else {
         const member = context.conversation.members.find(m => m.id === msg.memberId);
         const memberName = member ? member.name : 'AI助手';
+
+        // 如果是 Tip 消息，清理 HTML 和模型信息
+        if (msg.type === 'tip') {
+          return this._cleanTipContent(msg.content, memberName);
+        }
+
         return `${memberName}：${msg.content}`;
       }
     }).join('\n\n');
   }
 
-  _buildHistory(context) {
+  /**
+   * 清理 Tip 消息内容，移除 HTML 和模型信息
+   * 输入: "阿军 加入会话，模型是 网页 - qianwen，<a href="#" class="tip-link" data-member-id="xxx">修改模型</a>"
+   * 输出: "阿军 加入会话"
+   */
+  _cleanTipContent(content, fallbackName = '系统') {
+    // 移除"模型是 xxx，"部分
+    let cleaned = content.replace(/，模型是[^，]+，/g, '，');
+
+    // 移除 <a> 标签及内容（"修改模型"）
+    cleaned = cleaned.replace(/<a[^>]*>修改模型<\/a>/g, '').trim();
+
+    // 移除末尾可能的逗号
+    cleaned = cleaned.replace(/，$/, '');
+
+    return cleaned || content;
+  }
+
+  /**
+   * 清理 Tip 消息内容（API 模式使用，不包含成员名称前缀）
+   */
+  _cleanTipContentSimple(content) {
+    return this._cleanTipContent(content);
+  }
+
+  _buildHistory(context, modelSwitchedAt = null) {
     const messages = context.conversation.messages || [];
     const contextMode = context.contextMode;
     const lastMessageId = context.getLastMessageId(this.id);
 
     let startIndex = 0;
-    if (lastMessageId) {
+
+    // 如果有模型切换时间戳，从切换点开始
+    if (modelSwitchedAt) {
+      // 找到切换后的第一条消息索引
+      startIndex = messages.findIndex(msg => msg.timestamp > modelSwitchedAt);
+      if (startIndex === -1) {
+        startIndex = 0;
+      }
+    } else if (lastMessageId) {
+      // 否则使用lastMessageId
       startIndex = messages.findIndex(msg => msg.id === lastMessageId) + 1;
       if (startIndex === 0) {
         startIndex = 0;
@@ -225,17 +321,36 @@ class MemberEntity extends BaseEntity {
 
     const incrementalMessages = messages.slice(startIndex);
 
+    // 定义需要发送给 AI 的 Tip 子类型
+    const ALLOWED_TIP_SUBTYPES = ['join', 'leave', 'rename'];
+
     let filteredMessages;
     if (contextMode === 'self') {
-      filteredMessages = incrementalMessages.filter(msg => msg.isUser || msg.memberId === this.id);
+      filteredMessages = incrementalMessages.filter(msg => {
+        if (msg.isIntro) return false;
+        if (msg.isUser) return true;
+        if (msg.memberId === this.id) return true;
+        if (msg.type === 'tip' && ALLOWED_TIP_SUBTYPES.includes(msg.tipSubType)) return true;
+        return false;
+      });
     } else {
-      filteredMessages = incrementalMessages.filter(msg => msg.memberId !== this.id);
+      filteredMessages = incrementalMessages.filter(msg => {
+        if (msg.isIntro) return false;
+        if (msg.memberId !== this.id) return true;
+        if (msg.type === 'tip' && ALLOWED_TIP_SUBTYPES.includes(msg.tipSubType)) return true;
+        return false;
+      });
     }
 
-    return filteredMessages.map(msg => ({
-      role: msg.isUser ? 'user' : 'assistant',
-      content: msg.content
-    }));
+    return filteredMessages.map(msg => {
+      // 如果是 Tip 消息，清理 HTML 和模型信息
+      const content = msg.type === 'tip' ? this._cleanTipContentSimple(msg.content) : msg.content;
+
+      return {
+        role: msg.isUser ? 'user' : 'assistant',
+        content: content
+      };
+    });
   }
 }
 

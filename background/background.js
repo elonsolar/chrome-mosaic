@@ -19,6 +19,7 @@ importScripts('./entities/expert-entity.js');
 importScripts('./entities/entity-factory.js');
 importScripts('./services/progress-notification-service.js');
 importScripts('./services/conversation-message-service.js');
+importScripts('./core/constants.js');
 
 /**
  * 检测浏览器信息
@@ -899,7 +900,7 @@ class ConversationManager {
     return null;
   }
 
-  async addMessage(conversationId, memberId, content, isUser = false) {
+  async addMessage(conversationId, memberId, content, msgType = MessageType.MEMBER) {
     const queueKey = conversationId;
 
     if (!this.messageQueues.has(queueKey)) {
@@ -917,9 +918,18 @@ class ConversationManager {
           id: this.generateId(),
           memberId,
           content,
-          isUser,
           timestamp: Date.now()
         };
+
+        // 根据 msgType 设置消息类型
+        if (msgType === MessageType.USER) {
+          message.isUser = true;
+        } else if (msgType === MessageType.INTRO) {
+          message.isIntro = true;
+        } else if (msgType === MessageType.TIP) {
+          message.type = 'tip';
+          message.isTip = true;
+        }
 
         conversation.messages.push(message);
         conversation.updatedAt = Date.now();
@@ -1402,6 +1412,23 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           aiMessageManager.conversationManager.getConversation(request.conversationId)
             .then(conversation => sendResponse(conversation))
             .catch(() => sendResponse({ error: error.message }));
+        });
+      return true;
+
+    case 'addMessageDirect':
+      conversationManager.addMessage(
+        request.conversationId,
+        request.memberId,
+        request.content,
+        request.msgType  // 直接使用前端传来的枚举值
+      )
+        .then(message => {
+          return conversationManager.getConversation(request.conversationId);
+        })
+        .then(conversation => sendResponse(conversation))
+        .catch(error => {
+          console.error('addMessageDirect失败:', error);
+          sendResponse({ error: error.message });
         });
       return true;
 

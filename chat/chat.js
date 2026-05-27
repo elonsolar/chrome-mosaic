@@ -2,6 +2,16 @@
 const urlParams = new URLSearchParams(window.location.search);
 const conversationId = urlParams.get('id');
 
+/**
+ * 消息类型枚举（与 background/core/constants.js 保持一致）
+ */
+const MessageType = {
+  MEMBER: 'member',      // 成员消息（默认，成员回复）
+  USER: 'user',          // 用户消息
+  INTRO: 'intro',        // 自我介绍消息
+  TIP: 'tip'             // 系统提示消息
+};
+
 // Mode Examples 数据（内联）
 const MODE_EXAMPLES = {
   brainstorming: [
@@ -235,6 +245,17 @@ async function init() {
   // 加载数据
   await loadData();
 
+  // 检查是否是新会话（没有消息且有成员），自动发送成员加入 Tip 提示
+  if (state.conversation &&
+      state.conversation.members &&
+      state.conversation.members.length > 0 &&
+      (!state.conversation.messages || state.conversation.messages.length === 0)) {
+    console.log('[Chat] 检测到新会话，发送成员加入 Tip 提示');
+    setTimeout(() => {
+      sendMemberJoinTipMessages(conversationId, state.conversation.members);
+    }, 1000);
+  }
+
   // 检查是否需要自动发送消息
   const autoSendMessage = urlParams.get('autoSend');
   if (autoSendMessage) {
@@ -425,11 +446,11 @@ function bindEvents() {
       return;
     }
 
-    // 点击成员标签打开对话历史
+    // 点击成员标签打开配置模态框
     const tag = e.target.closest('.member-tag');
     if (tag) {
       const memberId = tag.dataset.memberId;
-      openMemberChat(memberId);
+      openMemberConfigModal(memberId);
     }
   });
 
@@ -509,6 +530,36 @@ function bindEvents() {
   if (conversationInfoClose) {
     conversationInfoClose.addEventListener('click', closeConversationInfo);
   }
+
+  const addMemberBtn = document.getElementById('addMemberBtn');
+  if (addMemberBtn) {
+    addMemberBtn.addEventListener('click', addSingleMember);
+  }
+
+  // 成员配置模态框
+  const closeMemberConfigBtn = document.getElementById('closeMemberConfigBtn');
+  if (closeMemberConfigBtn) {
+    closeMemberConfigBtn.addEventListener('click', closeMemberConfigModal);
+  }
+
+  const cancelMemberConfigBtn = document.getElementById('cancelMemberConfigBtn');
+  if (cancelMemberConfigBtn) {
+    cancelMemberConfigBtn.addEventListener('click', closeMemberConfigModal);
+  }
+
+  const saveMemberConfigBtn = document.getElementById('saveMemberConfigBtn');
+  if (saveMemberConfigBtn) {
+    saveMemberConfigBtn.addEventListener('click', saveMemberConfig);
+  }
+
+  const memberConfigModal = document.getElementById('memberConfigModal');
+  if (memberConfigModal) {
+    memberConfigModal.addEventListener('click', (e) => {
+      if (e.target === memberConfigModal) {
+        closeMemberConfigModal();
+      }
+    });
+  }
 }
 
 function openConversationInfo() {
@@ -556,9 +607,130 @@ function renderConversationMembers() {
             ${modelCode ? `<span class="conversation-member-model">${escapeHtml(modelCode)}</span>` : ''}
           </div>
         </div>
+        <button class="remove-member-btn" data-member-id="${member.id}" title="移除成员">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
       </div>
     `;
   }).join('');
+
+  // 绑定删除按钮事件
+  const removeButtons = membersList.querySelectorAll('.remove-member-btn');
+  removeButtons.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const memberId = e.currentTarget.dataset.memberId;
+      removeMember(memberId);
+    });
+  });
+}
+
+/**
+ * 添加单个成员
+ */
+async function addSingleMember() {
+  try {
+    if (!state.models || state.models.length === 0) {
+      alert('暂无可用模型，请先在 Dashboard 中添加平台和模型');
+      return;
+    }
+
+    // 使用第一个模型作为默认值
+    const defaultModel = state.models[0];
+    const nicknames = generateRandomNicknames(1);
+
+    const newMember = {
+      id: `member_${Date.now().toString(36)}_${Math.random().toString(36).substr(2)}`,
+      name: nicknames[0],
+      platformId: defaultModel.platformId,
+      modelId: defaultModel.id,
+      modelCode: defaultModel.code,
+      platformName: defaultModel.platformName,
+      accessMethod: defaultModel.accessMethod,
+      color: defaultModel.color || '#667eea',
+      systemPrompt: '',
+      webUrl: defaultModel.webUrl || ''
+    };
+
+    const updatedMembers = [...state.conversation.members, newMember];
+
+    await new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({
+        action: 'updateConversation',
+        conversationId: state.conversation.id,
+        updates: {
+          members: updatedMembers
+        }
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+        } else {
+          resolve(response);
+        }
+      });
+    });
+
+    state.conversation.members = updatedMembers;
+
+    renderConversationMembers();
+
+    await sendMemberJoinTipMessages(state.conversation.id, [newMember]);
+
+    // 自动打开配置模态框让用户选择模型
+    setTimeout(() => {
+      openMemberConfigModal(newMember.id);
+    }, 500);
+  } catch (error) {
+    console.error('[Chat] 添加成员失败:', error);
+    alert('添加成员失败: ' + (error.message || error));
+  }
+}
+
+/**
+ * 移除成员
+ */
+async function removeMember(memberId) {
+  try {
+    const member = state.conversation.members.find(m => m.id === memberId);
+    if (!member) {
+      alert('成员不存在');
+      return;
+    }
+
+    const updatedMembers = state.conversation.members.filter(m => m.id !== memberId);
+
+    await new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({
+        action: 'updateConversation',
+        conversationId: state.conversation.id,
+        updates: {
+          members: updatedMembers
+        }
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+        } else {
+          resolve(response);
+        }
+      });
+    });
+
+    state.conversation.members = updatedMembers;
+
+    renderConversationMembers();
+
+    // 添加 Tip 提示：成员离开
+    await addTipMessage(
+      state.conversation.id,
+      `${member.name} 已离开会话`,
+      'leave'  // ✅ 离开会话 - 需要发送给 AI
+    );
+  } catch (error) {
+    console.error('[Chat] 移除成员失败:', error);
+    alert('移除成员失败: ' + (error.message || error));
+  }
 }
 
 async function handleStorageChange(change) {
@@ -568,8 +740,9 @@ async function handleStorageChange(change) {
   const updatedConversation = newConversations.find(c => c.id === conversationId);
 
   if (updatedConversation) {
-    const oldMessageCount = state.conversation?.messages?.length || 0;
-    const newMessageCount = updatedConversation?.messages?.length || 0;
+    // 过滤掉自我介绍消息，只统计真实对话消息
+    const oldMessageCount = (state.conversation?.messages || []).filter(msg => !msg.isIntro).length;
+    const newMessageCount = (updatedConversation?.messages || []).filter(msg => !msg.isIntro).length;
 
     console.log(`[Chat] 消息数变化: ${oldMessageCount} → ${newMessageCount}`);
 
@@ -607,6 +780,19 @@ function bindMemberClickEvents() {
     el.addEventListener('click', async (e) => {
       const provider = e.currentTarget.getAttribute('data-provider');
       const memberId = e.currentTarget.getAttribute('data-member-id');
+      
+      // 优先打开成员配置模态框
+      if (memberId && state.conversation?.members) {
+        const member = state.conversation.members.find(m => m.id === memberId);
+        if (member) {
+          e.preventDefault();
+          e.stopPropagation();
+          openMemberConfigModal(memberId);
+          return;
+        }
+      }
+      
+      // 如果没有memberId，则激活平台标签页（保持原有行为）
       if (provider) {
         try {
           let targetUrl = null;
@@ -699,6 +885,185 @@ function renderMembersTags() {
   }).join('');
 
   console.log('[Chat] renderMembersTags - Members tags HTML:', elements.membersTags.innerHTML);
+}
+
+// ==================== 成员配置模态框 ====================
+
+let currentConfigMemberId = null;
+
+function openMemberConfigModal(memberId) {
+  const member = state.conversation.members.find(m => m.id === memberId);
+  if (!member) {
+    console.warn('[Chat] openMemberConfigModal - Member not found:', memberId);
+    return;
+  }
+
+  console.log('[Chat] openMemberConfigModal - Opening config for member:', member.name);
+
+  currentConfigMemberId = memberId;
+
+  // 填充表单
+  const nameInput = document.getElementById('memberConfigName');
+  const modelSelect = document.getElementById('memberConfigModel');
+  const promptSelect = document.getElementById('memberConfigPrompt');
+
+  if (nameInput) nameInput.value = member.name;
+
+  // 填充模型选择器
+  if (modelSelect) {
+    modelSelect.innerHTML = '<option value="">请选择模型...</option>' +
+      state.models.map(model => {
+        const platformName = model.platformName || '未知平台';
+        const displayName = `${platformName} - ${model.code || model.id}`;
+        const selected = model.id === member.modelId ? 'selected' : '';
+        return `<option value="${model.id}" ${selected}>${escapeHtml(displayName)}</option>`;
+      }).join('');
+
+  }
+
+  // 填充提示词选择器
+  if (promptSelect) {
+    promptSelect.innerHTML = '<option value="">无提示词</option>' +
+      state.prompts.map(prompt => {
+        const selected = prompt.content === member.systemPrompt ? 'selected' : '';
+        return `<option value="${prompt.id}" ${selected}>${escapeHtml(prompt.name)}</option>`;
+      }).join('');
+  }
+
+  // 显示模态框
+  const modal = document.getElementById('memberConfigModal');
+  if (modal) modal.classList.add('active');
+}
+
+async function saveMemberConfig() {
+  if (!currentConfigMemberId) return;
+
+  const nameInput = document.getElementById('memberConfigName');
+  const modelSelect = document.getElementById('memberConfigModel');
+  const promptSelect = document.getElementById('memberConfigPrompt');
+
+  const memberName = nameInput ? nameInput.value.trim() : '';
+  const modelId = modelSelect ? modelSelect.value : null;
+  const promptId = promptSelect ? promptSelect.value : null;
+
+  if (!memberName) {
+    alert('请输入成员名称');
+    return;
+  }
+
+  if (!modelId) {
+    alert('请选择模型');
+    return;
+  }
+
+  // 查找模型和提示词
+  const model = state.models.find(m => m.id === modelId);
+  if (!model) {
+    alert('模型不存在');
+    return;
+  }
+
+  let systemPrompt = '';
+  if (promptId) {
+    const prompt = state.prompts.find(p => p.id === promptId);
+    if (prompt) systemPrompt = prompt.content || '';
+  }
+
+  // 更新成员数据
+  const member = state.conversation.members.find(m => m.id === currentConfigMemberId);
+  if (!member) {
+    alert('成员不存在');
+    return;
+  }
+
+  // 记录旧的名称和模型ID，用于后续判断是否需要提示
+  const oldName = member.name;
+  const oldModelId = member.modelId;
+  const oldModelCode = member.modelCode;
+  const oldPlatformName = member.platformName;
+
+  member.name = memberName;
+  member.platformId = model.platformId;
+  member.modelId = model.id;
+  member.modelCode = model.code;
+  member.platformName = model.platformName;
+  member.accessMethod = model.accessMethod;
+  member.color = model.color || '#667eea';
+  member.systemPrompt = systemPrompt;
+
+  if (model.accessMethod === 'api') {
+    member.baseUrl = model.baseUrl || '';
+    member.apiKey = model.apiKey || '';
+    delete member.webUrl;
+  } else {
+    member.webUrl = model.webUrl || '';
+    delete member.baseUrl;
+    delete member.apiKey;
+  }
+
+  // 保存到storage
+  try {
+    await chrome.runtime.sendMessage({
+      action: 'updateConversation',
+      conversationId: state.conversation.id,
+      updates: {
+        members: state.conversation.members
+      }
+    });
+
+    // 关闭模态框
+    const modal = document.getElementById('memberConfigModal');
+    if (modal) modal.classList.remove('active');
+
+    currentConfigMemberId = null;
+
+    // 重新渲染成员标签
+    renderMembersTags();
+
+    // 如果名称改变了，添加提示消息
+    if (oldName !== memberName) {
+      try {
+        await chrome.runtime.sendMessage({
+          action: 'addMessageDirect',
+          conversationId: state.conversation.id,
+          memberId: null,
+          content: `${oldName} 改名为 ${memberName}`,
+          msgType: MessageType.TIP,
+          tipSubType: 'rename'  // ✅ 改名 - 需要发送给 AI
+        });
+      } catch (error) {
+        console.error('[Chat] 添加名称变更提示消息失败:', error);
+      }
+    }
+
+    // 如果模型改变了，添加提示消息并记录切换时间戳
+    if (oldModelId !== model.id) {
+      // 记录模型切换时间戳（用于后续判断上下文范围）
+      member.modelSwitchedAt = Date.now();
+
+      try {
+        await chrome.runtime.sendMessage({
+          action: 'addMessageDirect',
+          conversationId: state.conversation.id,
+          memberId: null,  // 系统消息没有成员
+          content: `${member.name} 切换了模型为 ${model.platformName} - ${model.code}`,
+          msgType: MessageType.TIP,
+          tipSubType: 'model_switch'  // ❌ 切换模型 - 不发送给 AI
+        });
+      } catch (error) {
+        console.error('[Chat] 添加模型切换提示消息失败:', error);
+      }
+    }
+  } catch (error) {
+    console.error('[Chat] saveMemberConfig - 保存失败:', error);
+    alert('保存失败: ' + (error.message || error));
+  }
+}
+
+function closeMemberConfigModal() {
+  const modal = document.getElementById('memberConfigModal');
+  if (modal) modal.classList.remove('active');
+  currentConfigMemberId = null;
 }
 
 // ==================== 成员对话历史弹出框 ====================
@@ -837,7 +1202,10 @@ function renderMessages() {
     return;
   }
 
-  if (!state.conversation.messages || state.conversation.messages.length === 0) {
+  // 获取所有消息（包括打招呼消息）
+  const messages = state.conversation.messages || [];
+
+  if (messages.length === 0) {
     elements.messagesContainer.innerHTML = `
       <div class="empty-messages">
         <div class="empty-messages-icon">💬</div>
@@ -849,7 +1217,16 @@ function renderMessages() {
     return;
   }
 
-  elements.messagesContainer.innerHTML = state.conversation.messages.map((msg, index) => {
+  elements.messagesContainer.innerHTML = messages.map((msg, index) => {
+    // 系统提示消息（支持HTML，用于"修改模型"链接）
+    if (msg.type === 'tip') {
+      return `
+        <div class="message tip-message">
+          <div class="tip-content">${msg.content}</div>
+        </div>
+      `;
+    }
+
     const member = state.conversation.members.find(m => m.id === msg.memberId);
     const roleSetting = state.conversation.memberSettings?.[msg.memberId] || {};
     const displayName = roleSetting.nickname || member?.name || '未知成员';
@@ -867,7 +1244,7 @@ function renderMessages() {
               <span class="message-sender-name">我</span>
               <span class="message-time">${formatTime(msg.timestamp)}</span>
             </div>
-            <div class="message-text">${escapeHtml(msg.content)}</div>
+            <div class="message-text">${escapeHtml(msg.content).replace(/\n/g, '<br>')}</div>
             <div class="message-actions">
               <button class="copy-msg-btn" data-msg-index="${index}" title="复制消息">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -881,12 +1258,12 @@ function renderMessages() {
       `;
     } else {
       const color = member?.color || '#667eea';
-      const clickableClass = modelCode ? 'clickable' : '';
-      const providerAttr = modelCode ? `data-provider="${modelCode}" data-member-id="${msg.memberId}"` : '';
+      const clickableClass = 'clickable';
+      const providerAttr = `data-provider="${modelCode || ''}" data-member-id="${msg.memberId}"`;
 
       return `
         <div class="message ai-message">
-          <div class="message-avatar ai-avatar ${clickableClass}" ${providerAttr}>
+          <div class="message-avatar ai-avatar ${clickableClass}" ${providerAttr} title="点击配置成员" style="cursor: pointer;">
             <img src="${generateAvatarUrl(displayName)}" alt="${escapeHtml(displayName)}" loading="lazy">
           </div>
           <div class="message-body">
@@ -911,6 +1288,18 @@ function renderMessages() {
 
   bindMemberClickEvents();
   addCodeCopyButtons(elements.messagesContainer);
+
+  // 绑定 Tip 消息中的"修改模型"链接点击事件
+  const tipLinks = elements.messagesContainer.querySelectorAll('.tip-link');
+  tipLinks.forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const memberId = e.currentTarget.dataset.memberId;
+      if (memberId) {
+        openMemberConfigModal(memberId);
+      }
+    });
+  });
 
   // 滚动到底部
   scrollToBottom();
@@ -1103,22 +1492,47 @@ attachMessageListener();
 
 function handleFlowExecutionProgress(progress) {
   console.log('[Chat] 流程执行进度:', progress);
-  
+
+  // ✅ 只在专家模式下显示进度
+  const isExpertMode = state.conversation.flowId ||
+                      (state.conversation.mode === 'expertqa' && state.conversation.expertId);
+
+  if (!isExpertMode) {
+    console.log('[Chat] 非专家模式，忽略进度提示');
+    return;
+  }
+
+  // 获取专家名称
+  const expertName = state.conversation.flowId
+    ? (state.conversation.flowName || 'AI助手')
+    : (state.experts?.find(e => e.id === state.conversation.expertId)?.name || 'AI助手');
+
   let progressElement = document.getElementById('currentFlowProgressIndicator');
 
   if (!progressElement) {
     const progressHtml = `
-      <div class="message ai-message" id="currentFlowProgressIndicator">
+      <div class="message ai-message expert-progress-message" id="currentFlowProgressIndicator">
         <div class="message-avatar-wrapper">
-          <div class="message-avatar">⚙️</div>
+          <div class="message-avatar expert-avatar-thinking">⚙️</div>
         </div>
-        <div class="message-content">
-          <div class="message-sender">系统</div>
-          <div class="progress-indicator">
-            <div class="progress-text" id="currentFlowProgressText"></div>
-            <div class="progress-bar-container">
-              <div class="progress-fill" id="currentFlowProgressBar"></div>
+        <div class="message-body">
+          <div class="message-header-row">
+            <span class="message-sender-name">${escapeHtml(expertName)}</span>
+            <span class="expert-status-badge">执行中</span>
+          </div>
+          <div class="message-text expert-thinking-text">
+            <div class="thinking-dots-inline">
+              <span class="thinking-dot"></span>
+              <span class="thinking-dot"></span>
+              <span class="thinking-dot"></span>
             </div>
+            <span class="thinking-text">${progress.message || '正在处理...'}</span>
+          </div>
+          <div class="expert-progress-bar-wrapper">
+            <div class="expert-progress-bar">
+              <div class="expert-progress-fill" id="currentFlowProgressBar"></div>
+            </div>
+            <div class="expert-progress-text" id="currentFlowProgressText"></div>
           </div>
         </div>
       </div>
@@ -1130,14 +1544,15 @@ function handleFlowExecutionProgress(progress) {
       progressElement = document.getElementById('currentFlowProgressIndicator');
     }
   }
-  
+
   const progressText = document.getElementById('currentFlowProgressText');
   const progressBar = document.getElementById('currentFlowProgressBar');
+  const thinkingText = progressElement.querySelector('.thinking-text');
 
   if (progressText) {
     const current = progress.current || 0;
     const total = progress.total || 0;
-    progressText.textContent = `执行进度：${current}/${total}节点`;
+    progressText.textContent = `${current}/${total} 节点`;
   }
 
   if (progressBar) {
@@ -1146,7 +1561,11 @@ function handleFlowExecutionProgress(progress) {
     const percentage = total > 0 ? (current / total) * 100 : 0;
     progressBar.style.width = `${percentage}%`;
   }
-  
+
+  if (thinkingText && progress.message) {
+    thinkingText.textContent = progress.message;
+  }
+
   const messagesContainer = document.getElementById('messagesContainer');
   if (messagesContainer) {
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -1162,16 +1581,33 @@ function removeProgressIndicator() {
 
 function handleFlowExecutionError(error) {
   console.error('[Chat] 流程执行错误:', error);
+
+  // ✅ 只在专家模式下显示错误
+  const isExpertMode = state.conversation.flowId ||
+                      (state.conversation.mode === 'expertqa' && state.conversation.expertId);
+
+  if (!isExpertMode) {
+    console.log('[Chat] 非专家模式，忽略错误提示');
+    return;
+  }
+
   removeProgressIndicator();
+
+  // 获取专家名称
+  const expertName = state.conversation.flowId
+    ? (state.conversation.flowName || 'AI助手')
+    : (state.experts?.find(e => e.id === state.conversation.expertId)?.name || 'AI助手');
 
   const errorHtml = `
     <div class="message ai-message">
       <div class="message-avatar-wrapper">
-        <div class="message-avatar">❌</div>
+        <div class="message-avatar error-avatar">❌</div>
       </div>
-      <div class="message-content">
-        <div class="message-sender">系统</div>
-        <div class="error-message">流程执行失败: ${escapeHtml(error)}</div>
+      <div class="message-body">
+        <div class="message-header-row">
+          <span class="message-sender-name">${escapeHtml(expertName)}</span>
+        </div>
+        <div class="message-text error-message-text">流程执行失败: ${escapeHtml(error)}</div>
       </div>
     </div>
   `;
@@ -1535,6 +1971,116 @@ async function sendMessageToBackend(conversationId, content) {
       }
     });
   });
+}
+
+/**
+ * 添加系统提示消息
+ */
+async function addTipMessage(conversationId, content, tipSubType = null) {
+  try {
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('添加提示消息超时')), 5000);
+
+      const messageData = {
+        action: 'addMessageDirect',
+        conversationId,
+        memberId: null,  // 系统消息没有成员
+        content,
+        msgType: MessageType.TIP
+      };
+
+      // 如果有子类型，添加到消息数据中
+      if (tipSubType) {
+        messageData.tipSubType = tipSubType;
+      }
+
+      chrome.runtime.sendMessage(messageData, (response) => {
+        clearTimeout(timeout);
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+        } else {
+          resolve(response);
+        }
+      });
+    });
+  } catch (error) {
+    console.error('[Chat] 添加提示消息失败:', error);
+  }
+}
+
+/**
+ * 发送成员自我介绍消息
+ */
+async function sendMemberIntroMessages(conversationId, members) {
+  console.log('[Chat] 发送成员自我介绍消息，成员数:', members.length);
+
+  for (const member of members) {
+    const introText = `你好，我是${member.name}，我使用的模型是${member.platformName} - ${member.modelCode}，点击我的头像可以为我设置模型和提示词。`;
+
+    try {
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('发送自我介绍超时')), 10000);
+
+        chrome.runtime.sendMessage({
+          action: 'addMessageDirect',
+          conversationId,
+          memberId: member.id,
+          content: introText,
+          msgType: MessageType.INTRO
+        }, (response) => {
+          clearTimeout(timeout);
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve(response);
+          }
+        });
+      });
+
+      // 延迟500ms，避免消息同时到达
+      await new Promise(resolve => setTimeout(resolve, 500));
+    } catch (error) {
+      console.error(`[Chat] 发送成员 ${member.name} 自我介绍失败:`, error);
+    }
+  }
+}
+
+/**
+ * 发送成员加入会话的 Tip 提示（替代自我介绍消息）
+ */
+async function sendMemberJoinTipMessages(conversationId, members) {
+  console.log('[Chat] 发送成员加入 Tip 提示，成员数:', members.length);
+
+  for (const member of members) {
+    const tipContent = `${member.name} 加入会话，模型是 ${member.platformName} - ${member.modelCode}，<a href="#" class="tip-link" data-member-id="${member.id}">修改模型</a>`;
+
+    try {
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('发送 Tip 提示超时')), 10000);
+
+        chrome.runtime.sendMessage({
+          action: 'addMessageDirect',
+          conversationId,
+          memberId: null,
+          content: tipContent,
+          msgType: MessageType.TIP,
+          tipSubType: 'join'  // ✅ 加入会话 - 需要发送给 AI
+        }, (response) => {
+          clearTimeout(timeout);
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve(response);
+          }
+        });
+      });
+
+      // 延迟500ms，避免消息同时到达
+      await new Promise(resolve => setTimeout(resolve, 500));
+    } catch (error) {
+      console.error(`[Chat] 发送成员 ${member.name} Tip 提示失败:`, error);
+    }
+  }
 }
 
 function escapeHtml(text) {
@@ -2740,6 +3286,52 @@ function exportConversationFromSidebar(convId) {
 
 // ========== 新建会话模态框 ==========
 
+// 随机昵称库
+const NICKNAMES = [
+  '小明', '小红', '阿强', '小李', '小王', '阿花', '小美', '小刚', '阿华', '小丽',
+  '阿杰', '小芳', '阿明', '小娟', '阿伟', '小静', '阿军', '小慧', '阿涛', '小燕'
+];
+
+/**
+ * 生成指定数量的随机昵称（不重复）
+ */
+function generateRandomNicknames(count) {
+  const shuffled = [...NICKNAMES].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, Math.min(count, NICKNAMES.length));
+}
+
+/**
+ * 自动生成成员（使用网页平台模型）
+ */
+function generateAutoMembers(count, allModels) {
+  const webModels = allModels.filter(m => m.accessMethod === 'web');
+  const nicknames = generateRandomNicknames(count);
+  
+  if (webModels.length === 0) {
+    console.error('[AutoMembers] 没有可用的网页平台模型');
+    return [];
+  }
+
+  const members = [];
+  for (let i = 0; i < count; i++) {
+    const model = webModels[Math.floor(Math.random() * webModels.length)];
+    members.push({
+      id: `member_${Date.now().toString(36)}_${Math.random().toString(36).substr(2)}`,
+      name: nicknames[i],
+      platformId: model.platformId,
+      modelId: model.id,
+      modelCode: model.code,
+      platformName: model.platformName,
+      accessMethod: model.accessMethod,
+      color: model.color || '#667eea',
+      systemPrompt: '',
+      webUrl: model.webUrl || ''
+    });
+  }
+  
+  return members;
+}
+
 // 新建会话状态
 const newConvState = {
   mode: 'brainstorming',
@@ -2796,24 +3388,6 @@ async function loadNewConvModalData() {
     newConvState.inlineFormModels = (models || []).filter(m => m.enabled !== false);
     newConvState.inlineFormPrompts = prompts || [];
 
-    const modelSelect = document.getElementById('convNewMemberModel');
-    if (modelSelect) {
-      modelSelect.innerHTML = '<option value="">请选择模型...</option>' +
-        newConvState.inlineFormModels.map(model => {
-          const platformName = model.platformName || '未知平台';
-          const displayName = `${platformName} - ${model.code || model.id}`;
-          return `<option value="${model.id}">${escapeHtml(displayName)}</option>`;
-        }).join('');
-    }
-
-    const promptSelect = document.getElementById('convNewMemberPrompt');
-    if (promptSelect) {
-      promptSelect.innerHTML = '<option value="">无提示词</option>' +
-        newConvState.inlineFormPrompts.map(prompt => {
-          return `<option value="${prompt.id}">${escapeHtml(prompt.name)}</option>`;
-        }).join('');
-    }
-
     if (experts && experts.length > 0) {
       const expertSelector = document.getElementById('expertSelector');
       if (expertSelector) {
@@ -2848,35 +3422,13 @@ async function loadNewConvModalData() {
         });
       });
 
-      const createMemberBtn = document.getElementById('convCreateMemberBtn');
-      if (createMemberBtn) {
-        createMemberBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          const form = document.getElementById('convInlineMemberForm');
-          if (!form) return;
-          form.style.display = 'block';
-          setTimeout(() => form.classList.add('expanded'), 10);
-          setTimeout(() => {
-            const nameInput = document.getElementById('convNewMemberName');
-            if (nameInput) nameInput.focus();
-          }, 300);
+      // 成员数量滑块事件
+      const memberCountSlider = document.getElementById('memberCountSlider');
+      const memberCountValue = document.getElementById('memberCountValue');
+      if (memberCountSlider && memberCountValue) {
+        memberCountSlider.addEventListener('input', (e) => {
+          memberCountValue.textContent = e.target.value;
         });
-      }
-
-      const cancelInlineBtn = document.getElementById('convCancelInlineBtn');
-      if (cancelInlineBtn) {
-        cancelInlineBtn.addEventListener('click', () => {
-          const form = document.getElementById('convInlineMemberForm');
-          if (!form) return;
-          form.classList.remove('expanded');
-          setTimeout(() => { form.style.display = 'none'; }, 300);
-          resetInlineMemberForm();
-        });
-      }
-
-      const saveInlineBtn = document.getElementById('convSaveInlineBtn');
-      if (saveInlineBtn) {
-        saveInlineBtn.addEventListener('click', saveNewConvInlineMember);
       }
 
       const closeBtn = document.getElementById('closeConvModalBtn');
@@ -3171,13 +3723,22 @@ async function createNewConversation() {
     data.expertId = newConvState.selectedExpertId;
     data.members = [];
   } else {
-    // 使用新的 members 字段，而不是 modelIds
-    const members = newConvState.members;
+    // 自动生成成员
+    const memberCountSlider = document.getElementById('memberCountSlider');
+    const memberCount = memberCountSlider ? parseInt(memberCountSlider.value) : 3;
+    
+    const members = generateAutoMembers(memberCount, newConvState.inlineFormModels);
 
     if (mode === 'discussion' && members.length < 2) {
       alert('圆桌讨论至少需要 2 个成员');
       return;
     }
+    
+    if (members.length === 0) {
+      alert('没有可用的网页平台模型，请先在Dashboard中配置平台');
+      return;
+    }
+    
     data.members = members;
 
     if (mode === 'discussion') {
