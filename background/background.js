@@ -1045,6 +1045,7 @@ async function init() {
   wsManager = new WebSocketManager(tabManager, pendingResponses);
 
   // 初始化新架构管理器
+  expertManager = new ExpertManager();
   promptManager = new PromptManager();
   promptFolderManager = new PromptFolderManager();
   platformManager = new PlatformManager();
@@ -1052,7 +1053,6 @@ async function init() {
   flowManager = new FlowManager();
   flowExecutor = new FlowExecutor(tabManager, conversationManager, senderFactory, platformManager);
   teamManager = new TeamManager();
-  expertManager = new ExpertManager();
   flowTestRunner = new FlowTestRunner(conversationManager, senderFactory, flowExecutor);
 
   const floatWindowService = {
@@ -1834,6 +1834,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             request.context || {}
           );
 
+          sendResponse({ success: true, result });
+        } catch (error) {
+          sendResponse({ success: false, error: error.message });
+        }
+      })();
+      return true;
+
+    case 'executeSingleNode':
+      (async () => {
+        try {
+          const result = await flowExecutor.executeSingleNode(
+            request.node,
+            request.inputs || {}
+          );
           sendResponse({ success: true, result });
         } catch (error) {
           sendResponse({ success: false, error: error.message });

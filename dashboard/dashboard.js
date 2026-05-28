@@ -966,7 +966,7 @@ class Dashboard {
     const options = [
       '<option value="all">全部模型</option>',
       ...Array.from(usedModels).map(model =>
-        `<option value="${model.id}">${this.escapeHtml(model.name)}</option>`
+        `<option value="${model.id}">${this.escapeHtml(model.code || model.id)}(${this.escapeHtml(model.platformName || '')})</option>`
       )
     ];
 
@@ -1512,7 +1512,7 @@ class Dashboard {
           <div class="member-option-info">
             <div class="member-option-name">${this.escapeHtml(member.name)}</div>
             <div class="member-option-meta">
-              <span>${this.escapeHtml(platformName)} - ${this.escapeHtml(modelCode)}</span>
+              <span>${this.escapeHtml(modelCode)}(${this.escapeHtml(platformName)})</span>
               ${promptName ? `<span style="margin-left: 8px;">📝 ${this.escapeHtml(promptName)}</span>` : ''}
             </div>
           </div>
@@ -1648,7 +1648,7 @@ class Dashboard {
         modelSelect.innerHTML = '<option value="">请选择模型...</option>' +
           this.convInlineFormModels.map(model => {
             const platformName = model.platformName || '未知平台';
-            const displayName = `${platformName} - ${model.id}`;
+            const displayName = `${model.code || model.id}(${platformName})`;
             return `<option value="${model.id}">${this.escapeHtml(displayName)}</option>`;
           }).join('');
       }

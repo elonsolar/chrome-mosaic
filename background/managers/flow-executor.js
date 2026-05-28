@@ -402,6 +402,7 @@ class FlowExecutor {
           ? `[系统]\n${safeSystemPrompt}\n\n[用户]\n${safePrompt}\n\n${safeInput}`
           : `${safePrompt}\n\n${safeInput}`;
       }
+      message += '\n\n**严格遵守**：在你的回复最后必须添加 [[<<>>]] 标记，表示回复结束。';
     }
 
     try {
@@ -409,6 +410,7 @@ class FlowExecutor {
         model: model.code,
         baseUrl: model.baseUrl || '',
         apiKey: model.apiKey || '',
+        webUrl: model.webUrl || '',
         conversationId: context?.conversationId,
         memberId: context?.memberId
       });
@@ -587,6 +589,64 @@ class FlowExecutor {
         ...detail
       })) || []
     };
+  }
+  async executeSingleNode(node, inputs = {}) {
+    console.log('[FlowExecutor] 执行单节点测试:', node.name || node.data?.title);
+
+    const storedModel = node.data?.model;
+    const modelId = storedModel?.modelId || storedModel?.id;
+    if (!modelId) {
+      return { success: false, content: '', error: 'LLM 节点未配置模型' };
+    }
+
+    const model = await this.platformManager.getModelById(modelId);
+    if (!model) {
+      return { success: false, content: '', error: '模型配置不存在或已被删除' };
+    }
+
+    let prompt = node.data?.$$prompt_decorator$$?.prompt || '';
+    let systemPrompt = node.data?.$$prompt_decorator$$?.systemPrompt || '';
+
+    Object.keys(inputs).forEach(name => {
+      const regex = new RegExp(`\\{\\{${name}\\}\\}`, 'g');
+      systemPrompt = systemPrompt.replace(regex, inputs[name]);
+      prompt = prompt.replace(regex, inputs[name]);
+    });
+
+    const sender = this.senderFactory.getSender(model.accessMethod || 'web');
+
+    let message;
+    if (model.accessMethod === 'api') {
+      message = [];
+      if (systemPrompt) {
+        message.push({ role: 'system', content: systemPrompt });
+      }
+      message.push({ role: 'user', content: prompt });
+    } else {
+      message = (systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt) +
+        '\n\n**严格遵守**：在你的回复最后必须添加 [[<<>>]] 标记，表示回复结束。';
+    }
+
+    try {
+      const response = await sender.send(message, {
+        model: model.code,
+        baseUrl: model.baseUrl || '',
+        apiKey: model.apiKey || '',
+        webUrl: model.webUrl || ''
+      });
+      return {
+        success: true,
+        content: response.content,
+        conversationUrl: response.conversationUrl
+      };
+    } catch (error) {
+      console.error('[FlowExecutor] 单节点执行失败:', error);
+      return {
+        success: false,
+        content: '',
+        error: error.message
+      };
+    }
   }
 }
 

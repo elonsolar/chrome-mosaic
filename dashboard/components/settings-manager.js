@@ -101,7 +101,7 @@ class SettingsManager {
           const option = document.createElement('option');
           option.value = model.id;
           const platformName = model.platformName || '未知平台';
-          option.textContent = `${platformName} - ${model.code || model.id}`;
+          option.textContent = `${model.code || model.id}(${platformName})`;
           this.elements.helperModelSelect.appendChild(option);
         });
       }

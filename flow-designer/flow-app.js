@@ -390,19 +390,6 @@ class FlowDesignerApp {
           throw new Error('节点不存在');
         }
 
-        const tempFlow = {
-          name: 'Single Node Test',
-          nodes: [
-            { type: '1', id: 'start', name: 'Start', data: { outputs: node.data?.inputs || [] } },
-            node,
-            { type: '2', id: 'end', name: 'End', data: {} }
-          ],
-          connections: [
-            { from: 'start', to: node.id },
-            { from: node.id, to: 'end' }
-          ]
-        };
-
         const inputParams = node.data?.$$input_decorator$$?.inputParameters || [];
         const inputs = {};
         testPanel.querySelectorAll('.test-input-textarea').forEach((input, i) => {
@@ -411,15 +398,12 @@ class FlowDesignerApp {
           }
         });
 
-        const userInput = Object.values(inputs).join('\n');
-
         response = await Promise.race([
           new Promise((resolve, reject) => {
             chrome.runtime.sendMessage({
-              action: 'executeFlow',
-              flow: tempFlow,
-              userInput,
-              context: {}
+              action: 'executeSingleNode',
+              node: node,
+              inputs: inputs
             }, (resp) => {
               if (chrome.runtime.lastError) {
                 reject(new Error(chrome.runtime.lastError.message));
@@ -434,17 +418,6 @@ class FlowDesignerApp {
             setTimeout(() => reject(new Error('执行超时（5分钟）')), TIMEOUT_MS)
           )
         ]);
-
-        if (response && response.nodeResults) {
-          const nodeResult = response.nodeResults.find(r => r.nodeId === node.id);
-          if (nodeResult) {
-            response = {
-              success: nodeResult.result.success,
-              content: nodeResult.result.content,
-              error: nodeResult.result.error
-            };
-          }
-        }
 
         if (progressContent) {
           progressContent.innerHTML = '<div class="test-progress-complete">✓ 执行完成</div>';
@@ -971,7 +944,9 @@ class FlowDesignerApp {
       ? outputs.map(o => this.makeVarTag(o.name, false)).join('')
       : this.makeVarTag('output', false);
 
-    const modelName = data.model?.name || data.model?.modelType || 'default';
+    const foundModel = data.model?.modelId && this.models.find(m => m.id === data.model.modelId);
+    const modelName = data.model?.name || data.model?.modelType ||
+      (foundModel ? `${foundModel.code}(${foundModel.platformName})` : null) || 'default';
 
     return `
       <div class="node-section">
@@ -1245,7 +1220,7 @@ class FlowDesignerApp {
     const enableMem = chatHistory.enableChatHistory ? 'checked' : '';
 
     const modelDisplay = selectedModel
-      ? `${selectedModel.platformName || ''} - ${selectedModel.code || ''}`
+      ? `${selectedModel.code || ''}(${selectedModel.platformName || ''})`
       : '选择模型';
 
     return `
@@ -1482,7 +1457,7 @@ class FlowDesignerApp {
             } else {
               modelDropdown.innerHTML = enabledModels.map(m => `
                 <div class="model-option" data-model-id="${this.escHtml(m.id)}" data-platform-id="${this.escHtml(m.platformId || '')}">
-                  <div class="model-option-name">${this.escHtml(m.platformName || '')} - ${this.escHtml(m.code || '')}</div>
+                  <div class="model-option-name">${this.escHtml(m.code || '')}(${this.escHtml(m.platformName || '')})</div>
                   <div class="model-option-details">
                     <span class="model-access">${this.escHtml(m.accessMethod || 'web')}</span>
                   </div>
@@ -1496,14 +1471,15 @@ class FlowDesignerApp {
                   const modelId = opt.dataset.modelId;
                   const platformId = opt.dataset.platformId;
                   const selectedModel = enabledModels.find(m => m.id === modelId);
-                  if (selectedModel) {
-                    modelDisplay.textContent = `${selectedModel.platformName || ''} - ${selectedModel.code || ''}`;
+                    if (selectedModel) {
+                    modelDisplay.textContent = `${selectedModel.code || ''}(${selectedModel.platformName || ''})`;
                     modelDropdown.style.display = 'none';
                     const n = this.nodes.find(n2 => n2.id === node.id);
                     if (n) {
                       n.data.model = {
                         platformId: platformId,
-                        modelId: modelId
+                        modelId: modelId,
+                        name: `${selectedModel.code || ''}(${selectedModel.platformName || ''})`
                       };
                       this.saveFlowData();
                       this.render();

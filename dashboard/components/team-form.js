@@ -222,7 +222,7 @@ class TeamForm {
       <option value="">请选择模型</option>
       ${this.models.map(model => {
         const platformName = model.platformName || '未知平台';
-        return `<option value="${model.id}">${this.escapeHtml(platformName)} - ${this.escapeHtml(model.code || model.id)}</option>`;
+        return `<option value="${model.id}">${this.escapeHtml(model.code || model.id)}(${this.escapeHtml(platformName)})</option>`;
       }).join('')}
     `;
   }
@@ -268,7 +268,7 @@ class TeamForm {
             </div>
             <div style="font-size: 12px; color: #86868b; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
               <span>🎭 ${this.escapeHtml(flow?.name || '无角色')}</span>
-              <span>🤖 ${this.escapeHtml(providerName)} - ${this.escapeHtml(modelName)}</span>
+              <span>🤖 ${this.escapeHtml(modelName)}(${this.escapeHtml(providerName)})</span>
             </div>
           </div>
           <button type="button" class="remove-team-member-btn" data-index="${index}" style="padding: 6px 8px; background: #ffe5e5; color: #ff3b30; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; transition: all 0.2s ease;">

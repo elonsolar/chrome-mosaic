@@ -951,7 +951,7 @@ function openMemberConfigModal(memberId) {
     modelSelect.innerHTML = '<option value="">请选择模型...</option>' +
       state.models.map(model => {
         const platformName = model.platformName || '未知平台';
-        const displayName = `${platformName} - ${model.code || model.id}`;
+        const displayName = `${model.code || model.id}(${platformName})`;
         const selected = model.id === member.modelId ? 'selected' : '';
         return `<option value="${model.id}" ${selected}>${escapeHtml(displayName)}</option>`;
       }).join('');
@@ -1083,7 +1083,7 @@ async function saveMemberConfig() {
           action: 'addMessageDirect',
           conversationId: state.conversation.id,
           memberId: null,  // 系统消息没有成员
-          content: `${member.name} 切换了模型为 ${model.platformName} - ${model.code}`,
+          content: `${member.name} 切换了模型为 ${model.code}(${model.platformName})`,
           msgType: MessageType.TIP,
           tipSubType: 'model_switch'  // ❌ 切换模型 - 不发送给 AI
         });
@@ -1864,7 +1864,7 @@ async function sendMemberIntroMessages(conversationId, members) {
   console.log('[Chat] 发送成员自我介绍消息，成员数:', members.length);
 
   for (const member of members) {
-    const introText = `你好，我是${member.name}，我使用的模型是${member.platformName} - ${member.modelCode}，点击我的头像可以为我设置模型和提示词。`;
+    const introText = `你好，我是${member.name}，我使用的模型是${member.modelCode}(${member.platformName})，点击我的头像可以为我设置模型和提示词。`;
 
     try {
       await new Promise((resolve, reject) => {
@@ -1915,7 +1915,7 @@ async function sendMemberJoinTipMessages(conversationId, members) {
       console.log('[Chat] 成员没有设置提示词');
     }
 
-    const tipContent = `${member.name} 加入会话，模型是 ${member.platformName} - ${member.modelCode}${promptInfo}，<a href="#" class="tip-link" data-member-id="${member.id}">修改成员信息</a>`;
+    const tipContent = `${member.name} 加入会话，模型是 ${member.modelCode}(${member.platformName})${promptInfo}，<a href="#" class="tip-link" data-member-id="${member.id}">修改成员信息</a>`;
     console.log('[Chat] Tip 内容:', tipContent);
 
     try {
@@ -2369,7 +2369,7 @@ function showAddMemberModal() {
           <option value="">请选择模型...</option>
           ${(state.models || []).map(model => {
             const platformName = model.platformName || '未知平台';
-            const displayName = `${platformName} - ${model.code || model.id}`;
+            const displayName = `${model.code || model.id}(${platformName})`;
             return `<option value="${model.id}" ${model.enabled === false ? 'disabled' : ''}>
               ${displayName} ${model.enabled === false ? '(已禁用)' : ''}
             </option>`;
@@ -3370,7 +3370,7 @@ function renderNewConvMemberList() {
         <div class="member-option-info">
           <div class="member-option-name">${escapeHtml(member.name)}</div>
           <div class="member-option-meta">
-            <span>${escapeHtml(platformName)} - ${escapeHtml(modelCodeDisplay)}</span>
+            <span>${escapeHtml(modelCodeDisplay)}(${escapeHtml(platformName)})</span>
             ${promptName ? `<span style="margin-left: 8px;">📝 ${escapeHtml(promptName)}</span>` : ''}
           </div>
         </div>
