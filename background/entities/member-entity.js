@@ -229,8 +229,6 @@ class MemberEntity extends BaseEntity {
       message = message ? `${memberPrompt}\n\n${message}` : memberPrompt;
     }
 
-    message += '\n\n**严格遵守**：在你的回复最后必须添加 [[<<>>]] 标记，表示回复结束。';
-
     return message;
   }
 
@@ -291,8 +289,6 @@ class MemberEntity extends BaseEntity {
     } else {
       message = discussionPrefix ? `${discussionPrefix}\n\n${input}` : (input === 'INLOOP' ? discussionPrefix : input);
     }
-
-    message += '\n\n**严格遵守**：在你的回复最后必须添加 [[<<>>]] 标记，表示回复结束。';
 
     return message;
   }

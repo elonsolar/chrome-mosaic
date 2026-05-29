@@ -19,7 +19,7 @@ class WebMessageSender extends AbstractMessageSender {
     );
 
     return {
-      content: this.postProcessResponse(response.content || ''),
+      content: response.content || '',
       conversationUrl: response.conversationUrl
     };
   }

@@ -402,7 +402,6 @@ class FlowExecutor {
           ? `[系统]\n${safeSystemPrompt}\n\n[用户]\n${safePrompt}\n\n${safeInput}`
           : `${safePrompt}\n\n${safeInput}`;
       }
-      message += '\n\n**严格遵守**：在你的回复最后必须添加 [[<<>>]] 标记，表示回复结束。';
     }
 
     try {
@@ -623,8 +622,7 @@ class FlowExecutor {
       }
       message.push({ role: 'user', content: prompt });
     } else {
-      message = (systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt) +
-        '\n\n**严格遵守**：在你的回复最后必须添加 [[<<>>]] 标记，表示回复结束。';
+      message = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
     }
 
     try {

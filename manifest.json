@@ -83,6 +83,14 @@
     {
       "matches": ["https://www.kimi.com/*"],
       "js": [
+        "utils/anti-lazy-load-kimi.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://www.kimi.com/*"],
+      "js": [
         "utils/platforms/base-adapter.js",
         "utils/platforms/kimi-adapter.js",
         "utils/content-script.js"

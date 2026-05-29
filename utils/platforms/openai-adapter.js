@@ -174,14 +174,7 @@ class OpenAIAdapter extends BasePlatformAdapter {
         const content = checkNewMessage();
         if (content && content !== lastContent) {
           lastContent = content;
-
-          if (content.includes('[[<<>>]]')) {
-            if (timeoutHandle) {
-              clearTimeout(timeoutHandle);
-              timeoutHandle = null;
-            }
-            cleanup(content);
-          }
+          // 响应内容更新，继续等待
         }
       });
 

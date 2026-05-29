@@ -100,7 +100,7 @@ class ApiMessageSender extends AbstractMessageSender {
         console.log(`========== API 请求成功 ==========\n`);
 
         return {
-          content: this.postProcessResponse(resultContent),
+          content: resultContent,
           conversationUrl: null
         };
 

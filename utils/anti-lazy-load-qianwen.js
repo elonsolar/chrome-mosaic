@@ -675,9 +675,6 @@
                 // 使用完整回复（已过滤思考内容）
                 let finalText = fullText;
                 if (finalText.length > 0) {
-                  if (!finalText.includes('[[<<>>]]')) {
-                    finalText += ' [[<<>>]]';
-                  }
                   document.body.setAttribute('data-anti-lazy-message', finalText);
                   document.body.setAttribute('data-anti-lazy-fetch-ready', 'true');
                   debug(`✓ 获取完整回复，长度: ${finalText.length}`);

@@ -4537,4 +4537,26 @@ body.dark-mode .input-container {
   font-weight: var(--font-weight-medium);
 }
 
+/* 复制成功提示 */
+.copy-toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: var(--text-primary);
+  color: var(--bg-primary);
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  z-index: 10000;
+  opacity: 0;
+  transition: all 0.3s ease;
+  pointer-events: none;
+}
+
+.copy-toast.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+
 

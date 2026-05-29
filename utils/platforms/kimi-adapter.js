@@ -75,6 +75,10 @@ class KimiAdapter extends BasePlatformAdapter {
 
     await this.sleep(300);
 
+    // 设置 fetch 拦截器等待标志
+    document.body.setAttribute('data-anti-lazy-waiting', 'true');
+    console.log(`[${this.platform}] ✓ 已设置 data-anti-lazy-waiting = true`);
+
     const enterEvent = new KeyboardEvent('keydown', {
       key: 'Enter',
       code: 'Enter',
@@ -151,179 +155,38 @@ class KimiAdapter extends BasePlatformAdapter {
   }
 
   async waitForAIResponse() {
-    console.log(`[${this.platform}] ========== 开始等待 AI 回复 ==========`);
+    const timestamp = () => new Date().toISOString().split('T')[1].replace('Z', '');
+    console.log(`[${timestamp()}] [${this.platform}] ========== 开始等待 AI 回复 ==========`);
+
+    const POLL_INTERVAL = 500;
+    const MAX_WAIT = 120000;
+    const startTime = Date.now();
 
     return new Promise((resolve, reject) => {
-      let lastContent = '';
-      let observer = null;
-      let timeoutHandle = null;
-      const WATCHDOG_TIMEOUT = 30000;
+      const checkInterval = setInterval(() => {
+        const ts = timestamp();
+        const elapsed = Date.now() - startTime;
 
-      const resetWatchdog = () => {
-        if (timeoutHandle) {
-          clearTimeout(timeoutHandle);
+        if (elapsed > MAX_WAIT) {
+          clearInterval(checkInterval);
+          console.log(`[${ts}] [${this.platform}] 等待超时 (${MAX_WAIT}ms)`);
+          reject(new Error('等待AI回复超时'));
+          return;
         }
-        timeoutHandle = setTimeout(() => {
-          if (lastContent.length > 0) {
-            cleanup(lastContent);
-          } else {
-            reject(new Error('等待AI回复超时 (30秒无响应)'));
-          }
-        }, WATCHDOG_TIMEOUT);
-      };
 
-      const extractTextWithNewlines = (node) => {
-        const blockTags = new Set(['P', 'DIV', 'BR', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'PRE', 'BLOCKQUOTE', 'UL', 'OL', 'SEPARATOR']);
-        const headingTags = { 'H1': '# ', 'H2': '## ', 'H3': '### ', 'H4': '#### ', 'H5': '##### ', 'H6': '###### ' };
-        let result = '';
-
-        const extractTable = (tableNode) => {
-          const rows = [];
-          const tableRows = tableNode.querySelectorAll('tr');
-          tableRows.forEach(tr => {
-            const cells = [];
-            tr.querySelectorAll('th, td').forEach(cell => {
-              cells.push(cell.textContent.trim().replace(/\|/g, '\\|'));
-            });
-            rows.push(cells);
-          });
-
-          if (rows.length === 0) return '';
-
-          const maxCols = Math.max(...rows.map(r => r.length));
-          let table = '\n';
-
-          rows.forEach((row, i) => {
-            while (row.length < maxCols) row.push('');
-            table += '| ' + row.join(' | ') + ' |\n';
-            if (i === 0) {
-              table += '| ' + row.map(() => '---').join(' | ') + ' |\n';
-            }
-          });
-
-          return table + '\n';
-        };
-
-        const walk = (node, inBlock) => {
-          if (node.nodeType === Node.TEXT_NODE) {
-            result += node.textContent;
-          } else if (node.nodeType === Node.ELEMENT_NODE) {
-            const isBlock = blockTags.has(node.tagName);
-            const isHeading = headingTags[node.tagName];
-
-            if (node.tagName === 'BR') {
-              result += '\n';
-            } else if (node.tagName === 'TABLE') {
-              result += extractTable(node);
-            } else if (isHeading) {
-              if (result.length > 0 && !result.endsWith('\n')) {
-                result += '\n';
-              }
-              result += isHeading;
-              for (let child of node.childNodes) {
-                walk(child, true);
-              }
-              if (!result.endsWith('\n')) {
-                result += '\n';
-              }
-            } else {
-              if (isBlock && inBlock && result.length > 0 && !result.endsWith('\n')) {
-                result += '\n';
-              }
-
-              for (let child of node.childNodes) {
-                walk(child, isBlock || inBlock);
-              }
-
-              if (isBlock && !result.endsWith('\n')) {
-                result += '\n';
-              }
-            }
-          }
-        };
-
-        walk(node, false);
-        return result;
-      };
-
-      const checkNewMessage = (mutations) => {
-        console.log(`[${this.platform}] [${new Date().toLocaleTimeString()}] MutationObserver 触发`);
-        const messages = document.querySelectorAll('div.chat-content-item-assistant');
-        if (messages.length === 0) return null;
-
-        const lastMessage = messages[messages.length - 1];
-
-        const segmentContainer = lastMessage.querySelector('div.segment.segment-assistant');
-        if (!segmentContainer) return null;
-
-        const clonedContent = segmentContainer.cloneNode(true);
-
-        const codeBlocks = clonedContent.querySelectorAll('div.segment-code');
-        codeBlocks.forEach(block => {
-          const langEl = block.querySelector('span.segment-code-lang');
-          const preEl = block.querySelector('pre');
-          const codeEl = preEl?.querySelector('code');
-          const lang = langEl ? langEl.textContent.trim() : '';
-          const codeText = (codeEl || preEl)?.textContent?.trim() || '';
-
-          if (codeText.length > 0) {
-            const markdownCode = `\`\`\`${lang}\n${codeText}\n\`\`\``;
-            block.replaceWith(document.createTextNode(markdownCode));
-          } else {
-            block.remove();
-          }
-        });
-
-        let rawText = extractTextWithNewlines(clonedContent).trim();
-
-        const thinkKeywords = ['思考中', 'Thinking', '正在思考', '思考内容', '搜索中'];
-        const hasThinkKeyword = thinkKeywords.some(keyword => rawText.includes(keyword));
-        if (hasThinkKeyword) return null;
-
-        return rawText;
-      };
-
-      const cleanup = (content) => {
-        console.log(`[${this.platform}] ========== cleanup 被调用 ==========`);
-        console.log(`[${this.platform}] 原始内容长度:`, content?.length || 0);
-        if (observer) observer.disconnect();
-        if (timeoutHandle) clearTimeout(timeoutHandle);
-
-        const finalContent = content.replace(/\[\[<<>>\]\]/g, '').trim();
-        console.log(`[${this.platform}] 清理后内容长度:`, finalContent?.length || 0);
-        resolve(finalContent);
-      };
-
-      observer = new MutationObserver((mutations) => {
-        resetWatchdog();
-        const content = checkNewMessage(mutations);
-        if (content && content !== lastContent) {
-          lastContent = content;
-
-          if (content.includes('[[<<>>]]')) {
-            if (timeoutHandle) {
-              clearTimeout(timeoutHandle);
-              timeoutHandle = null;
-            }
-            setTimeout(() => {
-              const finalContent = checkNewMessage(mutations);
-              if (finalContent && finalContent.includes('[[<<>>]]')) {
-                cleanup(finalContent);
-              } else {
-                cleanup(content);
-              }
-            }, 500);
-          }
+        const fetchReady = document.body.getAttribute('data-anti-lazy-fetch-ready');
+        const fetchMsg = document.body.getAttribute('data-anti-lazy-message');
+        
+        if (fetchReady === 'true' && fetchMsg && fetchMsg.length > 0) {
+          console.log(`[${ts}] [${this.platform}] ✓ 从 fetch 拦截器获取消息，长度: ${fetchMsg.length}`);
+          document.body.removeAttribute('data-anti-lazy-message');
+          document.body.removeAttribute('data-anti-lazy-fetch-ready');
+          clearInterval(checkInterval);
+          resolve(fetchMsg);
+          return;
         }
-      });
 
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true,
-        characterData: true
-      });
-
-      resetWatchdog();
+      }, POLL_INTERVAL);
     });
   }
 
@@ -436,7 +299,31 @@ class KimiAdapter extends BasePlatformAdapter {
       }
       console.log(`[${this.platform}] ✓ 找到确认删除对话框`);
 
-      const confirmButton = confirmDialog.querySelector('button.kimi-button.danger');
+      // 尝试多种方式查找确认删除按钮
+      let confirmButton = null;
+      
+      // 方式1：通过 button.kimi-button.danger 选择器
+      confirmButton = confirmDialog.querySelector('button.kimi-button.danger');
+      
+      // 方式2：通过按钮文本查找
+      if (!confirmButton) {
+        const buttons = confirmDialog.querySelectorAll('button');
+        for (const btn of buttons) {
+          if (btn.textContent.trim() === '删除') {
+            confirmButton = btn;
+            break;
+          }
+        }
+      }
+      
+      // 方式3：通过最后一个按钮查找（通常是确认按钮）
+      if (!confirmButton) {
+        const buttons = confirmDialog.querySelectorAll('button');
+        if (buttons.length >= 2) {
+          confirmButton = buttons[buttons.length - 1];
+        }
+      }
+      
       if (!confirmButton) {
         throw new Error('找不到确认删除按钮');
       }

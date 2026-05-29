@@ -106,8 +106,33 @@ class ConversationMessageService {
       }
       return results;
     } else {
-      const promises = entities.map(entity => entity.execute(input, context));
-      return Promise.allSettled(promises);
+      // 头脑风暴模式：并行执行，谁响应就立即保存，不等待所有完成
+      entities.map(async (entity) => {
+        try {
+          const result = await entity.execute(input, context);
+
+          if (result.success && result.content) {
+            const message = await this.conversationManager.addMessage(
+              context.conversationId,
+              result.memberId,
+              result.content
+            );
+
+            if (message && message.id) {
+              context.memberLastMessageIds[result.memberId] = message.id;
+              context.conversation.messages.push(message);
+              await this.conversationManager.updateConversation(context.conversationId, {
+                memberLastMessageIds: context.memberLastMessageIds
+              });
+            }
+          }
+        } catch (error) {
+          console.error('[ConversationMessageService] 实体执行失败:', error);
+        }
+      });
+      
+      // 不等待所有完成，立即返回空数组
+      return [];
     }
   }
 
@@ -169,6 +194,9 @@ class ConversationMessageService {
 
   async _showCompletionMessage(results, context) {
     if (!context.useFloatWindow) return;
+
+    // 头脑风暴模式下 results 为空，跳过完成消息
+    if (!results || results.length === 0) return;
 
     const successCount = results.filter(r => 
       r.status === 'fulfilled' && r.value && r.value.success

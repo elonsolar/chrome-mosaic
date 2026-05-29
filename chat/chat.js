@@ -408,7 +408,7 @@ function bindEvents() {
   elements.sendBtn.addEventListener('click', sendMessage);
 
   elements.messageInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey) {
       e.preventDefault();
       const value = e.target.value.trim();
 
@@ -1325,6 +1325,7 @@ function renderMessages() {
   }).join('');
 
   bindMemberClickEvents();
+  bindCopyButtonEvents();
   addCodeCopyButtons(elements.messagesContainer);
 
   // 绑定 Tip 消息中的"修改成员信息"链接点击事件
@@ -1367,21 +1368,50 @@ async function sendMessage() {
     
     showThinkingIndicator();
 
-    const updatedConversation = await sendMessageToBackend(conversationId, content);
+    const isBrainstorming = state.conversation.mode === 'brainstorming';
 
-    state.isWaitingResponse = false;
-    resetSendButton();
+    if (isBrainstorming) {
+      // 头脑风暴模式：发送后立即重置状态，不等待响应
+      sendMessageToBackend(conversationId, content)
+        .then(updatedConversation => {
+          state.isWaitingResponse = false;
+          if (updatedConversation) {
+            state.conversation = updatedConversation;
+            renderMessages();
+            updateConversationName();
+          }
+        })
+        .catch(error => {
+          console.error('发送消息失败:', error);
+          showError('发送消息失败: ' + error.message);
+        })
+        .finally(() => {
+          hideThinkingIndicator();
+          scrollToBottom();
+        });
 
-    if (updatedConversation) {
-      state.conversation = updatedConversation;
-      renderMessages();
-      updateConversationName();
+      // 立即重置状态，允许继续输入
+      state.isLoading = false;
+      resetSendButton();
+    } else {
+      // 其他模式：等待响应完成
+      const updatedConversation = await sendMessageToBackend(conversationId, content);
+
+      state.isWaitingResponse = false;
+      resetSendButton();
+
+      if (updatedConversation) {
+        state.conversation = updatedConversation;
+        renderMessages();
+        updateConversationName();
+      }
+      hideThinkingIndicator();
+      scrollToBottom();
     }
   } catch (error) {
     console.error('发送消息失败:', error);
     showError('发送消息失败: ' + error.message);
     resetSendButton();
-  } finally {
     hideThinkingIndicator();
     scrollToBottom();
   }
@@ -2552,10 +2582,27 @@ function addCodeCopyButtons(container) {
   });
 }
 
+function showToast(message, duration = 2000) {
+  const toast = document.createElement('div');
+  toast.className = 'copy-toast';
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  
+  // 触发动画
+  setTimeout(() => toast.classList.add('show'), 10);
+  
+  // 自动消失
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, duration);
+}
+
 async function copyToClipboard(text, button) {
   try {
     await navigator.clipboard.writeText(text);
     showCopySuccess(button);
+    showToast('已复制到剪贴板');
     console.log('[复制] 成功复制到剪贴板');
   } catch (err) {
     console.error('[复制] 复制失败:', err);
