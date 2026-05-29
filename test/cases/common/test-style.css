@@ -1,0 +1,223 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  background: #f5f5f5;
+  color: #333;
+  line-height: 1.6;
+  padding: 24px;
+}
+
+h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 8px;
+}
+
+.subtitle {
+  font-size: 14px;
+  color: #888;
+  margin-bottom: 32px;
+}
+
+.stats-bar {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.stat-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 12px 20px;
+  min-width: 100px;
+  text-align: center;
+}
+
+.stat-card .number {
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.stat-card .label {
+  font-size: 12px;
+  color: #888;
+  margin-top: 2px;
+}
+
+.stat-card.total .number { color: #333; }
+.stat-card.pass .number { color: #16a34a; }
+.stat-card.fail .number { color: #dc2626; }
+.stat-card.pending .number { color: #d97706; }
+
+.filters {
+  margin-bottom: 20px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filters button {
+  padding: 6px 16px;
+  border: 1px solid #d0d0d0;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s;
+}
+
+.filters button:hover { border-color: #999; }
+.filters button.active { background: #333; color: #fff; border-color: #333; }
+
+.scenario {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  margin-bottom: 16px;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+
+.scenario.pass { border-left: 4px solid #16a34a; }
+.scenario.fail { border-left: 4px solid #dc2626; }
+.scenario.pending { border-left: 4px solid #d97706; }
+
+.scenario-header {
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+}
+
+.scenario-header:hover { background: #fafafa; }
+
+.scenario-title {
+  font-size: 15px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.scenario-id {
+  font-size: 12px;
+  color: #888;
+  font-weight: 400;
+  font-family: monospace;
+}
+
+.status-badge {
+  font-size: 12px;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-weight: 600;
+}
+
+.status-badge.pass { background: #dcfce7; color: #16a34a; }
+.status-badge.fail { background: #fee2e2; color: #dc2626; }
+.status-badge.pending { background: #fef3c7; color: #d97706; }
+
+.scenario-body {
+  padding: 0 20px 16px;
+  display: none;
+}
+
+.scenario.open .scenario-body { display: block; }
+
+.bdd-block {
+  margin-bottom: 12px;
+  padding: 12px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.bdd-block.given { background: #f0f9ff; border-left: 3px solid #3b82f6; }
+.bdd-block.when  { background: #fefce8; border-left: 3px solid #eab308; }
+.bdd-block.then  { background: #f0fdf4; border-left: 3px solid #22c55e; }
+.bdd-block.and   { background: #faf5ff; border-left: 3px solid #a855f7; }
+
+.bdd-keyword {
+  font-weight: 700;
+  margin-right: 6px;
+  text-transform: uppercase;
+  font-size: 12px;
+}
+
+.bdd-block.given .bdd-keyword { color: #3b82f6; }
+.bdd-block.when  .bdd-keyword { color: #eab308; }
+.bdd-block.then  .bdd-keyword { color: #22c55e; }
+.bdd-block.and   .bdd-keyword { color: #a855f7; }
+
+.bdd-text { color: #333; }
+
+.result-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.btn {
+  padding: 6px 16px;
+  border: 1px solid #d0d0d0;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s;
+}
+
+.btn-pass { color: #16a34a; border-color: #16a34a; }
+.btn-pass:hover { background: #f0fdf4; }
+.btn-fail { color: #dc2626; border-color: #dc2626; }
+.btn-fail:hover { background: #fef2f2; }
+.btn-reset { color: #888; }
+
+.btn-export {
+  padding: 8px 20px;
+  background: #333;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  margin-bottom: 20px;
+}
+
+.btn-export:hover { background: #555; }
+
+.notes {
+  margin-top: 8px;
+}
+
+.notes textarea {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.notes textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.collapse-all {
+  font-size: 12px;
+  color: #888;
+  cursor: pointer;
+  border: none;
+  background: none;
+  text-decoration: underline;
+}

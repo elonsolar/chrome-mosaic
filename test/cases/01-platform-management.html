@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>TC-01 平台管理</title>
+  <link rel="stylesheet" href="common/test-style.css">
+</head>
+<body>
+  <h1>TC-01 平台管理</h1>
+  <p class="subtitle">PlatformManager - 平台与模型的增删改查、内置初始化、数据校验</p>
+
+  <div class="stats-bar">
+    <div class="stat-card total"><div class="number">0</div><div class="label">总计</div></div>
+    <div class="stat-card pass"><div class="number">0</div><div class="label">通过</div></div>
+    <div class="stat-card fail"><div class="number">0</div><div class="label">失败</div></div>
+    <div class="stat-card pending"><div class="number">0</div><div class="label">待执行</div></div>
+  </div>
+
+  <div class="filters">
+    <button data-filter="all" class="active">全部</button>
+    <button data-filter="pass">已通过</button>
+    <button data-filter="fail">已失败</button>
+    <button data-filter="pending">待执行</button>
+    <button id="expandAll">全部展开</button>
+    <button id="collapseAll">全部折叠</button>
+  </div>
+
+  <button class="btn-export" id="exportBtn">导出测试报告</button>
+
+  <!-- TC-01-01 -->
+  <div class="scenario pending" data-id="TC-01-01">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-01-01</span>
+        首次安装自动生成内置平台
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">用户首次安装插件，本地存储中无任何平台数据</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">插件初始化完成（background 的 init 执行）</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">自动生成"网页"平台，包含 DeepSeek、豆包、千问、Kimi 四个网页模型，每个模型有正确的 webUrl</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">自动生成"阿里百炼""智谱""深度求索""月之暗面""Ollama" 五个 API 平台，模型列表为空</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">每个平台拥有唯一的 plt-* 格式 ID</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-01-02 -->
+  <div class="scenario pending" data-id="TC-01-02">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-01-02</span>
+        添加自定义 API 平台
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">用户打开 Dashboard 模型配置页，已有内置平台</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">用户点击"添加平台"，填写平台名称 "MyAPI"、BaseURL "https://api.test.com"、APIKey "sk-test123"，点击确认</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">平台列表出现 "MyAPI" 平台卡片</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">平台详情区显示 BaseURL 为 "https://api.test.com"，APIKey 已保存</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">平台的 models 数组为空，等待用户添加模型</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-01-03 -->
+  <div class="scenario pending" data-id="TC-01-03">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-01-03</span>
+        平台名称重复被阻止
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">已存在名为 "MyAPI" 的平台</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">用户再次尝试创建同名平台 "MyAPI"</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">系统提示"该平台已存在"，创建操作失败</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">平台列表保持不变，未产生新数据</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-01-04 -->
+  <div class="scenario pending" data-id="TC-01-04">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-01-04</span>
+        为 API 平台添加模型
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">用户选中 "MyAPI" 平台，该平台当前无模型</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">用户点击"添加模型"，输入模型编码 "gpt-4o"，点击确认</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">该平台模型列表出现 "gpt-4o"，拥有唯一的 model-* 格式 ID</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">模型默认为启用状态（enabled: true）</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-01-05 -->
+  <div class="scenario pending" data-id="TC-01-05">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-01-05</span>
+        模型编码重复被阻止
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">"MyAPI" 平台下已有模型 "gpt-4o"</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">用户再次尝试添加模型编码 "gpt-4o"</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">系统提示"模型编码已存在"，添加操作失败</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">模型列表保持不变</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-01-06 -->
+  <div class="scenario pending" data-id="TC-01-06">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-01-06</span>
+        切换模型启用/禁用状态
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">"MyAPI" 平台下模型 "gpt-4o" 当前为启用状态</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">用户关闭 "gpt-4o" 的启用开关</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">模型变为禁用状态（enabled: false）</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">在会话创建时的模型选择器中不再显示该模型</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">再次点击开关，模型恢复启用状态</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-01-07 -->
+  <div class="scenario pending" data-id="TC-01-07">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-01-07</span>
+        删除平台
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">系统存在多个平台（含内置 + 自定义）</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">用户选中某自定义平台并点击"删除"</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">该平台从列表中移除，其下所有模型一并删除</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">其他平台数据不受影响</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-01-08 -->
+  <div class="scenario pending" data-id="TC-01-08">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-01-08</span>
+        删除唯一平台被阻止
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">系统仅剩 1 个平台</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">用户尝试删除该平台</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">系统提示"至少需要保留一个平台"，删除操作失败</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">该平台仍然存在</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-01-09 -->
+  <div class="scenario pending" data-id="TC-01-09">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-01-09</span>
+        网页平台不可添加模型
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">用户选中内置"网页"平台（isWeb: true）</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">用户尝试为该平台添加模型</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">系统提示"网页平台不支持添加模型"，操作失败</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">网页平台的模型列表保持不变</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-01-10 -->
+  <div class="scenario pending" data-id="TC-01-10">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-01-10</span>
+        获取扁平化模型列表（含启用过滤）
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">系统有多个平台，部分模型已禁用</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">调用 getAllModels() 获取所有模型</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">返回扁平化数组，仅包含 enabled 的模型</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">网页模型包含 webUrl 字段，API 模型包含 baseUrl 和 apiKey 字段</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">每个模型包含 platformName、platformId、color 信息</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-01-11 -->
+  <div class="scenario pending" data-id="TC-01-11">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-01-11</span>
+        数据迁移：models 字段无效时自动修复
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">本地存储中某平台的 models 字段为 null 或非数组</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">插件初始化（initialize 执行）</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">自动将该平台的 models 修正为空数组 []</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">其他平台数据不受影响</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="common/test-utils.js"></script>
+</body>
+</html>

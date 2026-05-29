@@ -47,6 +47,10 @@ class DeepSeekAdapter extends BasePlatformAdapter {
     inputBox.dispatchEvent(new Event('input', { bubbles: true }));
     await this.sleep(500);
 
+    // 设置 fetch 拦截器等待标志
+    document.body.setAttribute('data-anti-lazy-waiting', 'true');
+    console.log(`[${this.platform}] ✓ 已设置 data-anti-lazy-waiting = true`);
+
     const enterEvent = new KeyboardEvent('keydown', {
       key: 'Enter',
       code: 'Enter',
@@ -143,191 +147,37 @@ class DeepSeekAdapter extends BasePlatformAdapter {
     const timestamp = () => new Date().toISOString().split('T')[1].replace('Z', '');
     console.log(`[${timestamp()}] [${this.platform}] ========== 开始等待 AI 回复 ==========`);
 
+    const POLL_INTERVAL = 500; // 每500ms检查一次
+    const MAX_WAIT = 120000; // 最长等待120秒
+    const startTime = Date.now();
+
     return new Promise((resolve, reject) => {
-      let lastContent = '';
-      let observer = null;
-      let timeoutHandle = null;
-      const WATCHDOG_TIMEOUT = 30000;
-
-      const resetWatchdog = () => {
-        if (timeoutHandle) {
-          clearTimeout(timeoutHandle);
-        }
-        timeoutHandle = setTimeout(() => {
-          const ts = timestamp();
-          if (lastContent.length > 0) {
-            console.log(`[${ts}] [${this.platform}] Watchdog 触发 cleanup`);
-            cleanup(lastContent);
-          } else {
-            console.log(`[${ts}] [${this.platform}] Watchdog 超时 reject`);
-            reject(new Error('等待AI回复超时 (30秒无响应)'));
-          }
-        }, WATCHDOG_TIMEOUT);
-      };
-
-      const checkNewMessage = (mutations) => {
+      const checkInterval = setInterval(() => {
         const ts = timestamp();
-        console.log(`[${ts}] [${this.platform}] MutationObserver 触发`);
-        const messages = document.querySelectorAll('.ds-message');
-        if (messages.length === 0) return null;
+        const elapsed = Date.now() - startTime;
 
-        const lastMessage = messages[messages.length - 1];
+        // 超时检查
+        if (elapsed > MAX_WAIT) {
+          clearInterval(checkInterval);
+          console.log(`[${ts}] [${this.platform}] 等待超时 (${MAX_WAIT}ms)`);
+          reject(new Error('等待AI回复超时'));
+          return;
+        }
 
-        const mainContent = lastMessage.querySelector('.ds-assistant-message-main-content');
-        if (!mainContent) return null;
-
-        const clonedContent = mainContent.cloneNode(true);
-        const codeBlocks = clonedContent.querySelectorAll('.md-code-block');
+        // 检查 fetch 拦截器是否已完成
+        const fetchReady = document.body.getAttribute('data-anti-lazy-fetch-ready');
+        const fetchMsg = document.body.getAttribute('data-anti-lazy-message');
         
-        codeBlocks.forEach(block => {
-          const pre = block.querySelector('pre');
-          const codeEl = pre?.querySelector('code');
-          const codeText = (codeEl || pre)?.textContent?.trim() || '';
-          
-          if (codeText.length > 0) {
-            let lang = '';
-            if (codeEl) {
-              const langMatch = (codeEl.className || '').match(/language-(\w+)/);
-              lang = langMatch ? langMatch[1] : '';
-            }
-            const markdownCode = `\`\`\`${lang}\n${codeText}\n\`\`\``;
-            block.replaceWith(document.createTextNode(markdownCode));
-          } else {
-            block.remove();
-          }
-        });
-
-        const extractTextWithNewlines = (node) => {
-          const blockTags = new Set(['P', 'DIV', 'BR', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'PRE', 'BLOCKQUOTE', 'UL', 'OL']);
-          const headingTags = { 'H1': '# ', 'H2': '## ', 'H3': '### ', 'H4': '#### ', 'H5': '##### ', 'H6': '###### ' };
-          let result = '';
-          
-          const extractTable = (tableNode) => {
-            const rows = [];
-            const tableRows = tableNode.querySelectorAll('tr');
-            tableRows.forEach(tr => {
-              const cells = [];
-              tr.querySelectorAll('th, td').forEach(cell => {
-                cells.push(cell.textContent.trim().replace(/\|/g, '\\|'));
-              });
-              rows.push(cells);
-            });
-            
-            if (rows.length === 0) return '';
-            
-            const maxCols = Math.max(...rows.map(r => r.length));
-            let table = '\n';
-            
-            rows.forEach((row, i) => {
-              while (row.length < maxCols) row.push('');
-              table += '| ' + row.join(' | ') + ' |\n';
-              if (i === 0) {
-                table += '| ' + row.map(() => '---').join(' | ') + ' |\n';
-              }
-            });
-            
-            return table + '\n';
-          };
-          
-          const walk = (node, inBlock) => {
-            if (node.nodeType === Node.TEXT_NODE) {
-              result += node.textContent;
-            } else if (node.nodeType === Node.ELEMENT_NODE) {
-              const isBlock = blockTags.has(node.tagName);
-              const isHeading = headingTags[node.tagName];
-              
-              if (node.tagName === 'BR') {
-                result += '\n';
-              } else if (node.tagName === 'TABLE') {
-                result += extractTable(node);
-              } else if (isHeading) {
-                if (result.length > 0 && !result.endsWith('\n')) {
-                  result += '\n';
-                }
-                result += isHeading;
-                for (let child of node.childNodes) {
-                  walk(child, true);
-                }
-                if (!result.endsWith('\n')) {
-                  result += '\n';
-                }
-              } else {
-                if (isBlock && inBlock && result.length > 0 && !result.endsWith('\n')) {
-                  result += '\n';
-                }
-                
-                for (let child of node.childNodes) {
-                  walk(child, isBlock || inBlock);
-                }
-                
-                if (isBlock && !result.endsWith('\n')) {
-                  result += '\n';
-                }
-              }
-            }
-          };
-          
-          walk(node, false);
-          return result;
-        };
-
-        let rawText = extractTextWithNewlines(clonedContent).trim();
-
-        if (!rawText) return null;
-
-        const thinkKeywords = ['思考中', 'Thinking', '正在思考', '思考内容'];
-        const hasThinkKeyword = thinkKeywords.some(keyword => rawText.includes(keyword));
-        if (hasThinkKeyword) return null;
-
-        return rawText;
-      };
-
-      const cleanup = (content) => {
-        const ts = timestamp();
-        console.log(`[${ts}] [${this.platform}] ========== cleanup 被调用 ==========`);
-        console.log(`[${ts}] [${this.platform}] 原始内容长度:`, content?.length || 0);
-        if (observer) observer.disconnect();
-        if (timeoutHandle) clearTimeout(timeoutHandle);
-
-        const finalContent = content.replace(/\[\[<<>>\]\]/g, '').trim();
-        console.log(`[${ts}] [${this.platform}] 清理后内容长度:`, finalContent?.length || 0);
-        resolve(finalContent);
-      };
-
-      observer = new MutationObserver((mutations) => {
-        resetWatchdog();
-        const content = checkNewMessage(mutations);
-        if (content && content !== lastContent) {
-          lastContent = content;
-
-          if (content.includes('[[<<>>]]')) {
-            const ts = timestamp();
-            console.log(`[${ts}] [${this.platform}] 检测到结束标记`);
-            if (timeoutHandle) {
-              clearTimeout(timeoutHandle);
-              timeoutHandle = null;
-            }
-            setTimeout(() => {
-              const finalContent = checkNewMessage(mutations);
-              if (finalContent && finalContent.includes('[[<<>>]]')) {
-                cleanup(finalContent);
-              } else {
-                cleanup(content);
-              }
-            }, 500);
-          }
+        if (fetchReady === 'true' && fetchMsg && fetchMsg.length > 0) {
+          console.log(`[${ts}] [${this.platform}] ✓ 从 fetch 拦截器获取消息，长度: ${fetchMsg.length}`);
+          document.body.removeAttribute('data-anti-lazy-message');
+          document.body.removeAttribute('data-anti-lazy-fetch-ready');
+          clearInterval(checkInterval);
+          resolve(fetchMsg);
+          return;
         }
-      });
 
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true,
-        characterData: true
-      });
-
-      const ts = timestamp();
-      console.log(`[${ts}] [${this.platform}] Watchdog 已启动，超时时间: ${WATCHDOG_TIMEOUT}ms`);
-      resetWatchdog();
+      }, POLL_INTERVAL);
     });
   }
 

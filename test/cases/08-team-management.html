@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>TC-08 团队管理</title>
+  <link rel="stylesheet" href="common/test-style.css">
+</head>
+<body>
+  <h1>TC-08 团队管理</h1>
+  <p class="subtitle">TeamManager - 团队 CRUD、成员验证、删除后会话引用清理</p>
+
+  <div class="stats-bar">
+    <div class="stat-card total"><div class="number">0</div><div class="label">总计</div></div>
+    <div class="stat-card pass"><div class="number">0</div><div class="label">通过</div></div>
+    <div class="stat-card fail"><div class="number">0</div><div class="label">失败</div></div>
+    <div class="stat-card pending"><div class="number">0</div><div class="label">待执行</div></div>
+  </div>
+
+  <div class="filters">
+    <button data-filter="all" class="active">全部</button>
+    <button data-filter="pass">已通过</button>
+    <button data-filter="fail">已失败</button>
+    <button data-filter="pending">待执行</button>
+    <button id="expandAll">全部展开</button>
+    <button id="collapseAll">全部折叠</button>
+  </div>
+
+  <button class="btn-export" id="exportBtn">导出测试报告</button>
+
+  <div class="scenario pending" data-id="TC-08-01">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-08-01</span>创建团队</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">用户已有 3 个可用模型</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">创建团队"前端组"，选择这 3 个模型作为成员</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">团队列表出现"前端组"，显示 3 个成员</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">团队拥有唯一 team-* 格式 ID，memberIds 包含 3 个模型 ID</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-08-02">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-08-02</span>编辑团队名称</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">已有团队"前端组"</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">修改名称为"前端架构组"</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">团队名称更新为"前端架构组"</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">updatedAt 刷新，createdAt 保持不变，ID 不变</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-08-03">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-08-03</span>删除团队后会话保留</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">团队"前端组"关联了 2 个会话（会话中含 teamId 字段）</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">用户删除"前端组"</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">团队从 teams 列表中移除</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">关联的 2 个会话仍然存在，不会被删除</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">会话中的 teamId 字段被清除，memberIds 保留</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-08-04">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-08-04</span>团队成员验证：包含无效 ID</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">系统中不存在 ID 为 "model-999" 的模型</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">用户创建团队时选择了 "model-999" 作为成员</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">系统提示"包含无效的成员ID"，创建失败</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-08-05">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-08-05</span>删除不存在的团队</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">团队 ID "team-nonexistent" 不存在</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">尝试删除该团队</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">系统提示"团队不存在"</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-08-06">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-08-06</span>搜索团队</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">已有多个团队，部分名称含"前端"</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">搜索"前端"</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">列表显示名称或描述包含"前端"的团队</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-08-07">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-08-07</span>获取团队含成员详情</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">团队"前端组"有 3 个成员 ID</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">调用 getTeamWithMembers(teamId)</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">返回团队信息 + 关联的 3 个模型完整详情</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">每个成员包含 name、code、platformName 等信息</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <script src="common/test-utils.js"></script>
+</body>
+</html>

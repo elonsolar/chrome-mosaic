@@ -944,9 +944,8 @@ class FlowDesignerApp {
       ? outputs.map(o => this.makeVarTag(o.name, false)).join('')
       : this.makeVarTag('output', false);
 
-    const foundModel = data.model?.modelId && this.models.find(m => m.id === data.model.modelId);
     const modelName = data.model?.name || data.model?.modelType ||
-      (foundModel ? `${foundModel.code}(${foundModel.platformName})` : null) || 'default';
+      (data.model?.modelId && this.models.find(m => m.id === data.model.modelId)?.code) || 'default';
 
     return `
       <div class="node-section">

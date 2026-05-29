@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>TC-02 头脑风暴会话</title>
+  <link rel="stylesheet" href="common/test-style.css">
+</head>
+<body>
+  <h1>TC-02 头脑风暴会话</h1>
+  <p class="subtitle">ConversationManager + ConversationMessageService - 多模型并行回复、上下文隔离</p>
+
+  <div class="stats-bar">
+    <div class="stat-card total"><div class="number">0</div><div class="label">总计</div></div>
+    <div class="stat-card pass"><div class="number">0</div><div class="label">通过</div></div>
+    <div class="stat-card fail"><div class="number">0</div><div class="label">失败</div></div>
+    <div class="stat-card pending"><div class="number">0</div><div class="label">待执行</div></div>
+  </div>
+
+  <div class="filters">
+    <button data-filter="all" class="active">全部</button>
+    <button data-filter="pass">已通过</button>
+    <button data-filter="fail">已失败</button>
+    <button data-filter="pending">待执行</button>
+    <button id="expandAll">全部展开</button>
+    <button id="collapseAll">全部折叠</button>
+  </div>
+
+  <button class="btn-export" id="exportBtn">导出测试报告</button>
+
+  <!-- TC-02-01 -->
+  <div class="scenario pending" data-id="TC-02-01">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-02-01</span>
+        创建头脑风暴会话
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">用户已有 2 个可用模型（DeepSeek、千问）</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">用户创建会话，选择"头脑风暴"模式，添加这 2 个模型为成员</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">会话创建成功，显示在会话列表中</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">会话 mode 为 "brainstorming"，contextMode 为 "self"，sendMode 为 "parallel"</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">会话 members 数组包含 2 个成员，memberOrder 与选择顺序一致</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-02-02 -->
+  <div class="scenario pending" data-id="TC-02-02">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-02-02</span>
+        发送消息后多模型并行回复
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">一个头脑风暴会话，包含 DeepSeek 和千问两个成员</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">用户发送消息"分析 API 响应慢的可能原因"</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">DeepSeek 和千问同时开始回复（并行执行，非串行等待）</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">两个模型的回复按完成时间先后依次显示在聊天区</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">每条回复标注对应的模型名称</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">用户消息存储为 MessageType.USER 类型</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-02-03 -->
+  <div class="scenario pending" data-id="TC-02-03">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-02-03</span>
+        各模型只能看到自己的历史（上下文隔离）
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">会话中已有用户消息和 DeepSeek 的第 1 轮回复</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">用户发送第 2 条消息</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">DeepSeek 能看到自己之前的回复作为上下文（assistant 角色消息）</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">千问看不到 DeepSeek 的回复，只能看到用户消息</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">每个成员的 API 请求 messages 数组中，其他成员的回复不会出现</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-02-04 -->
+  <div class="scenario pending" data-id="TC-02-04">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-02-04</span>
+        发送空消息被阻止
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">用户打开一个头脑风暴会话</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">用户尝试发送空白消息或仅包含空格的消息</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">系统拒绝发送，不产生任何 AI 请求</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">会话消息列表中不会新增用户消息</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-02-05 -->
+  <div class="scenario pending" data-id="TC-02-05">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-02-05</span>
+        首条消息注入系统提示词
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">成员 DeepSeek 配置了 systemPrompt（角色设定）</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">DeepSeek 发送第一条消息</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">API 请求中包含 role: "system" 的消息，内容为"【你的角色设定】" + systemPrompt</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">第 2 条消息起不再重复注入 system 消息</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-02-06 -->
+  <div class="scenario pending" data-id="TC-02-06">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-02-06</span>
+        Web 模式消息末尾追加结束标记
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">成员使用 web 访问方式（网页模式）</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">构建发送消息</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">消息末尾自动追加 "**严格遵守**：在你的回复最后必须添加 [[<<>>]] 标记，表示回复结束。"</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="common/test-utils.js"></script>
+</body>
+</html>

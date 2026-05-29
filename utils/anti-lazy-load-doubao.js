@@ -1,207 +1,239 @@
-// 豆包专用防懒加载脚本
+// 豆包专用 - Fetch 拦截器 + 用户活动模拟
+// 版本: 3.0.8
+// 使用完整回复（已过滤思考内容 block_type:10040，只保留文本 block_type:10000）
 (function() {
   'use strict';
 
-  // 配置
-  const CONFIG = {
-    debug: false,
-    mouseMovement: {
-      minInterval: 2000,
-      maxInterval: 5000,
-      smoothMovement: true
-    },
-    userActivity: {
-      eventTypes: ['mousemove', 'mousedown', 'mouseup'],
-      interval: { min: 2000, max: 4000 }
-    }
-  };
-
-  const activityIntervals = [];
-
+  const DEBUG = false; // 关闭详细调试日志
+  const intervals = [];
+  
   function debug(...args) {
-    if (CONFIG.debug) {
-      console.log('[Anti-Lazy-Load-Doubao]', ...args);
-    }
+    if (DEBUG) console.log('[Doubao Fetch]', ...args);
   }
 
-  // 覆盖 Visibility API
-  function overrideVisibilityAPI() {
-    try {
-      Object.defineProperty(document, 'hidden', {
-        get: () => false,
-        configurable: true
-      });
-      Object.defineProperty(document, 'visibilityState', {
-        get: () => "visible",
-        configurable: true
-      });
-      debug('Visibility API 已覆盖');
-    } catch (e) {}
-  }
-
-  // 覆盖 IntersectionObserver（立即触发回调）
-  function overrideIntersectionObserver() {
-    if (!window.IntersectionObserver) return;
-
-    const OriginalIntersectionObserver = window.IntersectionObserver;
-    window.IntersectionObserver = function(callback, options) {
-      const wrappedCallback = (entries, observer) => {
-        const modifiedEntries = entries.map(entry => {
-          entry.isIntersecting = true;
-          entry.intersectionRatio = 1;
-          entry.intersectionRect = entry.boundingClientRect;
-          return entry;
-        });
-        return callback(modifiedEntries, observer);
-      };
-
-      const observer = new OriginalIntersectionObserver(wrappedCallback, options);
-      const originalObserve = observer.observe.bind(observer);
-
-      observer.observe = function(element) {
-        setTimeout(() => {
-          const mockEntry = {
-            target: element,
-            isIntersecting: true,
-            intersectionRatio: 1,
-            boundingClientRect: element.getBoundingClientRect(),
-            intersectionRect: element.getBoundingClientRect(),
-            rootBounds: null,
-            time: performance.now()
-          };
-          wrappedCallback([mockEntry], observer);
-        }, 0);
-        return originalObserve(element);
-      };
-
-      return observer;
-    };
-    window.IntersectionObserver.prototype = OriginalIntersectionObserver.prototype;
-    debug('IntersectionObserver 已覆盖');
-  }
-
-  // 覆盖 requestIdleCallback
-  function overrideRequestIdleCallback() {
-    if (!window.requestIdleCallback) return;
-    const originalRequestIdleCallback = window.requestIdleCallback;
-    window.requestIdleCallback = function(callback, options) {
-      const deadline = { didTimeout: true, timeRemaining: () => 50 };
-      return setTimeout(() => callback(deadline), 0);
-    };
-    debug('requestIdleCallback 已覆盖');
-  }
-
-  // 覆盖 Focus API
-  function overrideFocusAPI() {
-    try {
-      Object.defineProperty(document, 'hasFocus', {
-        value: () => true,
-        writable: false,
-        configurable: true
-      });
-      debug('hasFocus 已覆盖');
-    } catch (e) {}
-  }
-
-  // 拦截 visibilitychange 事件
-  function blockVisibilityChange() {
-    const origAddEventListener = EventTarget.prototype.addEventListener;
-    EventTarget.prototype.addEventListener = function(type, listener, options) {
-      if (type === 'visibilitychange') {
-        return;
-      }
-      return origAddEventListener.call(this, type, listener, options);
-    };
-    debug('visibilitychange 拦截已启用');
-  }
-
-  // 拦截 freeze 事件
-  function blockFreezeEvent() {
-    window.addEventListener('freeze', (e) => {
-      e.stopImmediatePropagation();
-    }, true);
-    debug('freeze 事件拦截已启用');
-  }
-
-  // 鼠标移动模拟
-  function startMouseMovement() {
-    const moveMouse = () => {
-      const x = Math.random() * (window.innerWidth - 200) + 100;
-      const y = Math.random() * (window.innerHeight - 200) + 100;
-
-      if (CONFIG.mouseMovement.smoothMovement) {
-        // 平滑移动（模拟贝塞尔曲线）
-        const steps = 5;
-        for (let i = 0; i <= steps; i++) {
-          setTimeout(() => {
-            const event = new MouseEvent('mousemove', {
-              bubbles: true,
-              cancelable: true,
-              view: window,
-              clientX: x * (i / steps),
-              clientY: y * (i / steps)
-            });
-            document.dispatchEvent(event);
-          }, (i * 50));
+  // ========== Fetch 拦截器 ==========
+  function setupFetchInterceptor() {
+    const originalFetch = window.fetch;
+    
+    window.fetch = async function(...args) {
+      const url = typeof args[0] === 'string' ? args[0] : args[0]?.url;
+      const isWaiting = document.body.getAttribute('data-anti-lazy-waiting') === 'true';
+      
+      const response = await originalFetch.apply(this, args);
+      
+      try {
+        if (url && isWaiting && url.includes('/chat/completion')) {
+          debug('✓ 匹配到 AI API');
+          document.body.setAttribute('data-anti-lazy-waiting', 'false');
+          
+          const clonedResponse = response.clone();
+          const reader = clonedResponse.body.getReader();
+          const decoder = new TextDecoder();
+          let fullText = '';
+          let buffer = '';
+          let isThinking = false; // 追踪是否处于思考阶段
+          
+          function readStream() {
+            reader.read().then(({ done, value }) => {
+              if (done) {
+                // 使用完整回复（已过滤思考内容）
+                let finalText = fullText;
+                if (finalText.length > 0) {
+                  if (!finalText.includes('[[<<>>]]')) {
+                    finalText += ' [[<<>>]]';
+                  }
+                  document.body.setAttribute('data-anti-lazy-message', finalText);
+                  document.body.setAttribute('data-anti-lazy-fetch-ready', 'true');
+                  debug(`✓ 获取完整回复，长度: ${finalText.length}`);
+                }
+                return;
+              }
+              
+              // 解码数据
+              const chunk = decoder.decode(value, { stream: true });
+              console.log("解码数据chunk ",chunk)
+              buffer += chunk;
+              
+              // 处理所有完整的行
+              let lineEnd;
+              while ((lineEnd = buffer.indexOf('\n')) !== -1) {
+                const line = buffer.substring(0, lineEnd).trim();
+                buffer = buffer.substring(lineEnd + 1);
+                
+                if (!line) continue;
+                
+                if (line.startsWith('data:')) {
+                  const data = line.slice(5).trim();
+                  if (data === '[DONE]') continue;
+                  
+                  // console.log(data);
+                  
+                  try {
+                    const json = JSON.parse(data);
+                    let text = '';
+                    
+                    // 豆包格式: patch_op -> content_block -> text_block -> text
+                    if (json.patch_op && Array.isArray(json.patch_op)) {
+                      for (const op of json.patch_op) {
+                        const pv = op.patch_value;
+                        // 跳过 tts_content（思考内容）
+                        if (pv?.tts_content) {
+                          continue;
+                        }
+                        if (pv?.content_block && Array.isArray(pv.content_block)) {
+                          for (const block of pv.content_block) {
+                            // 检测思考块状态
+                            if (block.block_type === 10040) {
+                              isThinking = !block.is_finish;
+                              continue;
+                            }
+                            // 跳过思考子内容(有summary字段)
+                            if (block?.content?.text_block?.summary) continue;
+                            // 只处理文本块(block_type:10000)
+                            if (block.block_type === 10000) {
+                              const blockText = block?.content?.text_block?.text;
+                              if (typeof blockText === 'string') {
+                                text += blockText;
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                    
+                    // STREAM_MSG_NOTIFY 格式: content -> content_block -> text_block -> text
+                    if (!text && json.content?.content_block && Array.isArray(json.content.content_block)) {
+                      for (const block of json.content.content_block) {
+                        // 检测思考块状态
+                        if (block.block_type === 10040) {
+                          isThinking = !block.is_finish;
+                          continue;
+                        }
+                        // 跳过思考子内容(有summary字段)
+                        if (block?.content?.text_block?.summary) continue;
+                        // 只处理文本块(block_type:10000)
+                        if (block.block_type === 10000) {
+                          const blockText = block?.content?.text_block?.text;
+                          if (typeof blockText === 'string') {
+                            text += blockText;
+                          }
+                        }
+                      }
+                    }
+                    
+                    // CHUNK_DELTA 格式（纯文本追加）- 跳过思考阶段的文本
+                    if (!text && typeof json.text === 'string') {
+                      if (!isThinking) {
+                        text = json.text;
+                      }
+                    }
+                    
+                    // 标准格式回退
+                    if (!text && typeof json.choices?.[0]?.delta?.content === 'string') {
+                      text = json.choices[0].delta.content;
+                    }
+                    
+                    if (text) {
+                      fullText += text;
+                    }
+                  } catch (e) {
+                    debug(`JSON 解析错误: ${e.message}, 数据: "${data.substring(0, 100)}"`);
+                  }
+                }
+              }
+              
+              readStream();
+            }).catch(e => debug('流读取错误:', e.message));
+          }
+          
+          readStream();
         }
-      } else {
-        const event = new MouseEvent('mousemove', {
-          bubbles: true,
-          cancelable: true,
-          view: window,
-          clientX: x,
-          clientY: y
-        });
-        document.dispatchEvent(event);
+      } catch (e) {
+        debug('错误:', e.message);
       }
-
-      const interval = Math.random() * (CONFIG.mouseMovement.maxInterval - CONFIG.mouseMovement.minInterval) + CONFIG.mouseMovement.minInterval;
-      const intervalId = setTimeout(moveMouse, interval);
-      activityIntervals.push(intervalId);
+      
+      return response;
     };
-    const intervalId = setTimeout(moveMouse, 1000);
-    activityIntervals.push(intervalId);
-    debug('鼠标移动模拟已启动');
+    
+    window.fetch = new Proxy(window.fetch, {
+      apply: (target, thisArg, args) => target.apply(thisArg, args),
+      get: (target, prop) => prop === 'toString' ? Function.prototype.toString.bind(originalFetch) : Reflect.get(target, prop)
+    });
+    
+    debug('✓ Fetch 拦截器已安装');
   }
 
-  // 用户活动模拟
-  function startUserActivity() {
-    const simulateActivity = () => {
-      const eventType = CONFIG.userActivity.eventTypes[Math.floor(Math.random() * CONFIG.userActivity.eventTypes.length)];
-      const x = Math.random() * (window.innerWidth - 200) + 100;
-      const y = Math.random() * (window.innerHeight - 200) + 100;
+  // ========== 用户活动模拟（防检测）==========
+  function setupUserActivity() {
+    // 鼠标移动模拟
+    let lastMouseTime = 0;
+    const mouseInterval = setInterval(() => {
+      const now = Date.now();
+      if (now - lastMouseTime < 3000) return;
+      lastMouseTime = now;
+      
+      const x = Math.random() * window.innerWidth;
+      const y = Math.random() * window.innerHeight;
+      
+      document.dispatchEvent(new MouseEvent('mousemove', {
+        clientX: x, clientY: y, bubbles: true
+      }));
+    }, 2000 + Math.random() * 3000);
+    intervals.push(mouseInterval);
 
-      const event = new MouseEvent(eventType, {
-        bubbles: true,
-        cancelable: true,
-        view: window,
-        clientX: x,
-        clientY: y
-      });
-      document.dispatchEvent(event);
+    // 点击模拟
+    const clickInterval = setInterval(() => {
+      const x = Math.random() * window.innerWidth;
+      const y = Math.random() * window.innerHeight;
+      
+      document.dispatchEvent(new MouseEvent('mousedown', { clientX: x, clientY: y, bubbles: true }));
+      document.dispatchEvent(new MouseEvent('mouseup', { clientX: x, clientY: y, bubbles: true }));
+    }, 5000 + Math.random() * 5000);
+    intervals.push(clickInterval);
 
-      const interval = Math.random() * (CONFIG.userActivity.interval.max - CONFIG.userActivity.interval.min) + CONFIG.userActivity.interval.min;
-      const intervalId = setTimeout(simulateActivity, interval);
-      activityIntervals.push(intervalId);
-    };
-    const intervalId = setTimeout(simulateActivity, 1500);
-    activityIntervals.push(intervalId);
-    debug('用户活动模拟已启动');
+    // 滚动模拟
+    const scrollInterval = setInterval(() => {
+      window.scrollBy(0, Math.random() * 10 - 5);
+    }, 8000 + Math.random() * 4000);
+    intervals.push(scrollInterval);
+
+    // 键盘事件模拟
+    const keyInterval = setInterval(() => {
+      const keys = ['Shift', 'Control', 'Alt'];
+      const key = keys[Math.floor(Math.random() * keys.length)];
+      document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+      document.dispatchEvent(new KeyboardEvent('keyup', { key, bubbles: true }));
+    }, 10000 + Math.random() * 5000);
+    intervals.push(keyInterval);
+
+    debug('✓ 用户活动模拟已启动');
   }
 
-  // 初始化
+  // ========== 页面可见性模拟 ==========
+  function setupVisibility() {
+    // 覆盖 document.hidden
+    Object.defineProperty(document, 'hidden', { get: () => false, configurable: true });
+    Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true });
+    
+    // 定期触发可见性事件
+    const visInterval = setInterval(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    }, 5000);
+    intervals.push(visInterval);
+
+    // 覆盖 document.hasFocus
+    document.hasFocus = () => true;
+
+    debug('✓ 可见性模拟已启动');
+  }
+
+  // ========== 初始化 ==========
   function init() {
-    overrideVisibilityAPI();
-    blockVisibilityChange();
-    overrideIntersectionObserver();
-    overrideRequestIdleCallback();
-    overrideFocusAPI();
-    blockFreezeEvent();
-    startMouseMovement();
-    startUserActivity();
-    debug('防懒加载脚本初始化完成');
+    setupFetchInterceptor();
+    setupUserActivity();
+    setupVisibility();
+    debug('✓ 初始化完成');
   }
 
   init();
-
 })();

@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>TC-03 讨论模式会话</title>
+  <link rel="stylesheet" href="common/test-style.css">
+</head>
+<body>
+  <h1>TC-03 讨论模式会话</h1>
+  <p class="subtitle">ConversationMessageService + MemberEntity - 串行执行、增量上下文、讨论提示词</p>
+
+  <div class="stats-bar">
+    <div class="stat-card total"><div class="number">0</div><div class="label">总计</div></div>
+    <div class="stat-card pass"><div class="number">0</div><div class="label">通过</div></div>
+    <div class="stat-card fail"><div class="number">0</div><div class="label">失败</div></div>
+    <div class="stat-card pending"><div class="number">0</div><div class="label">待执行</div></div>
+  </div>
+
+  <div class="filters">
+    <button data-filter="all" class="active">全部</button>
+    <button data-filter="pass">已通过</button>
+    <button data-filter="fail">已失败</button>
+    <button data-filter="pending">待执行</button>
+    <button id="expandAll">全部展开</button>
+    <button id="collapseAll">全部折叠</button>
+  </div>
+
+  <button class="btn-export" id="exportBtn">导出测试报告</button>
+
+  <!-- TC-03-01 -->
+  <div class="scenario pending" data-id="TC-03-01">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-03-01</span>
+        创建讨论会话
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">用户已有 3 个可用模型</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">用户创建会话，选择"讨论"模式，添加 3 个模型为成员</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">会话创建成功，mode 为 "discussion"</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">contextMode 为 "full"（所有成员共享完整上下文）</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">sendMode 为 "sequential"（串行执行）</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-03-02 -->
+  <div class="scenario pending" data-id="TC-03-02">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-03-02</span>
+        成员按顺序依次回复
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">讨论会话包含 A、B、C 三个成员，按 memberOrder 排列</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">用户发送问题"要不要上 TypeScript？"</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">A 先回复，A 回复完成后 B 再回复，B 回复完成后 C 最后回复</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">全程不会出现并行执行，每个成员执行间隔有明显等待</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">回复按顺序显示在聊天区：A 的回复 → B 的回复 → C 的回复</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-03-03 -->
+  <div class="scenario pending" data-id="TC-03-03">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-03-03</span>
+        后续成员能看到前面成员的回复
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">讨论会话，成员 A 已完成回复</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">成员 B 开始回复</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">B 的输入上下文中包含 A 的回复内容</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">B 可以针对 A 的观点进行补充或反驳</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">在 API 模式下，A 的回复以 role:"user"、content:"成员名：内容" 的格式传入</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-03-04 -->
+  <div class="scenario pending" data-id="TC-03-04">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-03-04</span>
+        讨论角色提示词首次注入
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">讨论会话中成员 DeepSeek 首次发言，配置了 systemPrompt</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">DeepSeek 构建消息</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">自动注入讨论提示词，包含群背景说明："我们是一个协作讨论群"</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">包含 6 条讨论规则："严禁根据名字做假设""不要人云亦云""不确定要查证"等</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">讨论提示词仅在该成员的第 1 条消息中注入，后续消息不再重复</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-03-05 -->
+  <div class="scenario pending" data-id="TC-03-05">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-03-05</span>
+        增量上下文：只传递上次之后的消息
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">讨论会话已完成第 1 轮（A、B、C 均已回复），memberLastMessageIds 已记录</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">用户发送第 2 条消息，开始第 2 轮讨论</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">每个成员只收到第 1 轮自己 lastMessageId 之后的新消息，不重复接收旧消息</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">第 2 轮的上下文仍包含第 1 轮所有成员的回复（因为它们在 lastMessageId 之后）</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-03-06 -->
+  <div class="scenario pending" data-id="TC-03-06">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-03-06</span>
+        用户消息仅作为 user 角色传入（非 assistant）
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">讨论会话，用户发送了问题</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">各成员构建 API 请求</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">用户消息以 role:"user" 传入，不会以 role:"assistant" 传入</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">其他成员的回复以 role:"user" + "成员名：内容" 格式传入（非 assistant）</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="common/test-utils.js"></script>
+</body>
+</html>

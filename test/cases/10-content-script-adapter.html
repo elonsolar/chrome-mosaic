@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>TC-10 内容脚本适配器</title>
+  <link rel="stylesheet" href="common/test-style.css">
+</head>
+<body>
+  <h1>TC-10 内容脚本适配器</h1>
+  <p class="subtitle">ContentScript + PlatformAdapters - 平台检测、适配器创建、消息收发</p>
+
+  <div class="stats-bar">
+    <div class="stat-card total"><div class="number">0</div><div class="label">总计</div></div>
+    <div class="stat-card pass"><div class="number">0</div><div class="label">通过</div></div>
+    <div class="stat-card fail"><div class="number">0</div><div class="label">失败</div></div>
+    <div class="stat-card pending"><div class="number">0</div><div class="label">待执行</div></div>
+  </div>
+
+  <div class="filters">
+    <button data-filter="all" class="active">全部</button>
+    <button data-filter="pass">已通过</button>
+    <button data-filter="fail">已失败</button>
+    <button data-filter="pending">待执行</button>
+    <button id="expandAll">全部展开</button>
+    <button id="collapseAll">全部折叠</button>
+  </div>
+
+  <button class="btn-export" id="exportBtn">导出测试报告</button>
+
+  <div class="scenario pending" data-id="TC-10-01">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-10-01</span>DeepSeek 平台检测与适配器创建</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">用户打开 chat.deepseek.com</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">页面加载完成，content script 注入</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">detectPlatform() 返回 "deepseek"</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">createPlatformAdapter() 创建 DeepSeekAdapter 实例</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">适配器暴露到 window.platformAdapter</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">向 background 发送 {type:'pageReady', platform:'deepseek'} 消息</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-10-02">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-10-02</span>豆包平台检测</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">用户打开 www.doubao.com</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">content script 初始化</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">detectPlatform() 返回 "doubao"</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">适配器为 DoubaoAdapter</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-10-03">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-10-03</span>千问平台检测</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">用户打开 www.qianwen.com</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">content script 初始化</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">detectPlatform() 返回 "qianwen"</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">适配器为 QianwenAdapter</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-10-04">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-10-04</span>Kimi 平台检测</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">用户打开 kimi.moonshot.cn</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">content script 初始化</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">detectPlatform() 返回 "kimi"</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">适配器为 KimiAdapter</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-10-05">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-10-05</span>未知平台不创建适配器</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">用户打开非 AI 平台网站（如 example.com）</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">content script 尝试初始化</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">detectPlatform() 返回 null</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">不创建适配器，不发送 pageReady 消息</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-10-06">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-10-06</span>未知适配器类型回退到默认</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">createPlatformAdapter() 收到未知平台参数</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">创建适配器</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">使用 DoubaoAdapter 作为默认适配器</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">控制台输出警告"未知平台"</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-10-07">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-10-07</span>ping 响应检测就绪状态</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">content script 已注入并初始化完成</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">background 发送 {type:'ping'} 消息</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">返回 {status:'ok'}，确认脚本已就绪</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-10-08">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-10-08</span>发送消息到 AI 平台并返回结果</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">DeepSeek 页面已注入适配器，页面输入框可用</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">background 发送 {type:'sendMessage', content:'你好', messageId:'xxx'}</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">适配器在页面输入框填入"你好"并触发发送</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">等待 AI 回复完成（检测 [[<<>>]结束标记）</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">将回复内容通过 {type:'aiResponse', messageId:'xxx', content:'...'} 返回给 background</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-10-09">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-10-09</span>消息发送重试机制</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">sendAiResponseWithRetry 最大重试 3 次</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">前 2 次 sendMessage 失败（chrome.runtime.lastError），第 3 次成功</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">自动重试 3 次，间隔递增（1s → 2s → 3s）</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">第 3 次成功后正常返回</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <script src="common/test-utils.js"></script>
+</body>
+</html>

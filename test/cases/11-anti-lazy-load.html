@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>TC-11 反懒加载</title>
+  <link rel="stylesheet" href="common/test-style.css">
+</head>
+<body>
+  <h1>TC-11 反懒加载</h1>
+  <p class="subtitle">AntiLazyLoadBase - API 覆盖、鼠标模拟、用户活动模拟、WebSocket 保活</p>
+
+  <div class="stats-bar">
+    <div class="stat-card total"><div class="number">0</div><div class="label">总计</div></div>
+    <div class="stat-card pass"><div class="number">0</div><div class="label">通过</div></div>
+    <div class="stat-card fail"><div class="number">0</div><div class="label">失败</div></div>
+    <div class="stat-card pending"><div class="number">0</div><div class="label">待执行</div></div>
+  </div>
+
+  <div class="filters">
+    <button data-filter="all" class="active">全部</button>
+    <button data-filter="pass">已通过</button>
+    <button data-filter="fail">已失败</button>
+    <button data-filter="pending">待执行</button>
+    <button id="expandAll">全部展开</button>
+    <button id="collapseAll">全部折叠</button>
+  </div>
+
+  <button class="btn-export" id="exportBtn">导出测试报告</button>
+
+  <div class="scenario pending" data-id="TC-11-01">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-11-01</span>页面可见性伪装</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">反懒加载脚本已注入到 AI 平台页面</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">页面代码检查 document.visibilityState</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">始终返回 "visible"，即使页面实际在后台</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">document.hidden 始终返回 false</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-11-02">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-11-02</span>元素可见性伪装（IntersectionObserver）</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">反懒加载脚本已注入</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">页面使用 IntersectionObserver 检测元素是否进入可视区域</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">所有被观察元素立即报告为"可见"（isIntersecting: true）</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">intersectionRatio 为 1</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">observe() 调用后立即触发一次回调</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-11-03">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-11-03</span>requestIdleCallback 伪装</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">反懒加载脚本已注入</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">页面调用 requestIdleCallback(callback)</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">回调立即执行（通过 setTimeout(cb, 0)），不等待空闲</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">deadline.didTimeout 为 true，timeRemaining() 返回 50</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-11-04">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-11-04</span>页面焦点伪装</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">反懒加载脚本已注入</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">页面调用 document.hasFocus()</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">始终返回 true，即使页面实际无焦点</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-11-05">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-11-05</span>页面生命周期事件拦截</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">反懒加载脚本已注入</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">页面尝试监听 visibilitychange、freeze、pagehide 等事件</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">这些事件的 addEventListener 被拦截，监听器不会注册</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">freeze 和 pagehide 事件的 dispatchEvent 被阻止</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-11-06">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-11-06</span>网络信息伪装</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">反懒加载脚本已注入，浏览器支持 navigator.connection</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">页面检查网络信息</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">navigator.connection.saveData 返回 false</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">effectiveType 返回 "4g"，rtt 返回 0，downlink 返回 100</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-11-07">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-11-07</span>鼠标移动模拟</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">反懒加载脚本已注入，mouseMovement 配置已启用</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">脚本初始化完成</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">定期在页面上派发 mousemove 事件</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">坐标在配置的范围内随机生成</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">如启用平滑移动，模拟贝塞尔曲线轨迹</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-11-08">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-11-08</span>用户活动模拟</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">反懒加载脚本已注入，userActivity 配置已启用</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">脚本初始化完成</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">定期派发 mousemove、keydown、scroll 等事件</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">事件类型在配置的 eventTypes 中随机选择</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-11-09">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-11-09</span>WebSocket 保活</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">反懒加载脚本已注入，websocket 配置已启用</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">页面建立 WebSocket 连接</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">定期发送 ping 消息（按配置的 pingInterval）</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">ping 消息内容为配置的 pingMessage</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">WebSocket 关闭后自动停止 ping</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-11-10">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-11-10</span>资源清理</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">反懒加载脚本的多个定时器正在运行</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">调用 cleanup()</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">所有 activityIntervals 中的定时器被清除</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">activityIntervals 数组清空</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">不再产生新的模拟事件</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <script src="common/test-utils.js"></script>
+</body>
+</html>

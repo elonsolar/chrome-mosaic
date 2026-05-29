@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>TC-09 WebSocket 集成</title>
+  <link rel="stylesheet" href="common/test-style.css">
+</head>
+<body>
+  <h1>TC-09 WebSocket 集成</h1>
+  <p class="subtitle">WebSocketManager - 连接管理、消息收发、心跳、超时、重连</p>
+
+  <div class="stats-bar">
+    <div class="stat-card total"><div class="number">0</div><div class="label">总计</div></div>
+    <div class="stat-card pass"><div class="number">0</div><div class="label">通过</div></div>
+    <div class="stat-card fail"><div class="number">0</div><div class="label">失败</div></div>
+    <div class="stat-card pending"><div class="number">0</div><div class="label">待执行</div></div>
+  </div>
+
+  <div class="filters">
+    <button data-filter="all" class="active">全部</button>
+    <button data-filter="pass">已通过</button>
+    <button data-filter="fail">已失败</button>
+    <button data-filter="pending">待执行</button>
+    <button id="expandAll">全部展开</button>
+    <button id="collapseAll">全部折叠</button>
+  </div>
+
+  <button class="btn-export" id="exportBtn">导出测试报告</button>
+
+  <div class="scenario pending" data-id="TC-09-01">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-09-01</span>WebSocket 连接建立</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">用户在设置中启用 WebSocket，地址为 ws://localhost:8080</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">插件初始化，wsManager.connect() 被调用</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">WebSocket 连接成功建立，connected 变为 true</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">自动发送 {type:'connected', data:{message:'浏览器插件已连接'}} 消息</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">队列中如有待发消息，自动 flush 发送</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-09-02">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-09-02</span>外部工具发送聊天请求</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">WebSocket 已连接，存在名为"测试会话"的会话，包含 2 个成员</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">外部工具发送 {type:'chat_request', model:'测试会话', messages:[{role:'user',content:'你好'}]}</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">插件查找名为"测试会话"的会话</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">将消息转发给该会话的所有成员</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">所有成员回复完成后，合并结果通过 WebSocket 返回 {type:'ai_response'}</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-09-03">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-09-03</span>指定不存在的会话</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">WebSocket 已连接</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">外部工具请求的 model 名为"不存在的会话"</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">返回 {type:'ai_response', error:true, content:'错误: 会话不存在: 不存在的会话'}</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-09-04">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-09-04</span>心跳保活</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">WebSocket 已连接，心跳间隔为 30 秒</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">连接持续 30 秒无消息</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">自动发送 {type:'heartbeat', timestamp:...} 消息</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">每隔 30 秒持续发送心跳</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-09-05">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-09-05</span>断线自动重连</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">WebSocket 已连接，shouldReconnect 为 true</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">服务器断开连接（ws.onclose 触发）</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">自动尝试重连，第 1 次延迟 2 秒</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">重连间隔指数增长：2s → 4s → 8s → ... 最大 30s</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">重连期间状态为 "reconnecting"，显示重连次数</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-09-06">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-09-06</span>手动断开后不重连</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">WebSocket 已连接</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">用户手动调用 wsManager.disconnect()</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">shouldReconnect 设为 false，不再自动重连</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">重连定时器被清除，心跳停止</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-09-07">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-09-07</span>请求 300 秒超时</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">外部工具发送了 chat_request</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">300 秒内未收到所有成员回复</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">返回超时错误 {type:'ai_response', error:true, content:'错误: 等待 AI 响应超时（300秒）'}</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">该请求从 wsRequestQueue 中移除</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-09-08">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-09-08</span>未连接时消息加入队列</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">WebSocket 未连接（connected: false）</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">调用 wsManager.send(message)</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">消息加入 messageQueue，不抛出错误</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">返回 false</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">连接恢复后，队列中的消息自动发送</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-09-09">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-09-09</span>状态变更广播到所有标签页</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">浏览器打开多个标签页</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">WebSocket 连接状态变化（连接/断开/重连）</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">向所有标签页发送 {type:'ws_status_update', connected, status} 消息</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">发送失败的标签页（已关闭等）被静默忽略</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <script src="common/test-utils.js"></script>
+</body>
+</html>

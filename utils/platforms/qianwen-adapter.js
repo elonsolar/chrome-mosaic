@@ -63,6 +63,10 @@ class QianwenAdapter extends BasePlatformAdapter {
     editor.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: false, inputType: 'insertText', data: content }));
     await this.sleep(1000);
 
+    // 设置 fetch 拦截器等待标志
+    document.body.setAttribute('data-anti-lazy-waiting', 'true');
+    console.log(`[${this.platform}] ✓ 已设置 data-anti-lazy-waiting = true`);
+
     const sendButton = await this.waitForButton();
     sendButton.click();
     console.log(`[${this.platform}] ✓ 已点击发送按钮`);
@@ -177,217 +181,37 @@ class QianwenAdapter extends BasePlatformAdapter {
     const timestamp = () => new Date().toISOString().split('T')[1].replace('Z', '');
     console.log(`[${timestamp()}] [${this.platform}] ========== 开始等待 AI 回复 ==========`);
 
+    const POLL_INTERVAL = 500; // 每500ms检查一次
+    const MAX_WAIT = 120000; // 最长等待120秒
+    const startTime = Date.now();
+
     return new Promise((resolve, reject) => {
-      let lastContent = '';
-      let observer = null;
-      let timeoutHandle = null;
-      const WATCHDOG_TIMEOUT = 30000;
-
-      const resetWatchdog = () => {
-        if (timeoutHandle) {
-          clearTimeout(timeoutHandle);
-        }
-        timeoutHandle = setTimeout(() => {
-          const ts = timestamp();
-          if (lastContent.length > 0) {
-            console.log(`[${ts}] [${this.platform}] Watchdog 触发 cleanup`);
-            cleanup(lastContent);
-          } else {
-            console.log(`[${ts}] [${this.platform}] Watchdog 超时 reject`);
-            reject(new Error('等待AI回复超时 (30秒无响应)'));
-          }
-        }, WATCHDOG_TIMEOUT);
-      };
-
-      const checkNewMessage = (mutations) => {
+      const checkInterval = setInterval(() => {
         const ts = timestamp();
-        console.log(`[${ts}] [${this.platform}] MutationObserver 触发`);
-        const messageContainer = document.querySelector('.message-list-content-container');
-        if (!messageContainer) return null;
+        const elapsed = Date.now() - startTime;
 
-        const chatRounds = messageContainer.querySelectorAll('.chat-round');
-        if (chatRounds.length === 0) return null;
-
-        const lastRound = chatRounds[chatRounds.length - 1];
-        const answerCard = lastRound?.querySelector('.answer-common-card');
-        
-        if (!answerCard) return null;
-
-        const clonedMessage = answerCard.cloneNode(true);
-
-        const thinkSelectors = [
-          '[data-card_name="deep_think"]', '.thinking-content', '.think-process', '[class*="think"]',
-          '[class*="thought"]', '.qk-think', '.think-container', '.thinking', '.thought'
-        ];
-
-        thinkSelectors.forEach(selector => {
-          const elements = clonedMessage.querySelectorAll(selector);
-          elements.forEach(el => el.remove());
-        });
-
-        const markdownElement = clonedMessage.querySelector('.qk-markdown');
-
-        if (!markdownElement) return null;
-
-        const clone = markdownElement.cloneNode(true);
-        
-        // 处理代码块
-        const codeBlocks = clone.querySelectorAll('pre');
-        
-        codeBlocks.forEach(block => {
-          const codeEl = block.querySelector('code');
-          const codeText = (codeEl || block)?.textContent?.trim() || '';
-          
-          if (codeText.length > 0) {
-            let lang = '';
-            if (codeEl) {
-              const langMatch = (codeEl.className || '').match(/language-(\w+)/);
-              lang = langMatch ? langMatch[1] : '';
-            }
-            const markdownCode = `\`\`\`${lang}\n${codeText}\n\`\`\``;
-            block.replaceWith(document.createTextNode(markdownCode));
-          } else {
-            block.remove();
-          }
-        });
-
-        const removeSelectors = [
-          '[class*="video-note"]',
-          '[class*="card_video"]',
-          '[class*="search-result"]',
-          '[class*="recommend"]',
-          '[class*="source-map"]',
-          'style',
-          'script'
-        ];
-        removeSelectors.forEach(sel => {
-          clone.querySelectorAll(sel).forEach(el => el.remove());
-        });
-
-        const extractTextWithNewlines = (node) => {
-          const blockTags = new Set(['P', 'DIV', 'BR', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'PRE', 'BLOCKQUOTE', 'UL', 'OL', 'TD', 'TH']);
-          const headingTags = { 'H1': '# ', 'H2': '## ', 'H3': '### ', 'H4': '#### ', 'H5': '##### ', 'H6': '###### ' };
-          let result = '';
-          
-          const extractTable = (tableNode) => {
-            const rows = [];
-            const tableRows = tableNode.querySelectorAll('tr');
-            tableRows.forEach(tr => {
-              const cells = [];
-              tr.querySelectorAll('th, td').forEach(cell => {
-                cells.push(cell.textContent.trim().replace(/\|/g, '\\|'));
-              });
-              rows.push(cells);
-            });
-            
-            if (rows.length === 0) return '';
-            
-            const maxCols = Math.max(...rows.map(r => r.length));
-            let table = '\n';
-            
-            rows.forEach((row, i) => {
-              while (row.length < maxCols) row.push('');
-              table += '| ' + row.join(' | ') + ' |\n';
-              if (i === 0) {
-                table += '| ' + row.map(() => '---').join(' | ') + ' |\n';
-              }
-            });
-            
-            return table + '\n';
-          };
-          
-          const walk = (node, inBlock) => {
-            if (node.nodeType === Node.TEXT_NODE) {
-              result += node.textContent;
-            } else if (node.nodeType === Node.ELEMENT_NODE) {
-              const isBlock = blockTags.has(node.tagName);
-              const isHeading = headingTags[node.tagName];
-              
-              if (node.tagName === 'BR') {
-                result += '\n';
-              } else if (node.tagName === 'TABLE') {
-                result += extractTable(node);
-              } else if (isHeading) {
-                if (result.length > 0 && !result.endsWith('\n')) {
-                  result += '\n';
-                }
-                result += isHeading;
-                for (let child of node.childNodes) {
-                  walk(child, true);
-                }
-                if (!result.endsWith('\n')) {
-                  result += '\n';
-                }
-              } else {
-                if (isBlock && inBlock && result.length > 0 && !result.endsWith('\n')) {
-                  result += '\n';
-                }
-                
-                for (let child of node.childNodes) {
-                  walk(child, isBlock || inBlock);
-                }
-                
-                if (isBlock && !result.endsWith('\n')) {
-                  result += '\n';
-                }
-              }
-            }
-          };
-          
-          walk(node, false);
-          return result;
-        };
-
-        let rawText = extractTextWithNewlines(clone).trim();
-        console.log(`[${timestamp()}] [${this.platform}] 提取文本长度: ${rawText.length}, 前50字符: ${rawText.substring(0, 50)}`);
-
-        return rawText;
-      };
-
-      const cleanup = (content) => {
-        const ts = timestamp();
-        console.log(`[${ts}] [${this.platform}] ========== cleanup 被调用 ==========`);
-        console.log(`[${ts}] [${this.platform}] 原始内容长度:`, content?.length || 0);
-        if (observer) observer.disconnect();
-        if (timeoutHandle) clearTimeout(timeoutHandle);
-
-        const finalContent = content.replace(/\[\[<<>>\]\]/g, '').trim();
-        console.log(`[${ts}] [${this.platform}] 清理后内容长度:`, finalContent?.length || 0);
-        resolve(finalContent);
-      };
-
-      observer = new MutationObserver((mutations) => {
-        resetWatchdog();
-        const content = checkNewMessage(mutations);
-        if (content && content !== lastContent) {
-          lastContent = content;
-
-          if (content.includes('[[<<>>]]')) {
-            if (timeoutHandle) {
-              clearTimeout(timeoutHandle);
-              timeoutHandle = null;
-            }
-            setTimeout(() => {
-              const finalContent = checkNewMessage(mutations);
-              if (finalContent && finalContent.includes('[[<<>>]]')) {
-                cleanup(finalContent);
-              } else {
-                cleanup(content);
-              }
-            }, 500);
-          }
+        // 超时检查
+        if (elapsed > MAX_WAIT) {
+          clearInterval(checkInterval);
+          console.log(`[${ts}] [${this.platform}] 等待超时 (${MAX_WAIT}ms)`);
+          reject(new Error('等待AI回复超时'));
+          return;
         }
-      });
 
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true,
-        characterData: true
-      });
+        // 检查 fetch 拦截器是否已完成
+        const fetchReady = document.body.getAttribute('data-anti-lazy-fetch-ready');
+        const fetchMsg = document.body.getAttribute('data-anti-lazy-message');
+        
+        if (fetchReady === 'true' && fetchMsg && fetchMsg.length > 0) {
+          console.log(`[${ts}] [${this.platform}] ✓ 从 fetch 拦截器获取消息，长度: ${fetchMsg.length}`);
+          document.body.removeAttribute('data-anti-lazy-message');
+          document.body.removeAttribute('data-anti-lazy-fetch-ready');
+          clearInterval(checkInterval);
+          resolve(fetchMsg);
+          return;
+        }
 
-      const ts = timestamp();
-      console.log(`[${ts}] [${this.platform}] Watchdog 已启动，超时时间: ${WATCHDOG_TIMEOUT}ms`);
-      resetWatchdog();
+      }, POLL_INTERVAL);
     });
   }
 

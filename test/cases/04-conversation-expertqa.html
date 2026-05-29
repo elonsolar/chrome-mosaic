@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>TC-04 专家问答会话</title>
+  <link rel="stylesheet" href="common/test-style.css">
+</head>
+<body>
+  <h1>TC-04 专家问答会话</h1>
+  <p class="subtitle">ExpertEntity + EntityFactory + FlowExecutor - 流程驱动的专家问答</p>
+
+  <div class="stats-bar">
+    <div class="stat-card total"><div class="number">0</div><div class="label">总计</div></div>
+    <div class="stat-card pass"><div class="number">0</div><div class="label">通过</div></div>
+    <div class="stat-card fail"><div class="number">0</div><div class="label">失败</div></div>
+    <div class="stat-card pending"><div class="number">0</div><div class="label">待执行</div></div>
+  </div>
+
+  <div class="filters">
+    <button data-filter="all" class="active">全部</button>
+    <button data-filter="pass">已通过</button>
+    <button data-filter="fail">已失败</button>
+    <button data-filter="pending">待执行</button>
+    <button id="expandAll">全部展开</button>
+    <button id="collapseAll">全部折叠</button>
+  </div>
+
+  <button class="btn-export" id="exportBtn">导出测试报告</button>
+
+  <!-- TC-04-01 -->
+  <div class="scenario pending" data-id="TC-04-01">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-04-01</span>
+        创建专家问答会话并关联专家
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">用户已有一个"代码审查专家"配置，包含完整的节点和连接</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">用户创建会话，选择"专家问答"模式，关联该专家</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">会话创建成功，含 expertId 字段指向该专家</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">会话模式为 "expertqa"，contextMode 为 "self"</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-04-02 -->
+  <div class="scenario pending" data-id="TC-04-02">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-04-02</span>
+        发送问题触发专家流程执行
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">专家问答会话已关联"代码审查专家"，专家流程包含多个 LLM 节点</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">用户发送代码片段请求审查</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">系统自动执行专家配置的流程，依次经过各个节点</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">最终返回流程的执行结果作为回复，显示在聊天区</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">执行过程中的进度信息通过进度追踪器更新</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-04-03 -->
+  <div class="scenario pending" data-id="TC-04-03">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-04-03</span>
+        未关联专家时提示错误
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">会话选择了专家问答模式，但未关联任何专家或流程</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">用户发送消息</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">系统提示"未配置协作方案"，不执行任何流程</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-04-04 -->
+  <div class="scenario pending" data-id="TC-04-04">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-04-04</span>
+        专家不存在时的错误处理
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">会话关联了某专家，但该专家已被用户删除</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">用户发送消息触发执行</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">系统提示"专家不存在"</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-04-05 -->
+  <div class="scenario pending" data-id="TC-04-05">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-04-05</span>
+        流程中某节点执行失败
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">专家流程包含 3 个节点，第 2 个节点配置了不存在的模型</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">用户发送问题，流程执行到第 2 个节点</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">系统报告第 2 个节点的错误信息（如"模型配置不存在或已被删除"）</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">第 3 个节点不再执行，整个流程中断</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-04-06 -->
+  <div class="scenario pending" data-id="TC-04-06">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-04-06</span>
+        通过 flowId 关联流程（非 expertId）
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">会话通过 flowId 直接关联了一个流程（非专家方式）</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">用户发送消息</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">系统通过 FlowManager 获取流程数据，创建 ExpertEntity 执行</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">执行结果与通过 expertId 关联时一致</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="common/test-utils.js"></script>
+</body>
+</html>

@@ -59,6 +59,10 @@ class DoubaoAdapter extends BasePlatformAdapter {
     const sendButton = await this.waitForButton();
     console.log(`[${timestamp()}] [${this.platform}] ✓ 找到发送按钮`);
 
+    // 点击发送按钮前，通过 DOM 属性通知 MAIN world 的 fetch 拦截器
+    document.body.setAttribute('data-anti-lazy-waiting', 'true');
+    console.log(`[${timestamp()}] [${this.platform}] ✓ 已设置 data-anti-lazy-waiting = true（点击前）`);
+
     // 点击发送按钮
     sendButton.click();
     console.log(`[${timestamp()}] [${this.platform}] ✓ 已点击发送按钮`);
@@ -73,11 +77,17 @@ class DoubaoAdapter extends BasePlatformAdapter {
     console.log(`[${timestamp()}] [${this.platform}] messageId:`, messageId);
     console.log(`[${timestamp()}] [${this.platform}] conversationId:`, conversationId);
 
+    // 发送前记录消息数量
+    const msgList = document.querySelector('[class*="message-list"]');
+    const beforeCount = msgList ? msgList.querySelectorAll('.v_list_row').length : 0;
+    console.log(`[${timestamp()}] [${this.platform}] 发送前消息数量: ${beforeCount}`);
+    window.__antiLazyMsgCountBefore = beforeCount;
+
     window.isSendingMessage = true;
     console.log(`[${timestamp()}] [${this.platform}] ✓ 已设置 isSendingMessage = true`);
 
     try {
-      await this.sendMessage(content);
+      await this.sendMessage(content);  // sendMessage 内部会在点击前设置 data-anti-lazy-waiting = true
       console.log(`[${timestamp()}] [${this.platform}] ✓ 消息已发送到输入框`);
 
       const response = await this.waitForAIResponse();
@@ -120,6 +130,9 @@ class DoubaoAdapter extends BasePlatformAdapter {
     } catch (error) {
       const ts = timestamp();
       console.error(`[${ts}] [${this.platform}] ❌ 错误:`, error.message);
+      window.__antiLazyUserSending = false;
+      window.__antiLazyWaitingForReply = false;
+      document.body.setAttribute('data-anti-lazy-waiting', 'false');
       chrome.runtime.sendMessage({
         type: 'aiResponse',
         platform: this.platform,
@@ -129,8 +142,11 @@ class DoubaoAdapter extends BasePlatformAdapter {
       });
     } finally {
       window.isSendingMessage = false;
+      window.__antiLazyUserSending = false;
+      window.__antiLazyWaitingForReply = false;
+      document.body.setAttribute('data-anti-lazy-waiting', 'false');
       const ts = timestamp();
-      console.log(`[${ts}] [${this.platform}] ✓ 消息处理完成，已清除 isSendingMessage 标记`);
+      console.log(`[${ts}] [${this.platform}] ✓ 消息处理完成，已清除所有标志`);
     }
   }
 
@@ -294,133 +310,40 @@ class DoubaoAdapter extends BasePlatformAdapter {
     const timestamp = () => new Date().toISOString().split('T')[1].replace('Z', '');
     console.log(`[${timestamp()}] [${this.platform}] ========== 开始等待 AI 回复 ==========`);
 
+    const beforeCount = window.__antiLazyMsgCountBefore || 0;
+    console.log(`[${timestamp()}] [${this.platform}] 等待消息数 >= ${beforeCount + 2}`);
+
+    const POLL_INTERVAL = 500; // 每500ms检查一次
+    const MAX_WAIT = 120000; // 最长等待120秒
+    const startTime = Date.now();
+
     return new Promise((resolve, reject) => {
-      let lastContent = '';
-      let observer = null;
-      let timeoutHandle = null;
-      const WATCHDOG_TIMEOUT = 30000;
-
-      const resetWatchdog = () => {
-        if (timeoutHandle) {
-          clearTimeout(timeoutHandle);
-        }
-        timeoutHandle = setTimeout(() => {
-          const ts = timestamp();
-          if (lastContent.length > 0) {
-            console.log(`[${ts}] [${this.platform}] Watchdog 触发 cleanup`);
-            cleanup(lastContent);
-          } else {
-            console.log(`[${ts}] [${this.platform}] Watchdog 超时 reject`);
-            reject(new Error('等待AI回复超时 (30秒无响应)'));
-          }
-        }, WATCHDOG_TIMEOUT);
-      };
-
-      const checkNewMessage = (mutations) => {
+      const checkInterval = setInterval(() => {
         const ts = timestamp();
-        console.log(`[${ts}] [${this.platform}] MutationObserver 触发`);
-        const msgList = document.querySelector('[class*="message-list"]');
-        if (!msgList) return null;
+        const elapsed = Date.now() - startTime;
 
-        // 查找所有消息行（豆包使用 .v_list_row）
-        const allRows = msgList.querySelectorAll('.v_list_row');
-        const messageRows = Array.from(allRows).filter(row =>
-          row.textContent && row.textContent.trim().length > 0
-        );
-
-        if (messageRows.length === 0) return null;
-
-        // 获取最后一个非空消息行
-        const lastMessageRow = messageRows[messageRows.length - 1];
-        if (!lastMessageRow) return null;
-
-        const clonedMessage = lastMessageRow.cloneNode(true);
-
-        // 移除思考相关元素（如果存在）
-        const thinkSelectors = [
-          '[class*="think"]',
-          '[class*="thought"]',
-          '.thinking',
-          '.thought'
-        ];
-
-        thinkSelectors.forEach(selector => {
-          const elements = clonedMessage.querySelectorAll(selector);
-          elements.forEach(el => el.remove());
-        });
-
-        // 移除所有按钮
-        const buttons = clonedMessage.querySelectorAll('button');
-        buttons.forEach(btn => btn.remove());
-
-        // 移除用户输入部分（通常包含输入提示）
-        const userInputElements = clonedMessage.querySelectorAll('[class*="whitespace-pre-wrap"], [class*="user-input"]');
-        userInputElements.forEach(el => el.remove());
-
-        // 移除 select-none class 的元素
-        const selectNoneElements = clonedMessage.querySelectorAll('.select-none');
-        selectNoneElements.forEach(el => el.remove());
-
-        const formattedElement = this.formatCodeBlocks(clonedMessage);
-
-        let rawText = this.extractTextWithNewlines(formattedElement).trim();
-        console.log(`[${timestamp()}] [${this.platform}] 提取文本长度: ${rawText.length}, 前50字符: ${rawText.substring(0, 50)}`);
-
-        if (!rawText) return null;
-
-        const thinkKeywords = ['思考中', 'Thinking', '正在思考', '思考内容'];
-        const hasThinkKeyword = thinkKeywords.some(keyword => rawText.includes(keyword));
-        if (hasThinkKeyword) return null;
-
-        return rawText;
-      };
-
-      const cleanup = (content) => {
-        const ts = timestamp();
-        console.log(`[${ts}] [${this.platform}] ========== cleanup 被调用 ==========`);
-        console.log(`[${ts}] [${this.platform}] 原始内容长度:`, content?.length || 0);
-        if (observer) observer.disconnect();
-        if (timeoutHandle) clearTimeout(timeoutHandle);
-
-        const finalContent = content.replace(/\[\[<<>>\]\]/g, '').trim();
-        console.log(`[${ts}] [${this.platform}] 清理后内容长度:`, finalContent?.length || 0);
-        resolve(finalContent);
-      };
-
-      observer = new MutationObserver((mutations) => {
-        resetWatchdog();
-        const content = checkNewMessage(mutations);
-        if (content && content !== lastContent) {
-          lastContent = content;
-
-          if (content.includes('[[<<>>]]')) {
-            const ts = timestamp();
-            console.log(`[${ts}] [${this.platform}] 检测到结束标记`);
-            if (timeoutHandle) {
-              clearTimeout(timeoutHandle);
-              timeoutHandle = null;
-            }
-            setTimeout(() => {
-              const finalContent = checkNewMessage(mutations);
-              if (finalContent && finalContent.includes('[[<<>>]]')) {
-                cleanup(finalContent);
-              } else {
-                cleanup(content);
-              }
-            }, 500);
-          }
+        // 超时检查
+        if (elapsed > MAX_WAIT) {
+          clearInterval(checkInterval);
+          console.log(`[${ts}] [${this.platform}] 等待超时 (${MAX_WAIT}ms)`);
+          reject(new Error('等待AI回复超时'));
+          return;
         }
-      });
 
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true,
-        characterData: true
-      });
+        // 只检查 fetch 拦截器是否已完成
+        const fetchReady = document.body.getAttribute('data-anti-lazy-fetch-ready');
+        const fetchMsg = document.body.getAttribute('data-anti-lazy-message');
+        
+        if (fetchReady === 'true' && fetchMsg && fetchMsg.length > 0) {
+          console.log(`[${ts}] [${this.platform}] ✓ 从 fetch 拦截器获取消息，长度: ${fetchMsg.length}`);
+          document.body.removeAttribute('data-anti-lazy-message');
+          document.body.removeAttribute('data-anti-lazy-fetch-ready');
+          clearInterval(checkInterval);
+          resolve(fetchMsg);
+          return;
+        }
 
-      const ts = timestamp();
-      console.log(`[${ts}] [${this.platform}] Watchdog 已启动，超时时间: ${WATCHDOG_TIMEOUT}ms`);
-      resetWatchdog();
+      }, POLL_INTERVAL);
     });
   }
 

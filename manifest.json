@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Mosaic",
-  "version": "1.1.5",
+  "version": "2.0.5",
   "description": "多平台 AI 模型协作工具，统一管理多个 AI 平台，支持多模型协作对话、流程编排和提示词管理",
   "permissions": [
     "storage",
@@ -32,7 +32,14 @@
     {
       "matches": ["https://chat.deepseek.com/*"],
       "js": [
-        "utils/anti-lazy-load-deepseek.js",
+        "utils/anti-lazy-load-deepseek.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://chat.deepseek.com/*"],
+      "js": [
         "utils/platforms/base-adapter.js",
         "utils/platforms/deepseek-adapter.js",
         "utils/content-script.js"
@@ -42,7 +49,14 @@
     {
       "matches": ["https://www.doubao.com/*"],
       "js": [
-        "utils/anti-lazy-load-doubao.js",
+        "utils/anti-lazy-load-doubao.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://www.doubao.com/*"],
+      "js": [
         "utils/platforms/base-adapter.js",
         "utils/platforms/doubao-adapter.js",
         "utils/content-script.js"
@@ -52,7 +66,14 @@
     {
       "matches": ["https://www.qianwen.com/*"],
       "js": [
-        "utils/anti-lazy-load-qianwen.js",
+        "utils/anti-lazy-load-qianwen.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://www.qianwen.com/*"],
+      "js": [
         "utils/platforms/base-adapter.js",
         "utils/platforms/qianwen-adapter.js",
         "utils/content-script.js"

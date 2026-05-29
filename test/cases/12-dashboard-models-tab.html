@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>TC-12 Dashboard 模型配置页</title>
+  <link rel="stylesheet" href="common/test-style.css">
+</head>
+<body>
+  <h1>TC-12 Dashboard 模型配置页</h1>
+  <p class="subtitle">ModelsTab - 平台列表渲染、搜索、详情展示、模态框 CRUD</p>
+
+  <div class="stats-bar">
+    <div class="stat-card total"><div class="number">0</div><div class="label">总计</div></div>
+    <div class="stat-card pass"><div class="number">0</div><div class="label">通过</div></div>
+    <div class="stat-card fail"><div class="number">0</div><div class="label">失败</div></div>
+    <div class="stat-card pending"><div class="number">0</div><div class="label">待执行</div></div>
+  </div>
+
+  <div class="filters">
+    <button data-filter="all" class="active">全部</button>
+    <button data-filter="pass">已通过</button>
+    <button data-filter="fail">已失败</button>
+    <button data-filter="pending">待执行</button>
+    <button id="expandAll">全部展开</button>
+    <button id="collapseAll">全部折叠</button>
+  </div>
+
+  <button class="btn-export" id="exportBtn">导出测试报告</button>
+
+  <div class="scenario pending" data-id="TC-12-01">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-12-01</span>页面渲染结构完整</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">用户打开 Dashboard 并导航到"模型"标签页</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">ModelsTab.init() 执行完成</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">页面显示搜索框（#platformSearchInput）</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">左侧显示平台列表区域（#platformsList）</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">右侧显示详情区域（#platformsDetail）</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">底部显示"添加平台"按钮（#createPlatformBtn）</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-12-02">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-12-02</span>平台列表加载并显示</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">系统已有多个平台（含内置 + 自定义）</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">页面加载完成</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">左侧列表显示所有平台卡片</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">每个卡片显示平台名称和图标</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">右侧详情区默认显示"请从左侧选择一个平台查看详情"</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-12-03">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-12-03</span>搜索过滤平台</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">平台列表包含"网页""阿里百炼""深度求索"等平台</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">用户在搜索框输入"深度"</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">列表实时过滤，仅显示"深度求索"平台</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">清除按钮（×）出现</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">点击清除按钮后，搜索框清空，列表恢复全部显示</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-12-04">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-12-04</span>选中平台查看详情</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">左侧平台列表可见</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">用户点击某个 API 平台卡片</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">右侧详情区显示该平台的 BaseURL</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">显示 APIKey（脱敏显示）</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">显示模型列表，每个模型显示编码和启用状态</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">显示"添加模型"按钮</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-12-05">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-12-05</span>通过弹窗新增平台</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">用户在模型配置页</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">用户点击"添加平台"按钮</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">弹出模态框，包含平台名称、BaseURL、APIKey 输入表单</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">模态框有"确认"和"取消"按钮</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">填写完成后点击确认，平台出现在左侧列表中</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">模态框自动关闭</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-12-06">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-12-06</span>弹窗取消关闭</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">新增平台弹窗已打开</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">用户点击取消按钮或点击弹窗外的遮罩层</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">弹窗关闭</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">不创建任何新数据</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">平台列表保持不变</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-12-07">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-12-07</span>详情区添加模型</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">用户已选中某 API 平台，详情区显示模型列表</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">用户点击"添加模型"，输入模型编码 "gpt-4o"，确认</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">详情区模型列表新增 "gpt-4o"</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">模型默认启用，显示启用开关</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-12-08">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-12-08</span>详情区删除模型</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">平台详情区模型列表有多个模型</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">用户点击某模型的删除按钮</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">该模型从详情区列表中移除</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">其他模型不受影响</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-12-09">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-12-09</span>容器不存在时的容错处理</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">Dashboard 页面中 #modelsTabContainer 元素不存在</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">ModelsTab.render() 执行</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">控制台输出错误日志"找不到容器元素，无法渲染"</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">页面不崩溃，不产生白屏</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-12-10">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-12-10</span>网页平台详情展示（无 BaseURL/APIKey）</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">用户选中内置"网页"平台（isWeb: true）</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">右侧详情区加载</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">显示网页模型列表（DeepSeek、豆包、千问、Kimi）</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">不显示 BaseURL 和 APIKey 字段</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">不显示"添加模型"按钮</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <script src="common/test-utils.js"></script>
+</body>
+</html>

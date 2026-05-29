@@ -1,4 +1,19 @@
-# FreeAI - 多平台 AI 模型协作工具
+# Mosaic - 多平台 AI 模型协作工具
+
+> 📢 **项目更名**
+> 
+> 本项目已从 `FreeAI` 更名为 `Mosaic`，GitHub 仓库地址已更新。
+
+> 🙏 **致谢**
+> 
+> 感谢国内模型厂商（豆包、千问、DeepSeek、Kimi等）一如既往为广大用户提供免费网页服务，让更多人能够体验 AI 的魅力。
+
+> ⚠️ **免责声明**
+> 
+> - 本项目仅供学习交流和技术研究，**禁止商业用途**
+> - 内置的网页平台仅用于**交叉比较各厂商模型能力**，日常学习使用
+> - 使用者需遵守各平台服务条款，因使用本项目导致的任何后果（包括但不限于账号封禁）由使用者自行承担
+> - 平台更新可能导致内置网页调用功能失效
 
 浏览器扩展，统一管理多个 AI 平台，支持多模型协作对话、流程编排和提示词管理。
 
@@ -7,8 +22,8 @@
 ### 安装
 
 ```bash
-git clone https://github.com/elonsolar/free-ai.git
-cd free-ai
+git clone https://github.com/elonsolar/mosaic.git
+cd mosaic
 ```
 
 1. 打开 `edge://extensions/` 或 `chrome://extensions/`
@@ -85,9 +100,6 @@ cd server && npm install && npm start
 
 ## 常见问题
 
-**Q: 免费吗？**
-A: 需要各平台的 API Key，费用由各平台收取
-
 **Q: 数据安全吗？**
 A: 所有数据本地存储，对话直接发送到 AI 平台
 
@@ -97,3 +109,7 @@ A: OpenAI、DeepSeek、Kimi、豆包、千问等主流平台
 ## License
 
 MIT
+
+---
+
+**推荐使用方式**：通过各平台官方 API 接入，享受稳定、合规的服务。网页平台模式仅供体验和对比测试。

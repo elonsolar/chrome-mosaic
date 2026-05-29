@@ -93,6 +93,24 @@ function detectPlatform() {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   console.log('[AI Plugin] 收到消息:', request.type);
 
+  // ========== Keep-Alive：防止页面在后台冻结 ==========
+  if (request.type === 'keepAlive') {
+    console.log('[AI Plugin] 收到 keep-alive 消息');
+
+    // 强制 DOM 查询，保持页面活跃
+    const messages = document.querySelectorAll('[class*="message"], [class*="chat"]');
+    console.log('[AI Plugin] DOM 查询，消息数:', messages.length);
+
+    // 触发 scroll 事件
+    window.dispatchEvent(new Event('scroll'));
+
+    // 执行一些 DOM 操作
+    document.hasFeature && document.hasFeature('1.0');
+
+    sendResponse({ status: 'alive', messageCount: messages.length });
+    return;
+  }
+
   if (request.type === 'ping') {
     const platform = currentAdapter?.platform || 'unknown';
     sendResponse({ status: 'ok', platform });

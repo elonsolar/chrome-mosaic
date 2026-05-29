@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>TC-06 提示词管理</title>
+  <link rel="stylesheet" href="common/test-style.css">
+</head>
+<body>
+  <h1>TC-06 提示词管理</h1>
+  <p class="subtitle">PromptManager + PromptFolderManager - 提示词 CRUD、搜索、文件夹、数据迁移</p>
+
+  <div class="stats-bar">
+    <div class="stat-card total"><div class="number">0</div><div class="label">总计</div></div>
+    <div class="stat-card pass"><div class="number">0</div><div class="label">通过</div></div>
+    <div class="stat-card fail"><div class="number">0</div><div class="label">失败</div></div>
+    <div class="stat-card pending"><div class="number">0</div><div class="label">待执行</div></div>
+  </div>
+
+  <div class="filters">
+    <button data-filter="all" class="active">全部</button>
+    <button data-filter="pass">已通过</button>
+    <button data-filter="fail">已失败</button>
+    <button data-filter="pending">待执行</button>
+    <button id="expandAll">全部展开</button>
+    <button id="collapseAll">全部折叠</button>
+  </div>
+
+  <button class="btn-export" id="exportBtn">导出测试报告</button>
+
+  <!-- TC-06-01 -->
+  <div class="scenario pending" data-id="TC-06-01">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-06-01</span>
+        创建提示词
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">用户打开提示词管理页面</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">填写名称"翻译助手"、内容"将以下内容翻译为英文：{{text}}"、标签"翻译"，点击保存</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">提示词列表出现"翻译助手"</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">提示词拥有唯一 ID，createdAt 和 updatedAt 为当前时间戳</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">tags 数组包含"翻译"</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-06-02 -->
+  <div class="scenario pending" data-id="TC-06-02">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-06-02</span>
+        名称和内容为空时阻止创建
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">用户在创建提示词的表单中</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">名称留空或内容留空，点击保存</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">系统提示"提示词名称和内容不能为空"，不创建提示词</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-06-03 -->
+  <div class="scenario pending" data-id="TC-06-03">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-06-03</span>
+        搜索提示词
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">已有多个提示词，包含名称含"翻译"的和不含"翻译"的</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">用户在搜索框输入"翻译"</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">列表仅显示名称、内容或描述中包含"翻译"的提示词</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">搜索不区分大小写</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-06-04 -->
+  <div class="scenario pending" data-id="TC-06-04">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-06-04</span>
+        编辑提示词
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">用户选中"翻译助手"提示词</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">修改内容为"将以下内容翻译为日文：{{text}}"，点击保存</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">提示词内容更新为新值</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">updatedAt 刷新为当前时间，createdAt 保持不变</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">ID 保持不变</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-06-05 -->
+  <div class="scenario pending" data-id="TC-06-05">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-06-05</span>
+        删除提示词
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">用户选中某提示词</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">用户点击删除并确认</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">提示词从列表中移除</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">其他提示词不受影响</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-06-06 -->
+  <div class="scenario pending" data-id="TC-06-06">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-06-06</span>
+        移动提示词到文件夹
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">已有文件夹"翻译类"和提示词"翻译助手"（当前无文件夹）</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">用户将"翻译助手"移动到"翻译类"文件夹</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">提示词的 folderId 更新为"翻译类"文件夹的 ID</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">在文件夹视图中，提示词出现在"翻译类"下</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-06-07 -->
+  <div class="scenario pending" data-id="TC-06-07">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-06-07</span>
+        category 字段自动迁移到 tags
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">本地存储中有旧版提示词，含 category:"code" 字段</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">插件初始化（init 执行迁移逻辑）</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">category 字段被删除</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">tags 数组追加"编程"标签（如果尚未包含）</span>
+      </div>
+      <div class="bdd-block and">
+        <span class="bdd-keyword">And</span>
+        <span class="bdd-text">customCategories 键从存储中移除</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC-06-08 -->
+  <div class="scenario pending" data-id="TC-06-08">
+    <div class="scenario-header">
+      <div class="scenario-title">
+        <span class="scenario-id">TC-06-08</span>
+        编辑不存在的提示词
+      </div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given">
+        <span class="bdd-keyword">Given</span>
+        <span class="bdd-text">提示词 ID "nonexistent-id" 不存在</span>
+      </div>
+      <div class="bdd-block when">
+        <span class="bdd-keyword">When</span>
+        <span class="bdd-text">尝试更新该提示词</span>
+      </div>
+      <div class="bdd-block then">
+        <span class="bdd-keyword">Then</span>
+        <span class="bdd-text">系统提示"提示词不存在"</span>
+      </div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions">
+        <button class="btn btn-pass">通过</button>
+        <button class="btn btn-fail">失败</button>
+        <button class="btn btn-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="common/test-utils.js"></script>
+</body>
+</html>

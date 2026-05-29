@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Mosaic 测试用例导航</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f0f0f0;
+      color: #333;
+      min-height: 100vh;
+    }
+    .header {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      color: #fff;
+      padding: 48px 24px 40px;
+      text-align: center;
+    }
+    .header h1 { font-size: 32px; font-weight: 700; margin-bottom: 8px; }
+    .header p { font-size: 15px; color: #94a3b8; max-width: 600px; margin: 0 auto; }
+    .summary {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+      margin-top: 24px;
+    }
+    .summary .item { text-align: center; }
+    .summary .num { font-size: 28px; font-weight: 700; }
+    .summary .label { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+    .summary .num.files { color: #60a5fa; }
+    .summary .num.cases { color: #34d399; }
+    .summary .num.modules { color: #fbbf24; }
+
+    .container { max-width: 960px; margin: -20px auto 40px; padding: 0 16px; position: relative; z-index: 1; }
+
+    .search-bar {
+      background: #fff;
+      border-radius: 12px;
+      padding: 12px 20px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .search-bar svg { color: #aaa; flex-shrink: 0; }
+    .search-bar input {
+      border: none;
+      outline: none;
+      font-size: 15px;
+      width: 100%;
+      background: transparent;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px 22px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.06);
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+      color: inherit;
+      display: block;
+      border-left: 4px solid transparent;
+    }
+    .card:hover {
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+      transform: translateY(-2px);
+    }
+    .card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .card-id {
+      font-family: monospace;
+      font-size: 13px;
+      color: #888;
+      background: #f5f5f5;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .card-count {
+      font-size: 12px;
+      color: #888;
+    }
+    .card-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+    .card-desc { font-size: 13px; color: #666; line-height: 1.5; }
+    .card-tags { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .tag {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: #f0f0f0;
+      color: #666;
+    }
+
+    .card:nth-child(1)  { border-left-color: #3b82f6; }
+    .card:nth-child(2)  { border-left-color: #22c55e; }
+    .card:nth-child(3)  { border-left-color: #eab308; }
+    .card:nth-child(4)  { border-left-color: #a855f7; }
+    .card:nth-child(5)  { border-left-color: #ef4444; }
+    .card:nth-child(6)  { border-left-color: #06b6d4; }
+    .card:nth-child(7)  { border-left-color: #f97316; }
+    .card:nth-child(8)  { border-left-color: #ec4899; }
+    .card:nth-child(9)  { border-left-color: #14b8a6; }
+    .card:nth-child(10) { border-left-color: #8b5cf6; }
+    .card:nth-child(11) { border-left-color: #f43f5e; }
+    .card:nth-child(12) { border-left-color: #0ea5e9; }
+
+    .progress-section {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px 22px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.06);
+      margin-bottom: 20px;
+    }
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .progress-header h3 { font-size: 15px; font-weight: 600; }
+    .progress-header .pct { font-size: 14px; color: #888; }
+    .progress-bar {
+      height: 8px;
+      background: #e5e7eb;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #22c55e, #16a34a);
+      border-radius: 4px;
+      transition: width 0.3s;
+      width: 0%;
+    }
+    .progress-stats {
+      display: flex;
+      gap: 24px;
+    }
+    .progress-stats .ps { font-size: 13px; color: #666; }
+    .progress-stats .ps b { font-weight: 700; }
+    .progress-stats .ps.pass b { color: #16a34a; }
+    .progress-stats .ps.fail b { color: #dc2626; }
+    .progress-stats .ps.pending b { color: #d97706; }
+
+    .footer {
+      text-align: center;
+      padding: 24px;
+      font-size: 12px;
+      color: #aaa;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Mosaic 测试用例</h1>
+    <p>多平台 AI 模型协作工具 — 功能测试用例集</p>
+    <div class="summary">
+      <div class="item"><div class="num files">12</div><div class="label">测试文件</div></div>
+      <div class="item"><div class="num cases">104</div><div class="label">测试场景</div></div>
+      <div class="item"><div class="num modules">8</div><div class="label">功能模块</div></div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="search-bar">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="searchInput" placeholder="搜索测试用例模块...">
+    </div>
+
+    <div class="progress-section">
+      <div class="progress-header">
+        <h3>整体进度</h3>
+        <span class="pct" id="progressPct">0%</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-stats">
+        <span class="ps pass">通过: <b id="totalPass">0</b></span>
+        <span class="ps fail">失败: <b id="totalFail">0</b></span>
+        <span class="ps pending">待执行: <b id="totalPending">104</b></span>
+      </div>
+    </div>
+
+    <div class="grid" id="cardGrid">
+      <a class="card" href="01-platform-management.html">
+        <div class="card-top"><span class="card-id">TC-01</span><span class="card-count">11 场景</span></div>
+        <div class="card-title">平台管理</div>
+        <div class="card-desc">平台与模型的增删改查、内置初始化、数据校验、启用/禁用切换</div>
+        <div class="card-tags"><span class="tag">PlatformManager</span><span class="tag">CRUD</span><span class="tag">数据迁移</span></div>
+      </a>
+      <a class="card" href="02-conversation-brainstorming.html">
+        <div class="card-top"><span class="card-id">TC-02</span><span class="card-count">6 场景</span></div>
+        <div class="card-title">头脑风暴会话</div>
+        <div class="card-desc">多模型并行回复、上下文隔离、系统提示词注入、结束标记</div>
+        <div class="card-tags"><span class="tag">ConversationManager</span><span class="tag">并行</span><span class="tag">上下文</span></div>
+      </a>
+      <a class="card" href="03-conversation-discussion.html">
+        <div class="card-top"><span class="card-id">TC-03</span><span class="card-count">6 场景</span></div>
+        <div class="card-title">讨论模式会话</div>
+        <div class="card-desc">串行执行、增量上下文传递、讨论提示词注入、角色规则</div>
+        <div class="card-tags"><span class="tag">串行</span><span class="tag">讨论规则</span><span class="tag">增量上下文</span></div>
+      </a>
+      <a class="card" href="04-conversation-expertqa.html">
+        <div class="card-top"><span class="card-id">TC-04</span><span class="card-count">6 场景</span></div>
+        <div class="card-title">专家问答会话</div>
+        <div class="card-desc">关联专家、流程驱动执行、错误处理、进度通知</div>
+        <div class="card-tags"><span class="tag">ExpertEntity</span><span class="tag">FlowExecutor</span><span class="tag">专家问答</span></div>
+      </a>
+      <a class="card" href="05-flow-execution.html">
+        <div class="card-top"><span class="card-id">TC-05</span><span class="card-count">12 场景</span></div>
+        <div class="card-title">流程执行</div>
+        <div class="card-desc">串行/并行分支、变量引用、循环依赖检测、HTTP/代码节点、资源清理</div>
+        <div class="card-tags"><span class="tag">FlowExecutor</span><span class="tag">DAG</span><span class="tag">节点类型</span></div>
+      </a>
+      <a class="card" href="06-prompt-management.html">
+        <div class="card-top"><span class="card-id">TC-06</span><span class="card-count">8 场景</span></div>
+        <div class="card-title">提示词管理</div>
+        <div class="card-desc">提示词 CRUD、搜索、文件夹移动、category 迁移</div>
+        <div class="card-tags"><span class="tag">PromptManager</span><span class="tag">搜索</span><span class="tag">数据迁移</span></div>
+      </a>
+      <a class="card" href="07-expert-management.html">
+        <div class="card-top"><span class="card-id">TC-07</span><span class="card-count">10 场景</span></div>
+        <div class="card-title">专家管理</div>
+        <div class="card-desc">专家 CRUD、节点连接管理、删除级联、复制、搜索</div>
+        <div class="card-tags"><span class="tag">ExpertManager</span><span class="tag">节点</span><span class="tag">连接</span></div>
+      </a>
+      <a class="card" href="08-team-management.html">
+        <div class="card-top"><span class="card-id">TC-08</span><span class="card-count">7 场景</span></div>
+        <div class="card-title">团队管理</div>
+        <div class="card-desc">团队 CRUD、成员验证、删除后会话引用清理</div>
+        <div class="card-tags"><span class="tag">TeamManager</span><span class="tag">成员验证</span><span class="tag">引用清理</span></div>
+      </a>
+      <a class="card" href="09-websocket-integration.html">
+        <div class="card-top"><span class="card-id">TC-09</span><span class="card-count">9 场景</span></div>
+        <div class="card-title">WebSocket 集成</div>
+        <div class="card-desc">连接建立、聊天请求转发、心跳保活、断线重连、超时处理</div>
+        <div class="card-tags"><span class="tag">WebSocketManager</span><span class="tag">心跳</span><span class="tag">重连</span></div>
+      </a>
+      <a class="card" href="10-content-script-adapter.html">
+        <div class="card-top"><span class="card-id">TC-10</span><span class="card-count">9 场景</span></div>
+        <div class="card-title">内容脚本适配器</div>
+        <div class="card-desc">平台检测、适配器创建、ping 响应、消息收发、重试机制</div>
+        <div class="card-tags"><span class="tag">ContentScript</span><span class="tag">Adapter</span><span class="tag">四大平台</span></div>
+      </a>
+      <a class="card" href="11-anti-lazy-load.html">
+        <div class="card-top"><span class="card-id">TC-11</span><span class="card-count">10 场景</span></div>
+        <div class="card-title">反懒加载</div>
+        <div class="card-desc">Visibility/IntersectionObserver/Focus API 覆盖、鼠标模拟、WebSocket 保活</div>
+        <div class="card-tags"><span class="tag">AntiLazyLoad</span><span class="tag">API 覆盖</span><span class="tag">事件模拟</span></div>
+      </a>
+      <a class="card" href="12-dashboard-models-tab.html">
+        <div class="card-top"><span class="card-id">TC-12</span><span class="card-count">10 场景</span></div>
+        <div class="card-title">Dashboard 模型配置页</div>
+        <div class="card-desc">平台列表渲染、搜索过滤、详情展示、模态框 CRUD、容错处理</div>
+        <div class="card-tags"><span class="tag">ModelsTab</span><span class="tag">Dashboard</span><span class="tag">UI</span></div>
+      </a>
+    </div>
+  </div>
+
+  <div class="footer">Mosaic Test Cases — Generated 2026-05-28</div>
+
+  <script>
+    // Search
+    const searchInput = document.getElementById('searchInput');
+    const cards = document.querySelectorAll('.card');
+    searchInput.addEventListener('input', () => {
+      const kw = searchInput.value.trim().toLowerCase();
+      cards.forEach(card => {
+        const text = card.textContent.toLowerCase();
+        card.style.display = text.includes(kw) ? '' : 'none';
+      });
+    });
+
+    // Aggregate progress from all test case pages' localStorage
+    function loadProgress() {
+      const pages = [
+        '01-platform-management','02-conversation-brainstorming',
+        '03-conversation-discussion','04-conversation-expertqa',
+        '05-flow-execution','06-prompt-management',
+        '07-expert-management','08-team-management',
+        '09-websocket-integration','10-content-script-adapter',
+        '11-anti-lazy-load','12-dashboard-models-tab'
+      ];
+      let pass = 0, fail = 0, total = 104;
+      pages.forEach(p => {
+        const data = JSON.parse(localStorage.getItem('tc-' + p) || '{}');
+        Object.values(data).forEach(v => {
+          if (v.status === 'pass') pass++;
+          else if (v.status === 'fail') fail++;
+        });
+      });
+      const pending = total - pass - fail;
+      const pct = total > 0 ? Math.round((pass + fail) / total * 100) : 0;
+
+      document.getElementById('totalPass').textContent = pass;
+      document.getElementById('totalFail').textContent = fail;
+      document.getElementById('totalPending').textContent = pending;
+      document.getElementById('progressPct').textContent = pct + '%';
+      document.getElementById('progressFill').style.width = pct + '%';
+    }
+    loadProgress();
+  </script>
+</body>
+</html>

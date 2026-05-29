@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>TC-07 专家管理</title>
+  <link rel="stylesheet" href="common/test-style.css">
+</head>
+<body>
+  <h1>TC-07 专家管理</h1>
+  <p class="subtitle">ExpertManager - 专家 CRUD、节点连接管理、复制、搜索</p>
+
+  <div class="stats-bar">
+    <div class="stat-card total"><div class="number">0</div><div class="label">总计</div></div>
+    <div class="stat-card pass"><div class="number">0</div><div class="label">通过</div></div>
+    <div class="stat-card fail"><div class="number">0</div><div class="label">失败</div></div>
+    <div class="stat-card pending"><div class="number">0</div><div class="label">待执行</div></div>
+  </div>
+
+  <div class="filters">
+    <button data-filter="all" class="active">全部</button>
+    <button data-filter="pass">已通过</button>
+    <button data-filter="fail">已失败</button>
+    <button data-filter="pending">待执行</button>
+    <button id="expandAll">全部展开</button>
+    <button id="collapseAll">全部折叠</button>
+  </div>
+
+  <button class="btn-export" id="exportBtn">导出测试报告</button>
+
+  <div class="scenario pending" data-id="TC-07-01">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-07-01</span>创建专家</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">用户打开专家管理页面</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">创建专家，填写名称"代码审查专家"，选择图标</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">专家列表出现新专家，拥有唯一 expert-* 格式 ID</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">nodes 和 connections 初始为空数组</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-07-02">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-07-02</span>编辑专家基本信息</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">已有"代码审查专家"</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">修改名称为"高级代码审查专家"，修改描述</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">专家名称和描述更新成功</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">updatedAt 刷新，createdAt 保持不变</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-07-03">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-07-03</span>为专家流程添加节点</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">已打开"代码审查专家"编辑页，当前无节点</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">用户添加一个 LLM 节点并配置模型和提示词</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">节点出现在专家的 nodes 数组中，拥有唯一 ID</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-07-04">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-07-04</span>连接两个节点</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">画布中有节点 A 和节点 B</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">用户从 A 拖拽连线到 B</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">A 和 B 之间建立连接关系，connections 数组新增一条记录</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">连接包含 from、to、id、order 字段</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-07-05">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-07-05</span>重复连接被阻止</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">节点 A 到节点 B 的连接已存在</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">用户再次尝试添加 A→B 连接</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">系统提示"连接已存在"，操作失败</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-07-06">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-07-06</span>删除节点同时删除关联连接</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">节点 A 连接到节点 B 和节点 C（A→B, A→C）</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">用户删除节点 B</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">节点 B 从 nodes 中移除</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">所有涉及 B 的连接（A→B）同时被移除</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">不涉及 B 的连接（A→C）保持不变</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-07-07">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-07-07</span>复制专家</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">已有"代码审查专家"，包含 3 个节点和 2 条连接</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">用户点击"复制"</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">生成"代码审查专家 (副本)"</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">副本的节点和连接完整复制，所有 ID 重新生成</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">连接中的 from/to 引用更新为新的节点 ID</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-07-08">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-07-08</span>搜索专家</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">已有多个专家，部分名称或描述含"代码"</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">用户搜索"代码"</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">列表显示名称或描述包含"代码"的专家</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">搜索不区分大小写</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-07-09">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-07-09</span>删除专家</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">已有"代码审查专家"</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">用户删除该专家</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">专家从列表中移除</span></div>
+      <div class="bdd-block and"><span class="bdd-keyword">And</span><span class="bdd-text">已关联该专家的会话中，expertId 指向的数据变为无效（会话不删除）</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <div class="scenario pending" data-id="TC-07-10">
+    <div class="scenario-header">
+      <div class="scenario-title"><span class="scenario-id">TC-07-10</span>操作不存在的专家</div>
+      <span class="status-badge pending">待执行</span>
+    </div>
+    <div class="scenario-body">
+      <div class="bdd-block given"><span class="bdd-keyword">Given</span><span class="bdd-text">专家 ID "expert-nonexistent" 不存在</span></div>
+      <div class="bdd-block when"><span class="bdd-keyword">When</span><span class="bdd-text">尝试更新该专家</span></div>
+      <div class="bdd-block then"><span class="bdd-keyword">Then</span><span class="bdd-text">系统提示"专家不存在"</span></div>
+      <div class="notes"><textarea placeholder="执行备注..."></textarea></div>
+      <div class="result-actions"><button class="btn btn-pass">通过</button><button class="btn btn-fail">失败</button><button class="btn btn-reset">重置</button></div>
+    </div>
+  </div>
+
+  <script src="common/test-utils.js"></script>
+</body>
+</html>

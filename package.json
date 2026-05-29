@@ -1,0 +1,20 @@
+{
+  "name": "free-ai-refactor",
+  "version": "1.0.0",
+  "description": "浏览器扩展，统一管理多个 AI 平台，支持多模型协作对话、流程编排和提示词管理。",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "playwright": "^1.60.0"
+  }
+}
