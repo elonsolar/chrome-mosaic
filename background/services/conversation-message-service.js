@@ -122,7 +122,8 @@ class ConversationMessageService {
               context.memberLastMessageIds[result.memberId] = message.id;
               context.conversation.messages.push(message);
               await this.conversationManager.updateConversation(context.conversationId, {
-                memberLastMessageIds: context.memberLastMessageIds
+                memberLastMessageIds: context.memberLastMessageIds,
+                memberUrls: context.memberUrls
               });
             }
           }
