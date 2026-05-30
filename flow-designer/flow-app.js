@@ -1,6 +1,7 @@
 class FlowDesignerApp {
-  constructor(canvasId) {
+  constructor(canvasId, canvasController) {
     this.canvasId = canvasId;
+    this.canvasController = canvasController || null;
     this.nodes = [];
     this.edges = [];
     this.selectedNodeId = null;
@@ -18,7 +19,7 @@ class FlowDesignerApp {
     this.loadFlowData();
     this.ensureDefaultNodes();
     this.saveFlowData();
-    this.connectionManager = new ConnectionManager(this.canvasId, this);
+    this.connectionManager = new ConnectionManager(this.canvasId, this, this.canvasController);
     this.syncEdgesToConnections();
     await this.loadModels();
     this.bindEvents();
@@ -1191,6 +1192,234 @@ class FlowDesignerApp {
     `;
   }
 
+  async openPromptSelector() {
+    // 创建弹窗容器
+    let modal = document.getElementById('prompt-selector-modal');
+    if (modal) modal.remove();
+
+    modal = document.createElement('div');
+    modal.id = 'prompt-selector-modal';
+    modal.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+    `;
+
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+      background: white;
+      border-radius: 12px;
+      width: 500px;
+      max-height: 70vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+    `;
+
+    dialog.innerHTML = `
+      <div style="padding: 16px 20px; border-bottom: 1px solid #e8e8e8; display: flex; align-items: center; justify-content: space-between;">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 600; color: #1a1a1a;">选择提示词</h3>
+        <button id="close-prompt-selector" style="background: none; border: none; cursor: pointer; padding: 4px; color: #999; transition: color 0.2s;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M4 4L12 12M12 4L4 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div style="padding: 12px 20px; border-bottom: 1px solid #e8e8e8;">
+        <input type="text" id="prompt-search-input" placeholder="搜索提示词名称、内容或标签..." style="width: 100%; padding: 8px 12px; border: 1px solid #d9d9d9; border-radius: 6px; font-size: 14px; color: #333; outline: none; box-sizing: border-box;" />
+      </div>
+      <div id="prompt-list-container" style="flex: 1; overflow-y: auto; padding: 12px 20px;">
+        <div style="text-align: center; color: #999; padding: 20px;">加载中...</div>
+      </div>
+    `;
+
+    modal.appendChild(dialog);
+    document.body.appendChild(modal);
+
+    // 关闭按钮事件
+    document.getElementById('close-prompt-selector').addEventListener('click', () => {
+      modal.remove();
+    });
+
+    // 点击背景关闭
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.remove();
+    });
+
+    // 搜索功能
+    const searchInput = document.getElementById('prompt-search-input');
+    searchInput.addEventListener('input', (e) => {
+      const keyword = e.target.value.trim().toLowerCase();
+      this.filterPromptList(keyword);
+    });
+
+    // 加载提示词列表
+    await this.loadPromptList();
+  }
+
+  async loadPromptList() {
+    const container = document.getElementById('prompt-list-container');
+    if (!container) return;
+
+    try {
+      // 从 chrome.storage 或 background 获取提示词
+      const result = await chrome.runtime.sendMessage({ action: 'getPrompts' });
+      let prompts = [];
+
+      if (Array.isArray(result)) {
+        prompts = result;
+      } else if (result && result.prompts) {
+        prompts = result.prompts;
+      }
+
+      // 添加内置提示词
+      const builtinPrompts = [
+        {
+          id: 'builtin-code-review',
+          name: '代码审查',
+          content: '请审查以下代码，重点关注：\n1. 代码质量和可读性\n2. 潜在的 bug 和边界情况\n3. 性能优化机会\n4. 安全性问题\n5. 最佳实践建议\n\n请提供具体的改进建议，并说明理由。',
+          tags: ['代码审查', '质量', '编程'],
+          isBuiltin: true
+        },
+        {
+          id: 'builtin-writing-polish',
+          name: '文章润色',
+          content: '请帮我润色以下文本，使其更加清晰、准确、流畅。保持原意不变，优化表达方式和逻辑结构。提供修改前后的对比说明。',
+          tags: ['润色', '编辑', '写作'],
+          isBuiltin: true
+        },
+        {
+          id: 'builtin-translation',
+          name: '专业翻译',
+          content: '请将以下文本翻译成目标语言，确保：\n1. 准确传达原意\n2. 符合目标语言的表达习惯\n3. 保持原文的语气和风格\n4. 专业术语准确\n\n如有歧义，请提供多种翻译选项并说明差异。',
+          tags: ['翻译', '多语言'],
+          isBuiltin: true
+        },
+        {
+          id: 'builtin-analysis',
+          name: '逻辑分析',
+          content: '请对以下内容进行深入分析：\n1. 核心观点和论据\n2. 逻辑结构和推理过程\n3. 潜在的假设和偏见\n4. 优势和不足\n5. 改进建议\n\n提供客观、结构化的分析结果。',
+          tags: ['分析', '逻辑'],
+          isBuiltin: true
+        },
+        {
+          id: 'builtin-creative',
+          name: '创意写作',
+          content: '请基于以下主题进行创意写作。要求：\n1. 构思新颖，视角独特\n2. 情节或观点引人入胜\n3. 语言生动，富有感染力\n4. 结构完整，逻辑自洽\n\n发挥创造力，打破常规思维。',
+          tags: ['创意', '写作'],
+          isBuiltin: true
+        },
+        {
+          id: 'builtin-problem-solving',
+          name: '问题解决',
+          content: '请帮我分析并解决以下问题。步骤：\n1. 明确问题本质和目标\n2. 分析根本原因\n3. 提出多个解决方案\n4. 评估各方案的优劣\n5. 给出最佳方案和实施步骤\n\n请提供系统性的解决方案。',
+          tags: ['问题解决', '方法论'],
+          isBuiltin: true
+        }
+      ];
+
+      this.allPrompts = [...builtinPrompts, ...prompts];
+      this.renderPromptList(this.allPrompts);
+    } catch (error) {
+      console.error('加载提示词失败:', error);
+      container.innerHTML = '<div style="text-align: center; color: #f5222d; padding: 20px;">加载提示词失败</div>';
+    }
+  }
+
+  renderPromptList(prompts) {
+    const container = document.getElementById('prompt-list-container');
+    if (!container) return;
+
+    if (prompts.length === 0) {
+      container.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">暂无提示词</div>';
+      return;
+    }
+
+    container.innerHTML = prompts.map(prompt => `
+      <div class="prompt-item" data-prompt-id="${this.escHtml(prompt.id)}" style="
+        padding: 12px;
+        margin-bottom: 8px;
+        border: 1px solid #eee;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+      ">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+          <span style="font-weight: 600; font-size: 14px; color: #1a1a1a;">${this.escHtml(prompt.name)}</span>
+          ${prompt.isBuiltin ? '<span style="font-size: 11px; color: #389e0d; background: #f6ffed; border: 1px solid #b7eb8f; padding: 1px 6px; border-radius: 4px;">内置</span>' : ''}
+        </div>
+        <div style="font-size: 13px; color: #666; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
+          ${this.escHtml(prompt.content.substring(0, 120))}${prompt.content.length > 120 ? '...' : ''}
+        </div>
+        ${prompt.tags && prompt.tags.length > 0 ? `
+          <div style="margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap;">
+            ${prompt.tags.map(tag => `<span style="font-size: 11px; color: #0958d9; background: #e6f4ff; padding: 2px 8px; border-radius: 4px;">${this.escHtml(tag)}</span>`).join('')}
+          </div>
+        ` : ''}
+      </div>
+    `).join('');
+
+    // 添加 hover 效果和点击事件
+    container.querySelectorAll('.prompt-item').forEach(item => {
+      item.addEventListener('mouseenter', () => {
+        item.style.borderColor = '#1890ff';
+        item.style.backgroundColor = '#f0f7ff';
+      });
+      item.addEventListener('mouseleave', () => {
+        item.style.borderColor = '#eee';
+        item.style.backgroundColor = 'transparent';
+      });
+      item.addEventListener('click', () => {
+        const promptId = item.dataset.promptId;
+        this.selectPrompt(promptId);
+      });
+    });
+  }
+
+  filterPromptList(keyword) {
+    if (!this.allPrompts) return;
+
+    if (!keyword) {
+      this.renderPromptList(this.allPrompts);
+      return;
+    }
+
+    const filtered = this.allPrompts.filter(prompt =>
+      prompt.name.toLowerCase().includes(keyword) ||
+      prompt.content.toLowerCase().includes(keyword) ||
+      (prompt.tags && prompt.tags.some(tag => tag.toLowerCase().includes(keyword)))
+    );
+
+    this.renderPromptList(filtered);
+  }
+
+  selectPrompt(promptId) {
+    if (!this.allPrompts) return;
+
+    const prompt = this.allPrompts.find(p => p.id === promptId);
+    if (!prompt) return;
+
+    // 将提示词内容填入系统提示词输入框
+    const systemPromptInput = document.getElementById('llm-system-prompt');
+    if (systemPromptInput) {
+      systemPromptInput.value = prompt.content;
+      // 触发 input 事件以确保任何监听器都能捕获变化
+      systemPromptInput.dispatchEvent(new Event('input', { bubbles: true }));
+      systemPromptInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    // 关闭弹窗
+    const modal = document.getElementById('prompt-selector-modal');
+    if (modal) modal.remove();
+  }
+
   renderLLMConfig(node) {
     const data = node.data || {};
     const systemPrompt = data.$$prompt_decorator$$?.systemPrompt || '';
@@ -1266,7 +1495,16 @@ class FlowDesignerApp {
         <input type="hidden" id="llm-model-id" value="${this.escHtml(modelId || '')}" />
       </div>
       <div class="config-section">
-        <div class="config-section-title">系统提示词</div>
+        <div class="config-section-title" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>系统提示词</span>
+          <button id="btn-select-prompt" style="font-size:12px;color:#666;cursor:pointer;background:transparent;border:1px dashed #d9d9d9;border-radius:4px;padding:2px 8px;display:inline-flex;align-items:center;gap:4px;transition:all 0.2s;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+            </svg>
+            选择提示词
+          </button>
+        </div>
         <textarea class="form-textarea" id="llm-system-prompt" rows="4" placeholder="设置系统提示词...">${this.escHtml(systemPrompt)}</textarea>
         <div class="form-hint">支持变量引用，格式: {{input}}</div>
       </div>
@@ -1435,6 +1673,15 @@ class FlowDesignerApp {
     });
 
     // Variable picker inputs - removed onclick to allow manual typing
+
+    // Select prompt button
+    const selectPromptBtn = document.getElementById('btn-select-prompt');
+    if (selectPromptBtn) {
+      selectPromptBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.openPromptSelector();
+      });
+    }
 
     // Model selector popover - load system models
     const modelDisplay = document.getElementById('llm-model-display');

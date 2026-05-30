@@ -19,7 +19,7 @@ class PromptManager {
 
     const prompts = await this.getPrompts();
     const newPrompt = {
-      id: this.generateId(),
+      id: data.id || this.generateId(),
       name,
       content,
       tags: tags || [],

@@ -1975,6 +1975,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case 'testRunFlow':
       (async () => {
         try {
+          if (!flowTestRunner) {
+            throw new Error('流程测试运行器未初始化，请稍后再试');
+          }
           const { flowData, startNodeInputs } = request;
           
           const onProgress = (progress) => {

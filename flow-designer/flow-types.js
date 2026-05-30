@@ -385,20 +385,8 @@ function createDefaultStartNode() {
       outputs: [
         {
           key: 'user_input',
-          name: 'outputList',
-          type: VariableTypeDTO.list,
-          children: [
-            {
-              key: 'id',
-              name: 'id',
-              type: VariableTypeDTO.string,
-            },
-            {
-              key: 'content',
-              name: 'content',
-              type: VariableTypeDTO.string,
-            },
-          ],
+          name: 'input',
+          type: VariableTypeDTO.string,
         },
       ],
       nodeMeta: {

@@ -1,7 +1,8 @@
 class ConnectionManager {
-  constructor(canvasId, app) {
+  constructor(canvasId, app, canvasController) {
     this.canvasId = canvasId;
     this.app = app;
+    this.canvasController = canvasController || null;
     this.svg = null;
     this.connections = [];
     this.isConnecting = false;
@@ -100,8 +101,9 @@ class ConnectionManager {
     if (!this.isConnecting || !this.tempLine) return;
     const canvas = document.getElementById(this.canvasId);
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left + canvas.parentElement.scrollLeft;
-    const y = e.clientY - rect.top + canvas.parentElement.scrollTop;
+    const scale = this.canvasController?.scale || 1;
+    const x = (e.clientX - rect.left) / scale + canvas.parentElement.scrollLeft;
+    const y = (e.clientY - rect.top) / scale + canvas.parentElement.scrollTop;
     this.updateTempLine(x, y);
   };
 
@@ -113,8 +115,9 @@ class ConnectionManager {
     const rect = canvas.getBoundingClientRect();
     const port = this.connectionStart.element;
     const portRect = port.getBoundingClientRect();
-    const sx = portRect.left - rect.left + portRect.width / 2 + canvas.parentElement.scrollLeft;
-    const sy = portRect.top - rect.top + portRect.height / 2 + canvas.parentElement.scrollTop;
+    const scale = this.canvasController?.scale || 1;
+    const sx = (portRect.left - rect.left) / scale + portRect.width / 2 + canvas.parentElement.scrollLeft;
+    const sy = (portRect.top - rect.top) / scale + portRect.height / 2 + canvas.parentElement.scrollTop;
 
     this.tempLine = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     this.tempLine.setAttribute('class', 'connection-line temp-line');
@@ -128,8 +131,9 @@ class ConnectionManager {
     const rect = canvas.getBoundingClientRect();
     const port = this.connectionStart.element;
     const portRect = port.getBoundingClientRect();
-    const sx = portRect.left - rect.left + portRect.width / 2 + canvas.parentElement.scrollLeft;
-    const sy = portRect.top - rect.top + portRect.height / 2 + canvas.parentElement.scrollTop;
+    const scale = this.canvasController?.scale || 1;
+    const sx = (portRect.left - rect.left) / scale + portRect.width / 2 + canvas.parentElement.scrollLeft;
+    const sy = (portRect.top - rect.top) / scale + portRect.height / 2 + canvas.parentElement.scrollTop;
     this.tempLine.setAttribute('d', this.calcPath(sx, sy, ex, ey));
   }
 
@@ -176,10 +180,12 @@ class ConnectionManager {
     const sr = sp.getBoundingClientRect();
     const tr = tp.getBoundingClientRect();
 
-    const sx = sr.left - rect.left + sr.width / 2 + canvas.parentElement.scrollLeft;
-    const sy = sr.top - rect.top + sr.height / 2 + canvas.parentElement.scrollTop;
-    const ex = tr.left - rect.left + tr.width / 2 + canvas.parentElement.scrollLeft;
-    const ey = tr.top - rect.top + tr.height / 2 + canvas.parentElement.scrollTop;
+    const scale = this.canvasController?.scale || 1;
+
+    const sx = (sr.left - rect.left) / scale + sr.width / 2 + canvas.parentElement.scrollLeft;
+    const sy = (sr.top - rect.top) / scale + sr.height / 2 + canvas.parentElement.scrollTop;
+    const ex = (tr.left - rect.left) / scale + tr.width / 2 + canvas.parentElement.scrollLeft;
+    const ey = (tr.top - rect.top) / scale + tr.height / 2 + canvas.parentElement.scrollTop;
 
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('class', 'connection-line');

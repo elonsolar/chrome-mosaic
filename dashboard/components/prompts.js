@@ -206,30 +206,31 @@ class PromptsTab {
 
   async initBuiltinPrompts() {
     const builtinIds = this.builtinPrompts.map(p => p.id);
-    const existingBuiltin = this.state.prompts.filter(p => p.isBuiltin);
+    const existingBuiltinIds = this.state.prompts.filter(p => p.isBuiltin).map(p => p.id);
+
+    // 检查是否有缺失的内置提示词
+    const missingBuiltins = this.builtinPrompts.filter(b => !existingBuiltinIds.includes(b.id));
 
     // 如果所有内置提示词都已存在，则不需要初始化
-    if (existingBuiltin.length === this.builtinPrompts.length) {
+    if (missingBuiltins.length === 0) {
       return;
     }
 
     // 只添加不存在的内置提示词
-    for (const builtin of this.builtinPrompts) {
-      const exists = this.state.prompts.find(p => p.id === builtin.id);
-      if (!exists) {
-        try {
-          await sendMessage({
-            action: 'createPrompt',
-            data: {
-              name: builtin.name,
-              content: builtin.content,
-              tags: builtin.tags,
-              isBuiltin: true
-            }
-          });
-        } catch (error) {
-          console.error('初始化内置提示词失败：', builtin.name, error);
-        }
+    for (const builtin of missingBuiltins) {
+      try {
+        await sendMessage({
+          action: 'createPrompt',
+          data: {
+            id: builtin.id,
+            name: builtin.name,
+            content: builtin.content,
+            tags: builtin.tags,
+            isBuiltin: true
+          }
+        });
+      } catch (error) {
+        console.error('初始化内置提示词失败：', builtin.name, error);
       }
     }
 

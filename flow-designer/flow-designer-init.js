@@ -66,8 +66,8 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // ===== Flow designer init =====
-  window.app = new FlowDesignerApp('flow-canvas');
-  new CanvasController(document.getElementById('flow-canvas'));
+  const canvasCtrl = new CanvasController(document.getElementById('flow-canvas'));
+  window.app = new FlowDesignerApp('flow-canvas', canvasCtrl);
 
   // ===== Test run button =====
   document.getElementById('btn-test-run')?.addEventListener('click', () => {

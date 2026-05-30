@@ -3312,7 +3312,7 @@ async function loadNewConvModalData() {
       if (expertSelector) {
         expertSelector.innerHTML = experts.map(expert => `
           <div class="expert-option" data-expert-id="${expert.id}">
-            <div class="expert-option-icon">${escapeHtml(expert.icon || '🎓')}</div>
+            <div class="expert-option-icon">${expert.icon && expert.icon.startsWith('http') ? `<img src="${escapeHtml(expert.icon)}" alt="专家图标" style="width:32px;height:32px;border-radius:50%;">` : escapeHtml(expert.icon || '🎓')}</div>
             <div class="expert-option-info">
               <div class="expert-option-name">${escapeHtml(expert.name)}</div>
               <div class="expert-option-desc">${escapeHtml(expert.description || '暂无描述')}</div>

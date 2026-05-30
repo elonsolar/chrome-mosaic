@@ -1603,7 +1603,7 @@ class Dashboard {
           <input type="radio" name="convExpert" value="${expert.id}">
         </div>
         <div class="expert-option-info">
-          <div class="expert-option-icon">${this.escapeHtml(expert.icon || '🎓')}</div>
+          <div class="expert-option-icon">${expert.icon && expert.icon.startsWith('http') ? `<img src="${this.escapeHtml(expert.icon)}" alt="专家图标" style="width:32px;height:32px;border-radius:50%;">` : this.escapeHtml(expert.icon || '🎓')}</div>
           <div class="expert-option-text">
             <div class="expert-option-name">${this.escapeHtml(expert.name)}</div>
             <div class="expert-option-desc">${this.escapeHtml(expert.description || '暂无描述')}</div>
