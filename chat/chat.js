@@ -205,7 +205,8 @@ const state = {
   conversation: null,
   members: [],
   isLoading: false,
-  isWaitingResponse: false
+  isLooping: false,
+  pendingWebMemberIds: null
 };
 
 // Dashboard 动画状态
@@ -319,6 +320,7 @@ function initElements() {
   elements.modeBadge = document.getElementById('modeBadge');
   elements.smartPanel = document.getElementById('smartPanel');
   elements.smartPanelToggle = document.getElementById('smartPanelToggle');
+  elements.loopProgressFixed = document.getElementById('loopProgressFixed');
 
   // 创建滚动到底部按钮
   elements.scrollBottomBtn = document.createElement('button');
@@ -787,13 +789,29 @@ async function handleStorageChange(change) {
     renderMessages();
     updateConversationName();
 
-    // 更新输入状态
-    const hasMembers = state.conversation.members && state.conversation.members.length > 0;
-    if (elements.messageInput) {
-      elements.messageInput.disabled = !hasMembers;
-      elements.messageInput.placeholder = hasMembers ? '输入消息...' : '请先添加成员后再发送消息';
+    // 更新输入状态（loop/Loading/pendingWebMemberIds期间不更新，保持禁用）
+    if (!state.isLooping && !state.isLoading && !state.pendingWebMemberIds) {
+      const hasMembers = (state.conversation.members && state.conversation.members.length > 0) ||
+        (state.conversation.mode === 'expertqa' && state.conversation.expertId);
+      if (elements.messageInput) {
+        elements.messageInput.disabled = !hasMembers;
+        elements.messageInput.placeholder = hasMembers ? '输入消息...' : '请先添加成员后再发送消息';
+      }
+      updateSendButtonState();
     }
-    updateSendButtonState();
+
+    // pendingWebMemberIds: 检查本次发送中参与的web成员是否都已有url
+    if (state.pendingWebMemberIds) {
+      const memberUrls = state.conversation.memberUrls || {};
+      const resolved = [...state.pendingWebMemberIds].filter(id => memberUrls[id]);
+      resolved.forEach(id => state.pendingWebMemberIds.delete(id));
+      if (state.pendingWebMemberIds.size === 0) {
+        console.log('[Chat] 所有参与发送的web成员已获得会话URL，恢复输入');
+        state.pendingWebMemberIds = null;
+        state.isLoading = false;
+        setInputState(false);
+      }
+    }
 
     // 更新智能面板内容
     updateSmartPanelContent();
@@ -801,12 +819,6 @@ async function handleStorageChange(change) {
     if (newMessageCount > oldMessageCount) {
       console.log(`[Chat] 新增了 ${newMessageCount - oldMessageCount} 条消息`);
       scrollToBottom();
-
-      if (state.isWaitingResponse) {
-        console.log('[Chat] AI回复已到达，恢复发送按钮');
-        state.isWaitingResponse = false;
-        resetSendButton();
-      }
     }
   }
 }
@@ -1351,7 +1363,6 @@ async function sendMessage() {
     return;
   }
 
-  // 检查是否是命令
   if (content.startsWith('/')) {
     await handleCommand(content);
     elements.messageInput.value = '';
@@ -1359,22 +1370,69 @@ async function sendMessage() {
   }
 
   state.isLoading = true;
-  updateSendButtonState();
+  elements.messageInput.value = '';
   elements.sendBtn.classList.add('sending');
+
+  const isExpertQa = state.conversation.mode === 'expertqa' && state.conversation.expertId;
+  const pendingIds = getWebMemberIdsWithoutUrl();
+  const webFirst = pendingIds.size > 0;
+
+  if (isExpertQa) {
+    setInputState(true, '专家处理中，请稍候...');
+    showInitialExpertProgress();
+  } else if (webFirst) {
+    state.pendingWebMemberIds = pendingIds;
+    setInputState(true, '等待网页模型首次响应，请稍候...');
+  } else {
+    state.isLoading = false;
+    updateSendButtonState();
+  }
 
   try {
     addTempMessage(content, true);
-    elements.messageInput.value = '';
-    
     showThinkingIndicator();
 
-    const isBrainstorming = state.conversation.mode === 'brainstorming';
-
-    if (isBrainstorming) {
-      // 头脑风暴模式：发送后立即重置状态，不等待响应
+    if (isExpertQa) {
       sendMessageToBackend(conversationId, content)
         .then(updatedConversation => {
-          state.isWaitingResponse = false;
+          if (updatedConversation) {
+            state.conversation = updatedConversation;
+            renderMessages();
+            updateConversationName();
+          }
+        })
+        .catch(error => {
+          console.error('发送消息失败:', error);
+          showError('发送消息失败: ' + error.message);
+        })
+        .finally(() => {
+          removeProgressIndicator();
+          hideThinkingIndicator();
+          resetInputState();
+          scrollToBottom();
+        });
+    } else if (webFirst) {
+      sendMessageToBackend(conversationId, content)
+        .then(updatedConversation => {
+          if (updatedConversation) {
+            state.conversation = updatedConversation;
+            renderMessages();
+            updateConversationName();
+          }
+        })
+        .catch(error => {
+          console.error('发送消息失败:', error);
+          showError('发送消息失败: ' + error.message);
+          state.pendingWebMemberIds = null;
+          resetInputState();
+        })
+        .finally(() => {
+          hideThinkingIndicator();
+          scrollToBottom();
+        });
+    } else {
+      sendMessageToBackend(conversationId, content)
+        .then(updatedConversation => {
           if (updatedConversation) {
             state.conversation = updatedConversation;
             renderMessages();
@@ -1389,32 +1447,87 @@ async function sendMessage() {
           hideThinkingIndicator();
           scrollToBottom();
         });
-
-      // 立即重置状态，允许继续输入
-      state.isLoading = false;
-      resetSendButton();
-    } else {
-      // 其他模式：等待响应完成
-      const updatedConversation = await sendMessageToBackend(conversationId, content);
-
-      state.isWaitingResponse = false;
-      resetSendButton();
-
-      if (updatedConversation) {
-        state.conversation = updatedConversation;
-        renderMessages();
-        updateConversationName();
-      }
-      hideThinkingIndicator();
-      scrollToBottom();
     }
   } catch (error) {
     console.error('发送消息失败:', error);
     showError('发送消息失败: ' + error.message);
-    resetSendButton();
+    resetInputState();
     hideThinkingIndicator();
     scrollToBottom();
   }
+}
+
+function showInitialExpertProgress() {
+  const expertName = state.experts?.find(e => e.id === state.conversation.expertId)?.name || 'AI助手';
+
+  const progressHtml = `
+    <div class="message ai-message expert-progress-message" id="currentFlowProgressIndicator">
+      <div class="message-avatar-wrapper">
+        <div class="message-avatar expert-avatar-thinking">⚙️</div>
+      </div>
+      <div class="message-body">
+        <div class="message-header-row">
+          <span class="message-sender-name">${escapeHtml(expertName)}</span>
+          <span class="expert-status-badge">执行中</span>
+        </div>
+        <div class="message-text expert-thinking-text">
+          <div class="thinking-dots-inline">
+            <span class="thinking-dot"></span>
+            <span class="thinking-dot"></span>
+            <span class="thinking-dot"></span>
+          </div>
+          <span class="thinking-text">开始执行流程...</span>
+        </div>
+        <div class="expert-progress-bar-wrapper">
+          <div class="expert-progress-bar">
+            <div class="expert-progress-fill" id="currentFlowProgressBar"></div>
+          </div>
+          <div class="expert-progress-text" id="currentFlowProgressText">0/0 节点</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const messagesContainer = document.getElementById('messagesContainer');
+  if (messagesContainer) {
+    messagesContainer.insertAdjacentHTML('beforeend', progressHtml);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
+}
+
+function setInputState(disabled, reason = '') {
+  if (elements.messageInput) {
+    elements.messageInput.disabled = disabled;
+    if (disabled && reason) {
+      elements.messageInput.placeholder = reason;
+    } else if (!disabled) {
+      const hasMembers = (state.conversation?.members?.length > 0) ||
+        (state.conversation?.mode === 'expertqa' && state.conversation?.expertId);
+      elements.messageInput.placeholder = hasMembers ? '输入消息，按 Enter 发送...' : '请先添加成员后再发送消息';
+      elements.messageInput.focus();
+    }
+  }
+  if (elements.sendBtn) {
+    elements.sendBtn.disabled = disabled;
+  }
+}
+
+function hasWebMembersWithoutUrl(memberIds) {
+  if (!state.conversation?.members) return false;
+  const memberUrls = state.conversation.memberUrls || {};
+  return state.conversation.members
+    .filter(m => !memberIds || memberIds.has(m.id))
+    .some(m => m.accessMethod === 'web' && !memberUrls[m.id]);
+}
+
+function getWebMemberIdsWithoutUrl() {
+  if (!state.conversation?.members) return new Set();
+  const memberUrls = state.conversation.memberUrls || {};
+  return new Set(
+    state.conversation.members
+      .filter(m => m.accessMethod === 'web' && !memberUrls[m.id])
+      .map(m => m.id)
+  );
 }
 
 function updateSendButtonState() {
@@ -1425,9 +1538,9 @@ function updateSendButtonState() {
   elements.sendBtn.disabled = !hasMembers || !hasText || state.isLoading;
 }
 
-function resetSendButton() {
+function resetInputState() {
   state.isLoading = false;
-  updateSendButtonState();
+  setInputState(false);
 }
 
 function showThinkingIndicator() {
@@ -1482,8 +1595,7 @@ let newStatusTimeout = null;
 
 async function handleNewCommand() {
   try {
-    elements.messageInput.disabled = true;
-    elements.sendBtn.disabled = true;
+    setInputState(true, '正在清除会话...');
 
     const response = await chrome.runtime.sendMessage({
       action: 'clearConversationLocal',
@@ -1510,8 +1622,7 @@ async function handleNewCommand() {
   } catch (error) {
     console.error('[Chat] 清除会话失败:', error);
     showNewStatus('failed');
-    elements.messageInput.disabled = false;
-    elements.sendBtn.disabled = false;
+    setInputState(false);
   }
 }
 
@@ -1546,15 +1657,14 @@ function attachMessageListener() {
     chrome.runtime.onMessage.addListener((request) => {
       if (request.type === 'clearComplete') {
         showNewStatus(request.success ? 'done' : 'failed');
-        elements.messageInput.disabled = false;
-        elements.sendBtn.disabled = false;
+        setInputState(false);
       } else if (request.type === 'loopDiscussionProgress') {
         showLoopProgress(request.currentRound, request.totalRounds);
       } else if (request.type === 'loopDiscussionComplete') {
         removeLoopProgress();
         showSuccess(`多轮讨论完成（共 ${request.rounds} 轮）`);
-        elements.messageInput.disabled = false;
-        elements.sendBtn.disabled = false;
+        state.isLooping = false;
+        setInputState(false);
       } else if (request.type === 'flowExecutionProgress') {
         handleFlowExecutionProgress(request.progress);
       } else if (request.type === 'flowExecutionComplete') {
@@ -1582,8 +1692,9 @@ function showLoopProgress(currentRound, totalRounds) {
     </div>
   `;
   
-  elements.messagesContainer.appendChild(progressDiv);
-  scrollToBottom();
+  if (elements.loopProgressFixed) {
+    elements.loopProgressFixed.appendChild(progressDiv);
+  }
 }
 
 function removeLoopProgress() {
@@ -1597,8 +1708,7 @@ function handleFlowExecutionProgress(progress) {
   console.log('[Chat] 流程执行进度:', progress);
 
   // ✅ 只在专家模式下显示进度
-  const isExpertMode = state.conversation.flowId ||
-                      (state.conversation.mode === 'expertqa' && state.conversation.expertId);
+  const isExpertMode = state.conversation.mode === 'expertqa' && state.conversation.expertId;
 
   if (!isExpertMode) {
     console.log('[Chat] 非专家模式，忽略进度提示');
@@ -1606,9 +1716,7 @@ function handleFlowExecutionProgress(progress) {
   }
 
   // 获取专家名称
-  const expertName = state.conversation.flowId
-    ? (state.conversation.flowName || 'AI助手')
-    : (state.experts?.find(e => e.id === state.conversation.expertId)?.name || 'AI助手');
+  const expertName = state.experts?.find(e => e.id === state.conversation.expertId)?.name || 'AI助手';
 
   let progressElement = document.getElementById('currentFlowProgressIndicator');
 
@@ -1686,8 +1794,7 @@ function handleFlowExecutionError(error) {
   console.error('[Chat] 流程执行错误:', error);
 
   // ✅ 只在专家模式下显示错误
-  const isExpertMode = state.conversation.flowId ||
-                      (state.conversation.mode === 'expertqa' && state.conversation.expertId);
+  const isExpertMode = state.conversation.mode === 'expertqa' && state.conversation.expertId;
 
   if (!isExpertMode) {
     console.log('[Chat] 非专家模式，忽略错误提示');
@@ -1697,9 +1804,7 @@ function handleFlowExecutionError(error) {
   removeProgressIndicator();
 
   // 获取专家名称
-  const expertName = state.conversation.flowId
-    ? (state.conversation.flowName || 'AI助手')
-    : (state.experts?.find(e => e.id === state.conversation.expertId)?.name || 'AI助手');
+  const expertName = state.experts?.find(e => e.id === state.conversation.expertId)?.name || 'AI助手';
 
   const errorHtml = `
     <div class="message ai-message">
@@ -1740,8 +1845,8 @@ async function handleLoopCommand(args) {
   }
 
   try {
-    elements.messageInput.disabled = true;
-    elements.sendBtn.disabled = true;
+    state.isLooping = true;
+    setInputState(true, '多轮讨论中...');
 
     const response = await chrome.runtime.sendMessage({
       action: 'startLoopDiscussion',
@@ -1762,8 +1867,8 @@ async function handleLoopCommand(args) {
   } catch (error) {
     console.error('[Chat] 启动多轮讨论失败:', error);
     showError(error.message);
-    elements.messageInput.disabled = false;
-    elements.sendBtn.disabled = false;
+    state.isLooping = false;
+    setInputState(false);
   }
 }
 
@@ -3060,6 +3165,8 @@ async function handleContextMenuAction(action) {
     exportConversationFromSidebar(convId);
   } else if (action === 'rename') {
     await renameConversationFromSidebar(convId);
+  } else if (action === 'batchDelete') {
+    openBatchDeleteModal();
   }
 }
 
@@ -4201,6 +4308,279 @@ function updateConvModeVisibility(mode) {
   } else {
     expertGroup.style.display = 'none';
     memberGroup.style.display = 'block';
+  }
+}
+
+// ==================== 批量删除会话 ====================
+
+const batchDeleteState = {
+  selectedIds: new Set()
+};
+
+function openBatchDeleteModal() {
+  const modal = document.getElementById('batchDeleteModal');
+  if (!modal) return;
+
+  // 重置状态
+  batchDeleteState.selectedIds.clear();
+
+  // 绑定事件
+  bindBatchDeleteEvents();
+
+  // 加载会话列表
+  renderBatchDeleteList();
+
+  // 显示模态框
+  modal.classList.add('active');
+}
+
+function closeBatchDeleteModal() {
+  const modal = document.getElementById('batchDeleteModal');
+  if (modal) {
+    modal.classList.remove('active');
+  }
+  batchDeleteState.selectedIds.clear();
+}
+
+function bindBatchDeleteEvents() {
+  // 关闭按钮
+  const closeBtn = document.getElementById('closeBatchDeleteModalBtn');
+  if (closeBtn) {
+    closeBtn.onclick = closeBatchDeleteModal;
+  }
+
+  // 取消按钮
+  const cancelBtn = document.getElementById('cancelBatchDeleteBtn');
+  if (cancelBtn) {
+    cancelBtn.onclick = closeBatchDeleteModal;
+  }
+
+  // 点击遮罩关闭
+  const modal = document.getElementById('batchDeleteModal');
+  if (modal) {
+    modal.onclick = (e) => {
+      if (e.target === modal) closeBatchDeleteModal();
+    };
+  }
+
+  // 全选
+  const selectAll = document.getElementById('batchSelectAll');
+  if (selectAll) {
+    selectAll.onchange = () => {
+      const checkboxes = document.querySelectorAll('.batch-delete-item-checkbox');
+      checkboxes.forEach(cb => {
+        cb.checked = selectAll.checked;
+        const convId = cb.dataset.convId;
+        if (selectAll.checked) {
+          batchDeleteState.selectedIds.add(convId);
+        } else {
+          batchDeleteState.selectedIds.delete(convId);
+        }
+      });
+      updateBatchSelectedCount();
+    };
+  }
+
+  // 筛选条件变化
+  const filterName = document.getElementById('batchFilterName');
+  const filterMode = document.getElementById('batchFilterMode');
+  const filterDateFrom = document.getElementById('batchFilterDateFrom');
+  const filterDateTo = document.getElementById('batchFilterDateTo');
+
+  [filterName, filterMode, filterDateFrom, filterDateTo].forEach(el => {
+    if (el) {
+      el.oninput = () => renderBatchDeleteList();
+      el.onchange = () => renderBatchDeleteList();
+    }
+  });
+
+  // 删除按钮
+  const confirmBtn = document.getElementById('confirmBatchDeleteBtn');
+  if (confirmBtn) {
+    confirmBtn.onclick = executeBatchDelete;
+  }
+}
+
+function getFilteredConversations() {
+  const filterName = document.getElementById('batchFilterName')?.value?.toLowerCase() || '';
+  const filterMode = document.getElementById('batchFilterMode')?.value || '';
+  const filterDateFrom = document.getElementById('batchFilterDateFrom')?.value;
+  const filterDateTo = document.getElementById('batchFilterDateTo')?.value;
+
+  return sidebarState.conversations.filter(conv => {
+    // 名称筛选
+    if (filterName && !(conv.name || '').toLowerCase().includes(filterName)) {
+      return false;
+    }
+
+    // 模式筛选
+    if (filterMode && conv.mode !== filterMode) {
+      return false;
+    }
+
+    // 日期筛选
+    const convTime = conv.updatedAt || conv.createdAt;
+    if (filterDateFrom) {
+      const fromDate = new Date(filterDateFrom).getTime();
+      if (convTime < fromDate) return false;
+    }
+    if (filterDateTo) {
+      const toDate = new Date(filterDateTo).getTime() + 86400000; // 加一天
+      if (convTime > toDate) return false;
+    }
+
+    return true;
+  });
+}
+
+function renderBatchDeleteList() {
+  const container = document.getElementById('batchDeleteList');
+  if (!container) return;
+
+  const filtered = getFilteredConversations();
+
+  if (filtered.length === 0) {
+    container.innerHTML = '<div class="batch-delete-empty">没有符合条件的会话</div>';
+    updateBatchSelectedCount();
+    return;
+  }
+
+  const modeIcons = {
+    brainstorming: '💡',
+    discussion: '🪑',
+    expertqa: '🎓'
+  };
+
+  const modeNames = {
+    brainstorming: '头脑风暴',
+    discussion: '圆桌讨论',
+    expertqa: '专家问答'
+  };
+
+  container.innerHTML = filtered.map(conv => {
+    const modeIcon = modeIcons[conv.mode] || modeIcons.brainstorming;
+    const modeName = modeNames[conv.mode] || '头脑风暴';
+    const time = formatSidebarTime(conv.updatedAt || conv.createdAt);
+    const isChecked = batchDeleteState.selectedIds.has(conv.id);
+
+    return `
+      <div class="batch-delete-item ${isChecked ? 'selected' : ''}" data-conv-id="${conv.id}">
+        <input type="checkbox" class="batch-delete-item-checkbox" data-conv-id="${conv.id}" ${isChecked ? 'checked' : ''}>
+        <span class="batch-delete-item-mode">${modeIcon}</span>
+        <div class="batch-delete-item-info">
+          <div class="batch-delete-item-name">${escapeHtml(conv.name)}</div>
+          <div class="batch-delete-item-meta">${modeName} · ${time}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // 绑定复选框事件
+  container.querySelectorAll('.batch-delete-item-checkbox').forEach(cb => {
+    cb.onchange = () => {
+      const convId = cb.dataset.convId;
+      if (cb.checked) {
+        batchDeleteState.selectedIds.add(convId);
+      } else {
+        batchDeleteState.selectedIds.delete(convId);
+      }
+      // 更新行样式
+      const item = cb.closest('.batch-delete-item');
+      if (item) {
+        item.classList.toggle('selected', cb.checked);
+      }
+      updateBatchSelectedCount();
+    };
+  });
+
+  // 点击行也可以选中
+  container.querySelectorAll('.batch-delete-item').forEach(item => {
+    item.onclick = (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      const cb = item.querySelector('.batch-delete-item-checkbox');
+      if (cb) {
+        cb.checked = !cb.checked;
+        cb.dispatchEvent(new Event('change'));
+      }
+    };
+  });
+
+  updateBatchSelectedCount();
+}
+
+function updateBatchSelectedCount() {
+  const countEl = document.getElementById('batchSelectedCount');
+  if (countEl) {
+    countEl.textContent = batchDeleteState.selectedIds.size;
+  }
+
+  const confirmBtn = document.getElementById('confirmBatchDeleteBtn');
+  if (confirmBtn) {
+    confirmBtn.disabled = batchDeleteState.selectedIds.size === 0;
+  }
+
+  // 更新全选状态
+  const selectAll = document.getElementById('batchSelectAll');
+  if (selectAll) {
+    const checkboxes = document.querySelectorAll('.batch-delete-item-checkbox');
+    const checkedCount = document.querySelectorAll('.batch-delete-item-checkbox:checked').length;
+    selectAll.checked = checkboxes.length > 0 && checkedCount === checkboxes.length;
+    selectAll.indeterminate = checkedCount > 0 && checkedCount < checkboxes.length;
+  }
+}
+
+async function executeBatchDelete() {
+  const idsToDelete = Array.from(batchDeleteState.selectedIds);
+  if (idsToDelete.length === 0) return;
+
+  // 检查是否包含当前会话
+  const includesCurrent = idsToDelete.includes(conversationId);
+
+  try {
+    // 逐个删除
+    for (const convId of idsToDelete) {
+      const conv = sidebarState.conversations.find(c => c.id === convId);
+      if (conv && conv.memberUrls) {
+        // 清理平台会话
+        for (const [memberId, conversationUrl] of Object.entries(conv.memberUrls)) {
+          if (conversationUrl) {
+            try {
+              await chrome.runtime.sendMessage({
+                action: 'deletePlatformConversation',
+                provider: conv.memberSettings?.[memberId]?.provider,
+                conversationUrl
+              });
+            } catch (e) {
+              console.error('[BatchDelete] 删除平台会话失败:', e);
+            }
+          }
+        }
+      }
+
+      await chrome.runtime.sendMessage({
+        action: 'deleteConversation',
+        conversationId: convId
+      });
+    }
+
+    // 关闭弹窗
+    closeBatchDeleteModal();
+
+    // 如果包含当前会话，跳转
+    if (includesCurrent) {
+      const remaining = sidebarState.conversations.filter(c => !idsToDelete.includes(c.id));
+      if (remaining.length > 0) {
+        window.location.href = `chat.html?id=${remaining[0].id}`;
+      } else {
+        window.location.href = 'chat.html';
+      }
+    } else {
+      // 刷新列表
+      await loadSidebarConversations();
+    }
+  } catch (error) {
+    console.error('[BatchDelete] 批量删除失败:', error);
+    alert('批量删除失败: ' + error.message);
   }
 }
 
