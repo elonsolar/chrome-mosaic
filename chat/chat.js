@@ -1538,13 +1538,8 @@ function renderMessages() {
   const messages = state.conversation.messages || [];
 
   if (messages.length === 0) {
-    elements.messagesContainer.innerHTML = `
-      <div class="empty-messages">
-        <div class="empty-messages-icon">💬</div>
-        <h2>开始对话</h2>
-        <p>在下方输入消息，所有成员将同时收到并回复</p>
-      </div>
-    `;
+    // 不显示空会话提示
+    elements.messagesContainer.innerHTML = '';
     updateSendButtonState();
     lastRenderedMsgCount = 0;
     return;
@@ -3540,23 +3535,19 @@ function renderSidebarList() {
 
   let conversations = sidebarState.conversations;
 
-  if (conversations.length === 0) {
-    container.innerHTML = '<div class="sidebar-empty">暂无会话</div>';
-    return;
-  }
-
-  // 按模式分组显示会话
+  // 按模式分组显示会话（即使没有会话也显示所有分组）
   const groups = groupConversationsByMode(conversations);
 
   const threeDotSvg = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4.55146 8.00001C4.55146 8.63513 4.03659 9.15001 3.40146 9.15001C2.76634 9.15001 2.25146 8.63513 2.25146 8.00001C2.25146 7.36488 2.76634 6.85001 3.40146 6.85001C4.03659 6.85001 4.55146 7.36488 4.55146 8.00001Z" fill="currentColor"></path><path d="M9.1476 8.00001C9.1476 8.63513 8.63273 9.15001 7.9976 9.15001C7.36248 9.15001 6.8476 8.63513 6.8476 8.00001C6.8476 7.36488 7.36248 6.85001 7.9976 6.85001C8.63273 6.85001 9.1476 7.36488 9.1476 8.00001Z" fill="currentColor"></path><path d="M13.7486 8.00001C13.7486 8.63513 13.2338 9.15001 12.5986 9.15001C11.9635 9.15001 11.4486 8.63513 11.4486 8.00001C11.4486 7.36488 11.9635 6.85001 12.5986 6.85001C13.2338 6.85001 13.7486 7.36488 13.7486 8.00001Z" fill="currentColor"></path></svg>';
 
   const collapseSvg = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
-  // 加载折叠状态
+  // 加载折叠状态，默认只有 recent 分组展开，其他分组折叠
   const collapsedGroups = JSON.parse(localStorage.getItem('sidebarCollapsedGroups') || '{}');
 
   container.innerHTML = groups.map(group => {
-    const isCollapsed = collapsedGroups[group.key] || false;
+    // 只有 recent 分组默认展开，其他分组默认折叠
+    const isCollapsed = collapsedGroups[group.key] !== undefined ? collapsedGroups[group.key] : (group.key !== 'recent');
     return `
       <div class="sidebar-date-group" data-group-key="${group.key}">
         <div class="sidebar-date-label" data-group-key="${group.key}">
@@ -3684,7 +3675,8 @@ function groupConversationsByMode(conversations) {
     }
   });
 
-  return Object.values(groups).filter(g => g.items.length > 0);
+  // 始终返回所有分组（即使为空）
+  return Object.values(groups);
 }
 
 // 格式化时间
@@ -4483,6 +4475,9 @@ function startModeConversationCarousel() {
     updateSendButtonState();
     renderMessages();
 
+    // 清空消息容器，不显示空会话提示
+    elements.messagesContainer.innerHTML = '';
+
     await sleep(500);
 
     // 模拟打字
@@ -4513,12 +4508,29 @@ function startModeConversationCarousel() {
     // 隐藏 thinking
     hideThinkingIndicator();
 
-    // 添加 AI 回复
+    // 移除临时消息
+    removeTempMessages();
+
+    // 移除"开始对话"提示
+    const emptyMessages = elements.messagesContainer.querySelector('.empty-messages');
+    if (emptyMessages) {
+      emptyMessages.remove();
+    }
+
+    // 添加用户消息（去除 [Pasted ~X lines] 标记）
+    const cleanUserText = userText.replace(/\[Pasted[^\]]*\]/g, '');
     state.conversation.messages.push({
       isUser: true,
-      content: userText,
+      content: cleanUserText,
       timestamp: Date.now()
     });
+
+    // 渲染用户消息
+    lastRenderedMsgCount = 0;
+    appendNewMessages();
+
+    // 等待一小段时间后，逐个添加 AI 消息并应用打字机效果
+    await sleep(300);
 
     for (let i = 0; i < example.preview.ai.length; i++) {
       const ai = example.preview.ai[i];
@@ -4531,7 +4543,8 @@ function startModeConversationCarousel() {
         timestamp: Date.now() + i + 1
       });
 
-      renderMessages();
+      // 每添加一条 AI 消息就渲染一次（会自动应用打字机效果）
+      appendNewMessages();
       await sleep(400);
     }
 
