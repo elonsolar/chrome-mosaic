@@ -232,26 +232,27 @@ body {
 }
 
 .sidebar-date-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: #6B7280;
-  padding: 6px 12px 4px;
-  margin-top: 8px;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #8899AA;
+  padding: 10px 12px 2px;
+  margin-top: 4px;
   user-select: none;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   cursor: pointer;
 }
 
 .sidebar-date-label:hover {
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 
 .sidebar-date-collapse-icon {
   display: flex;
   align-items: center;
-  transition: transform 0.2s ease;
 }
 
 .sidebar-date-collapse-icon.collapsed {
@@ -271,7 +272,6 @@ body {
 .sidebar-group-items {
   overflow: hidden;
   max-height: 2000px;
-  transition: max-height 0.3s ease;
 }
 
 .sidebar-group-items.collapsed {

@@ -3589,12 +3589,26 @@ function renderSidebarList() {
       const items = group.querySelector('.sidebar-group-items');
       const icon = label.querySelector('.sidebar-date-collapse-icon');
 
-      const isCollapsed = items.classList.toggle('collapsed');
-      icon.classList.toggle('collapsed', isCollapsed);
+      const wasCollapsed = items.classList.contains('collapsed');
 
-      // 保存折叠状态
-      const collapsedGroups = JSON.parse(localStorage.getItem('sidebarCollapsedGroups') || '{}');
-      collapsedGroups[groupKey] = isCollapsed;
+      container.querySelectorAll('.sidebar-date-group').forEach(otherGroup => {
+        const otherItems = otherGroup.querySelector('.sidebar-group-items');
+        const otherLabel = otherGroup.querySelector('.sidebar-date-label');
+        const otherIcon = otherLabel.querySelector('.sidebar-date-collapse-icon');
+        otherItems.classList.add('collapsed');
+        otherIcon.classList.add('collapsed');
+      });
+
+      if (wasCollapsed) {
+        items.classList.remove('collapsed');
+        icon.classList.remove('collapsed');
+      }
+
+      const collapsedGroups = {};
+      container.querySelectorAll('.sidebar-date-group').forEach(g => {
+        const gItems = g.querySelector('.sidebar-group-items');
+        collapsedGroups[g.dataset.groupKey] = gItems.classList.contains('collapsed');
+      });
       localStorage.setItem('sidebarCollapsedGroups', JSON.stringify(collapsedGroups));
     });
   });
@@ -3893,8 +3907,13 @@ function exportConversationFromSidebar(convId) {
 
 // 随机昵称库
 const NICKNAMES = [
-  '小明', '小红', '阿强', '小李', '小王', '阿花', '小美', '小刚', '阿华', '小丽',
-  '阿杰', '小芳', '阿明', '小娟', '阿伟', '小静', '阿军', '小慧', '阿涛', '小燕'
+  '子墨', '雨桐', '思远', '晨曦', '星辰', '清风', '明月', '白云', '青山', '流水',
+  '知秋', '听雨', '望舒', '映雪', '若溪', '逸飞', '书衡', '瑾瑜', '皓轩', '睿哲',
+  '语嫣', '芷若', '念真', '怀瑾', '拾光', '初见', '长安', '归晚', '南风', '北辰',
+  '墨白', '竹心', '兰亭', '松言', '鹤鸣', '鹿鸣', '凤栖', '龙吟', '虎啸', '鹰扬',
+  '天佑', '嘉禾', '瑞霖', '景行', '弘毅', '致远', '明德', '修远', '凌云', '博雅',
+  '文渊', '翰林', '锦书', '玉衡', '金戈', '铁衣', '丹心', '碧落', '紫电', '青霜',
+  '问渠', '寻芳', '听泉', '望岳', '临风', '踏雪', '采薇', '折桂', '听荷', '品竹'
 ];
 
 /**
@@ -3906,21 +3925,21 @@ function generateRandomNicknames(count) {
 }
 
 /**
- * 自动生成成员（使用网页平台模型）
+ * 自动生成成员（使用系统启用的模型）
  */
 function generateAutoMembers(count, allModels) {
-  const webModels = allModels.filter(m => m.accessMethod === 'web');
+  const enabledModels = allModels.filter(m => m.enabled !== false);
   const nicknames = generateRandomNicknames(count);
   
-  if (webModels.length === 0) {
-    console.error('[AutoMembers] 没有可用的网页平台模型');
+  if (enabledModels.length === 0) {
+    console.error('[AutoMembers] 没有可用的启用模型');
     return [];
   }
 
   const members = [];
   for (let i = 0; i < count; i++) {
-    const model = webModels[Math.floor(Math.random() * webModels.length)];
-    members.push({
+    const model = enabledModels[Math.floor(Math.random() * enabledModels.length)];
+    const member = {
       id: `member_${Date.now().toString(36)}_${Math.random().toString(36).substr(2)}`,
       name: nicknames[i],
       platformId: model.platformId,
@@ -3929,9 +3948,15 @@ function generateAutoMembers(count, allModels) {
       platformName: model.platformName,
       accessMethod: model.accessMethod,
       color: model.color || '#667eea',
-      systemPrompt: '',
-      webUrl: model.webUrl || ''
-    });
+      systemPrompt: ''
+    };
+    if (model.accessMethod === 'api') {
+      member.baseUrl = model.baseUrl || '';
+      member.apiKey = model.apiKey || '';
+    } else {
+      member.webUrl = model.webUrl || '';
+    }
+    members.push(member);
   }
   
   return members;
