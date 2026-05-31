@@ -14,6 +14,14 @@ class FlowExecutor {
       throw new Error('流程没有节点');
     }
 
+    // 统一连接格式：支持 edges/connections，支持 source/target 和 from/to
+    const rawConnections = flow.connections || flow.edges || [];
+    flow.connections = rawConnections.map(conn => ({
+      id: conn.id,
+      from: conn.from || conn.source,
+      to: conn.to || conn.target
+    }));
+
     const onProgress = context.onProgress || null;
     const sessionPool = new TemporarySessionPool(this.conversationManager);
 
@@ -25,7 +33,7 @@ class FlowExecutor {
         onProgress({ current: 0, total: executionGraph.nodes.size });
       }
 
-      const finalResult = await this.executeGraph(executionGraph, userInput, context, sessionPool);
+      const finalResult = await this.executeGraph(executionGraph, userInput, context, sessionPool, flow);
 
       console.log('[FlowExecutor] ========== 流程执行完成 ==========');
       return {
@@ -59,6 +67,7 @@ class FlowExecutor {
       incomingConnections.set(node.id, []);
     });
 
+    // 连接格式已在 executeFlow 中统一为 from/to
     flow.connections.forEach(conn => {
       if (outgoingConnections.has(conn.from)) {
         outgoingConnections.get(conn.from).push(conn);
@@ -80,15 +89,19 @@ class FlowExecutor {
       throw new Error('流程只能有一个起始节点');
     }
 
+    const startNode = startNodes[0];
+    console.log('[FlowExecutor] startNode:', startNode.id);
+    console.log('[FlowExecutor] startNode outgoing:', outgoingConnections.get(startNode.id));
+
     return {
       nodes: nodeMap,
       outgoingConnections,
       incomingConnections,
-      startNode: startNodes[0]
+      startNode
     };
   }
 
-  async executeGraph(graph, userInput, context, sessionPool) {
+  async executeGraph(graph, userInput, context, sessionPool, flow) {
     const { nodes, outgoingConnections, incomingConnections, startNode } = graph;
     const nodeResults = new Map();
     const pendingExecutions = new Map();
@@ -102,6 +115,7 @@ class FlowExecutor {
 
     // Initialize from start node outputs
     const startNodeData = nodes.get(startNode.id);
+    console.log('[FlowExecutor] 开始节点:', startNode.id, '数据:', startNodeData);
     if (startNodeData && startNodeData.data?.outputs) {
       const startNodeInputs = context.startNodeInputs || {};
       startNodeData.data.outputs.forEach(output => {
@@ -113,6 +127,8 @@ class FlowExecutor {
     }
 
     const executeNode = async (nodeId, input) => {
+      console.log('[FlowExecutor] executeNode 被调用, nodeId:', nodeId, 'input:', input?.substring(0, 50));
+
       if (pendingExecutions.has(nodeId)) {
         return await pendingExecutions.get(nodeId);
       }
@@ -126,6 +142,18 @@ class FlowExecutor {
         const nodeStartTime = Date.now();
         const node = nodes.get(nodeId);
         console.log('[FlowExecutor] 执行节点:', node.name || node.data?.title || nodeId, '类型:', node.type);
+
+        // 节点开始执行时发送进度通知
+        if (context.onProgress) {
+          context.onProgress({
+            current: executionOrder,
+            total: nodes.size,
+            nodeName: node.name || node.data?.title || nodeId,
+            nodeId,
+            status: 'started',
+            duration: 0
+          });
+        }
 
         // 汇聚节点等待所有上游节点执行完成，确保 executionContext 有值
         const incomingConns = incomingConnections.get(nodeId) || [];
@@ -144,24 +172,29 @@ class FlowExecutor {
 
         let result;
         switch (node.type) {
-          case '1':
-          case '2':
+          case '1':  // Start
+          case '2':  // End
+            console.log('[FlowExecutor] 执行开始/结束节点');
             result = { success: true, content: input, timestamp: Date.now() };
             break;
 
-          case '3':
+          case '3':  // LLM
+            console.log('[FlowExecutor] 执行LLM节点');
             result = await this.executeLLMNode(node, input, sessionPool, context, executionContext);
             break;
 
-          case '45':
+          case '45':  // Http
+            console.log('[FlowExecutor] 执行HTTP节点');
             result = await this.executeHttpNode(node, input);
             break;
 
-          case '5':
+          case '5':  // Code
+            console.log('[FlowExecutor] 执行代码节点');
             result = await this.executeCodeNode(node, input);
             break;
 
           default:
+            console.warn('[FlowExecutor] 不支持的节点类型:', node.type);
             result = {
               success: false,
               content: '',
@@ -199,7 +232,8 @@ class FlowExecutor {
             total: nodes.size,
             nodeName: detail.nodeName,
             nodeId,
-            duration: nodeDuration
+            duration: nodeDuration,
+            status: 'completed'  // 添加完成状态
           });
         }
 
@@ -219,20 +253,26 @@ class FlowExecutor {
       // 不会等到上游处理下游连接，避免死锁
       const result = await executionPromise;
 
-      // Phase 2: Handle outgoing connections
+      // Phase 2: Handle outgoing connections - 照抄 FlowRunner 逻辑
       try {
-        const outgoing = outgoingConnections.get(nodeId) || [];
+        const connections = flow.connections || [];
+        const outgoing = connections.filter(c => (c.from || c.source) === nodeId);
 
         if (outgoing.length === 0) {
           console.log('[FlowExecutor] 到达终点节点:', nodeId);
           return result;
         }
 
+        const getNextNode = (conn) => {
+          const targetId = conn.to || conn.target;
+          return nodes.get(targetId);
+        };
+
         if (outgoing.length > 1) {
           console.log(`[FlowExecutor] 并行执行 ${outgoing.length} 个子节点`);
 
           const branchResults = await Promise.all(
-            outgoing.map(conn => executeNode(conn.to, result.content))
+            outgoing.map(conn => executeNode((conn.to || conn.target), result.content))
           );
 
           return {
@@ -243,7 +283,7 @@ class FlowExecutor {
           };
         } else {
           console.log('[FlowExecutor] 串行执行子节点');
-          return await executeNode(outgoing[0].to, result.content);
+          return await executeNode((outgoing[0].to || outgoing[0].target), result.content);
         }
       } finally {
         pendingExecutions.delete(nodeId);
@@ -519,8 +559,8 @@ class FlowExecutor {
     return { valid: true, errors: [] };
   }
 
-  async testRun(flowData, startNodeInputs = {}, onProgress = null) {
-    console.log('[FlowExecutor] 试运行流程');
+  async execute(flowData, startNodeInputs = {}, onProgress = null) {
+    console.log('[FlowExecutor] 执行流程');
 
     const flow = this.transformFromFlowData(flowData);
     const userInput = this.buildUserInput(startNodeInputs, flowData);

@@ -26,6 +26,10 @@ class EntityFactory {
   }
 
   createExpert(flowData) {
+    // 兼容 storage 中的 connections 字段（与 flow-designer 的 edges 字段统一）
+    if (!flowData.edges && flowData.connections) {
+      flowData = { ...flowData, edges: flowData.connections };
+    }
     return new ExpertEntity(
       flowData,
       this.flowExecutor,
@@ -36,10 +40,21 @@ class EntityFactory {
   async createEntitiesFromConversation(conversation) {
     const entities = [];
 
-    if (conversation.flowId) {
-      const flow = await this.flowExecutor.flowManager.getFlowById(conversation.flowId);
-      if (flow) {
-        entities.push(this.createExpert(flow));
+    // 专家问答模式：检查 expertId
+    if (conversation.expertId) {
+      console.log('[EntityFactory] 检测到专家问答模式，expertId:', conversation.expertId);
+      try {
+        const result = await chrome.storage.local.get('experts');
+        const experts = result.experts || [];
+        const expert = experts.find(e => e.id === conversation.expertId);
+        if (expert) {
+          console.log('[EntityFactory] 找到专家:', expert.name, '节点数:', expert.nodes?.length);
+          entities.push(this.createExpert(expert));
+        } else {
+          console.error('[EntityFactory] 找不到专家:', conversation.expertId);
+        }
+      } catch (error) {
+        console.error('[EntityFactory] 获取专家数据失败:', error);
       }
     } else if (conversation.members && conversation.members.length > 0) {
       const memberIds = conversation.memberOrder || conversation.members.map(m => m.id);

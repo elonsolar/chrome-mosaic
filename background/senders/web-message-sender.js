@@ -11,6 +11,8 @@ class WebMessageSender extends AbstractMessageSender {
     const isNewConversation = !conversationUrl;
     const forceNewTab = isNewConversation;
 
+    console.log(`[WebMessageSender] conversationUrl:`, conversationUrl, '| webUrl:', webUrl, '| forceNewTab:', forceNewTab);
+
     const response = await this.sendToPlatform(
       'sendMessage',
       { content, conversationId: conversation },
@@ -53,6 +55,8 @@ class WebMessageSender extends AbstractMessageSender {
     if (!url) {
       throw new Error('没有配置目标 URL');
     }
+
+    console.log(`[WebMessageSender] sendToPlatform url:`, url, '| forceNewTab:', forceNewTab);
 
     const tab = await this.tabManager.openPlatformTab(url, forceNewTab);
 

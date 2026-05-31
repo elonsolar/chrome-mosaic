@@ -12,9 +12,9 @@ class FlowTestRunner {
   }
 
   async testRunFlow(flowData, startNodeInputs = {}, onProgress = null) {
-    console.log('[FlowTestRunner] 试运行流程（委托给 FlowExecutor）');
+    console.log('[FlowTestRunner] 执行流程（委托给 FlowExecutor）');
 
-    const result = await this.flowExecutor.testRun(flowData, startNodeInputs, onProgress);
+    const result = await this.flowExecutor.execute(flowData, startNodeInputs, onProgress);
 
     return result;
   }

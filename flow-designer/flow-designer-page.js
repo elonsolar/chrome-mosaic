@@ -245,13 +245,13 @@ class FlowDesignerPage {
     await this.loadTools();
 
     const urlParams = new URLSearchParams(window.location.search);
-    this.flowId = urlParams.get('flowId');
+    this.expertId = urlParams.get('expertId');
     const modelId = urlParams.get('modelId');
 
-    if (this.flowId) {
-      await this.loadFlow(this.flowId);
+    if (this.expertId) {
+      await this.loadExpert(this.expertId);
     } else if (modelId) {
-      await this.loadFlowByModelId(modelId);
+      await this.loadExpertByModelId(modelId);
     } else {
       // 新建流程：自动创建开始和结束节点
       this.createDefaultNodes();
@@ -430,9 +430,9 @@ class FlowDesignerPage {
     }
   }
 
-  async loadFlow(flowId) {
+  async loadExpert(expertId) {
     try {
-      const response = await chrome.runtime.sendMessage({ action: 'getFlow', flowId });
+      const response = await chrome.runtime.sendMessage({ action: 'getExpertById', expertId });
       if (response) {
         this.flowData = response;
         this.nodes = response.nodes || [];
@@ -445,7 +445,7 @@ class FlowDesignerPage {
         this.renderFlow();
       }
     } catch (error) {
-      console.error('加载流程失败:', error);
+      console.error('加载专家失败:', error);
     }
   }
 
@@ -491,14 +491,14 @@ class FlowDesignerPage {
     }
   }
 
-  async loadFlowByModelId(modelId) {
+  async loadExpertByModelId(modelId) {
     try {
       const response = await chrome.runtime.sendMessage({ action: 'getModel', modelId });
-      if (response && response.flowId) {
-        await this.loadFlow(response.flowId);
+      if (response && response.expertId) {
+        await this.loadExpert(response.expertId);
       }
     } catch (error) {
-      console.error('加载模型流程失败:', error);
+      console.error('加载模型专家失败:', error);
     }
   }
 
@@ -1323,16 +1323,16 @@ class FlowDesignerPage {
     this.updateEmptyState();
   }
 
-  async saveFlow() {
+  async saveExpert() {
     try {
       // 保存当前编辑的节点配置
       if (this.selectedNodeId) {
         this.saveNodeConfig();
       }
 
-      const flowData = {
-        id: this.flowId,
-        name: this.flowData?.name || '未命名流程',
+      const expertData = {
+        id: this.expertId,
+        name: this.flowData?.name || '未命名专家',
         nodes: this.nodes,
         connections: this.connections,
         nodeConfigs: this.nodeConfigs,
@@ -1340,19 +1340,20 @@ class FlowDesignerPage {
       };
 
       const response = await chrome.runtime.sendMessage({
-        action: 'saveFlow',
-        flow: flowData
+        action: 'updateExpert',
+        expertId: this.expertId,
+        data: expertData
       });
 
       if (response && response.id) {
-        this.flowId = response.id;
+        this.expertId = response.id;
         this.updateUI();
         this.showToast('保存成功', 'success');
       } else {
         this.showToast('保存失败', 'error');
       }
     } catch (error) {
-      console.error('保存流程失败:', error);
+      console.error('保存专家失败:', error);
       this.showToast('保存失败: ' + error.message, 'error');
     }
   }
@@ -1597,7 +1598,7 @@ class FlowDesignerPage {
 
   updateUI() {
     if (this.elements.flowIdDisplay) {
-      this.elements.flowIdDisplay.textContent = this.flowId || '新流程';
+      this.elements.flowIdDisplay.textContent = this.expertId || '新专家';
     }
   }
 

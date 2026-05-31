@@ -13,6 +13,8 @@ importScripts('./senders/sender-factory.js');
 importScripts('./flow-test-runner.js');
 importScripts('./core/base-entity.js');
 importScripts('./core/conversation-context.js');
+importScripts('./core/message-queue.js');
+importScripts('./core/conversation-worker.js');
 importScripts('./core/progress-tracker.js');
 importScripts('./entities/member-entity.js');
 importScripts('./entities/expert-entity.js');
@@ -475,8 +477,6 @@ class AIMessageManager {
         nodes: expert.nodes || [],
         connections: expert.connections || []
       };
-    } else if (conversation.flowId) {
-      flow = await flowManager.getFlowById(conversation.flowId);
     }
 
     if (!flow) {
@@ -500,6 +500,13 @@ class AIMessageManager {
 
     const result = await flowExecutor.executeFlow(flow, userMessage, {
       onProgress: async (progress) => {
+        // 发送进度到 chat 页面
+        chrome.runtime.sendMessage({
+          type: 'flowExecutionProgress',
+          conversationId: conversation.id,
+          progress: progress
+        }).catch(() => {});
+
         if (useFloatWindow) {
           await this.sendToFloatWindow('addMessage', {
             role: '系统',
@@ -691,14 +698,16 @@ class TabManager {
     if (!forceNew) {
       const existingTab = await this.findTabByUrl(url);
       if (existingTab) {
-        console.log(`[TabManager] 复用已存在的标签页`);
+        console.log(`[TabManager] 复用已存在的标签页: ${url}`);
         await chrome.tabs.update(existingTab.id, { active: false });
         await this.sleep(2000);
         return existingTab;
       }
+      console.log(`[TabManager] 未找到匹配标签页，创建新标签页: ${url}`);
+    } else {
+      console.log(`[TabManager] 强制创建新标签页: ${url}`);
     }
 
-    console.log(`[TabManager] 创建新标签页 -> ${url}`);
     const tab = await chrome.tabs.create({
       url: url,
       active: false
@@ -892,6 +901,82 @@ class ConversationManager {
     return null;
   }
 
+  async addMessageWithMeta(conversationId, memberId, content, msgType, metaUpdates) {
+    const queueKey = conversationId;
+
+    if (!this.messageQueues.has(queueKey)) {
+      this.messageQueues.set(queueKey, Promise.resolve());
+    }
+
+    const queue = this.messageQueues.get(queueKey);
+
+    const newQueue = queue.then(async () => {
+      const conversations = await StorageManager.getConversations();
+      const conversation = conversations.find(c => c.id === conversationId);
+
+      if (conversation) {
+        const oldMemberUrls = conversation.memberUrls || {};
+        console.log(`[addMessageWithMeta] 保存前 memberUrls:`, JSON.stringify(oldMemberUrls));
+
+        let memberName = null;
+        if (memberId) {
+          const member = conversation.members.find(m => m.id === memberId);
+          if (member) {
+            memberName = member.name;
+          }
+        }
+
+        const message = {
+          id: this.generateId(),
+          memberId,
+          content,
+          timestamp: Date.now()
+        };
+
+        if (memberName) {
+          message.memberName = memberName;
+        }
+
+        message.type = msgType;
+
+        if (msgType === MessageType.USER) {
+          message.isUser = true;
+        } else if (msgType === MessageType.INTRO) {
+          message.isIntro = true;
+        } else if (msgType === MessageType.TIP) {
+          message.isTip = true;
+        }
+
+        conversation.messages.push(message);
+        conversation.updatedAt = Date.now();
+
+        if (metaUpdates) {
+          if (metaUpdates.memberUrls) {
+            conversation.memberUrls = Object.assign({}, conversation.memberUrls || {}, metaUpdates.memberUrls);
+          }
+          if (metaUpdates.memberLastMessageIds) {
+            conversation.memberLastMessageIds = Object.assign({}, conversation.memberLastMessageIds || {}, metaUpdates.memberLastMessageIds);
+          }
+        }
+
+        console.log(`[addMessageWithMeta] 保存后 memberUrls:`, JSON.stringify(conversation.memberUrls));
+        await StorageManager.saveConversations(conversations);
+
+        const verify = await StorageManager.getConversations();
+        const verifyConv = verify.find(c => c.id === conversationId);
+        console.log(`[addMessageWithMeta] 验证读取 memberUrls:`, JSON.stringify(verifyConv?.memberUrls));
+
+        return message;
+      }
+
+      return null;
+    });
+
+    this.messageQueues.set(queueKey, newQueue);
+
+    return newQueue;
+  }
+
   async clearConversationMessages(conversationId) {
     const conversations = await StorageManager.getConversations();
     const conversation = conversations.find(c => c.id === conversationId);
@@ -922,12 +1007,23 @@ class ConversationManager {
       const conversation = conversations.find(c => c.id === conversationId);
 
       if (conversation) {
-        // 获取成员名称快照
+        // 获取成员/专家名称快照
         let memberName = null;
         if (memberId) {
           const member = conversation.members.find(m => m.id === memberId);
           if (member) {
             memberName = member.name;
+          } else if (memberId.startsWith('expert-')) {
+            // 专家模式：从 experts 中查找名称
+            try {
+              const result = await chrome.storage.local.get('experts');
+              const expert = (result.experts || []).find(e => e.id === memberId);
+              if (expert) {
+                memberName = expert.name;
+              }
+            } catch (e) {
+              console.warn('[ConversationManager] 获取专家名称失败:', e);
+            }
           }
         }
 
@@ -1092,7 +1188,8 @@ async function init() {
     entityFactory,
     progressTracker,
     progressNotificationService,
-    floatWindowService
+    floatWindowService,
+    tabManager
   );
 
   // 确保模型已导入
@@ -1182,6 +1279,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       if (request.error) {
         pending.reject(new Error(request.error));
       } else {
+        console.log(`[aiResponse] content script 返回 conversationUrl:`, request.conversationUrl);
         pending.resolve({
           content: request.content,
           conversationUrl: request.conversationUrl
@@ -1331,8 +1429,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           promptId: request.promptId,
           memberSettings: request.memberSettings,
           memberOrder: request.memberOrder,
-          expertId: request.expertId,
-          flowId: request.flowId
+          expertId: request.expertId
         }
       )
         .then(sendResponse);
@@ -1458,62 +1555,104 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             await new Promise(resolve => setTimeout(resolve, 1000));
           }
 
-          const context = new ConversationContext(conversation);
-          const entities = await entityFactory.createEntitiesFromConversation(conversation);
-
-          for (let round = 1; round <= maxIterations; round++) {
-            console.log(`[Background] ========== 第 ${round} 轮开始 ==========`);
-
-            // 发送轮次进度消息到 chat
-            chrome.runtime.sendMessage({
-              type: 'loopDiscussionProgress',
-              conversationId,
-              currentRound: round,
-              totalRounds: maxIterations
-            });
-
-            for (const entity of entities) {
-              console.log(`[Background] 触发成员 ${entity.name} 发送消息`);
+          // 将 loop 执行逻辑封装为任务，通过队列协调执行
+          const loopTask = {
+            execute: async (workerContext) => {
               try {
-                const result = await entity.execute('INLOOP', context);
+                // 发送开始执行的 tip 消息
+                const startTipContent = problemDesc
+                  ? `🔄 多轮讨论已启动：${problemDesc}（${maxIterations} 轮）`
+                  : `🔄 多轮讨论已启动（${maxIterations} 轮）`;
+                await conversationManager.addMessage(conversationId, null, startTipContent, MessageType.TIP);
 
-                if (result.success && result.content) {
-                  const message = await conversationManager.addMessage(
+                const conv = await conversationManager.getConversation(conversationId);
+                const context = new ConversationContext(conv);
+                const entities = await entityFactory.createEntitiesFromConversation(conv);
+
+                for (let round = 1; round <= maxIterations; round++) {
+                  // 检查是否应该停止
+                  if (workerContext && !workerContext.isRunning()) {
+                    console.log(`[Background] loopTask 被中断，第 ${round} 轮`);
+                    break;
+                  }
+
+                  console.log(`[Background] ========== 第 ${round} 轮开始 ==========`);
+
+                  // 发送轮次进度消息到 chat
+                  chrome.runtime.sendMessage({
+                    type: 'loopDiscussionProgress',
                     conversationId,
-                    result.memberId,
-                    result.content
-                  );
+                    currentRound: round,
+                    totalRounds: maxIterations
+                  });
 
-                  if (message && message.id) {
-                    context.memberLastMessageIds[result.memberId] = message.id;
-                    conversation.messages.push(message);
-                    await conversationManager.updateConversation(conversationId, {
-                      memberLastMessageIds: context.memberLastMessageIds
-                    });
+                  for (const entity of entities) {
+                    // 检查是否应该停止
+                    if (workerContext && !workerContext.isRunning()) {
+                      console.log(`[Background] loopTask 被中断`);
+                      break;
+                    }
+
+                    console.log(`[Background] 触发成员 ${entity.name} 发送消息`);
+                    try {
+                      const result = await entity.execute('INLOOP', context);
+
+                      if (result.success && result.content) {
+                        const message = await conversationManager.addMessage(
+                          conversationId,
+                          result.memberId,
+                          result.content
+                        );
+
+                        if (message && message.id) {
+                          context.memberLastMessageIds[result.memberId] = message.id;
+                          conv.messages.push(message);
+                          await conversationManager.updateConversation(conversationId, {
+                            memberLastMessageIds: context.memberLastMessageIds
+                          });
+                        }
+                      }
+
+                      await new Promise(resolve => setTimeout(resolve, 2000));
+                    } catch (error) {
+                      console.error(`[Background] 成员 ${entity.name} 发送消息失败:`, error);
+                    }
+                  }
+
+                  console.log(`[Background] ========== 第 ${round} 轮完成 ==========`);
+
+                  if (round < maxIterations) {
+                    await new Promise(resolve => setTimeout(resolve, 3000));
                   }
                 }
 
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                console.log(`[Background] ========== 多轮讨论完成（共 ${maxIterations} 轮）==========`);
+
+                // 发送完成的 tip 消息
+                const completeTipContent = `✅ 多轮讨论已完成（共 ${maxIterations} 轮）`;
+                await conversationManager.addMessage(conversationId, null, completeTipContent, MessageType.TIP);
+
+                chrome.runtime.sendMessage({
+                  type: 'loopDiscussionComplete',
+                  conversationId,
+                  success: true,
+                  rounds: maxIterations
+                });
               } catch (error) {
-                console.error(`[Background] 成员 ${entity.name} 发送消息失败:`, error);
+                console.error('[Background] loopTask 执行异常:', error);
+                // 发送失败通知给前端
+                chrome.runtime.sendMessage({
+                  type: 'loopDiscussionComplete',
+                  conversationId,
+                  success: false,
+                  error: error.message
+                });
               }
             }
+          };
 
-            console.log(`[Background] ========== 第 ${round} 轮完成 ==========`);
-
-            if (round < maxIterations) {
-              await new Promise(resolve => setTimeout(resolve, 3000));
-            }
-          }
-
-          console.log(`[Background] ========== 多轮讨论完成（共 ${maxIterations} 轮）==========`);
-
-          chrome.runtime.sendMessage({
-            type: 'loopDiscussionComplete',
-            conversationId,
-            success: true,
-            rounds: maxIterations
-          });
+          // 通过队列系统设置 loopTask，等待当前队列处理完毕后自动执行
+          await conversationMessageService.setLoopTask(conversationId, loopTask);
 
         } catch (error) {
           console.error('[Background] 启动多轮讨论失败:', error);
@@ -1558,6 +1697,38 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           console.error('addMessageDirect失败:', error);
           sendResponse({ error: error.message });
         });
+      return true;
+
+    case 'getMemberStatus':
+      (async () => {
+        try {
+          const worker = conversationMessageService.getWorker(request.conversationId);
+          if (worker) {
+            const status = worker.getMemberStatus(request.memberId);
+            sendResponse({ success: true, status });
+          } else {
+            sendResponse({ success: true, status: null });
+          }
+        } catch (error) {
+          sendResponse({ success: false, error: error.message });
+        }
+      })();
+      return true;
+
+    case 'setMemberStatus':
+      (async () => {
+        try {
+          const worker = conversationMessageService.getWorker(request.conversationId);
+          if (worker) {
+            worker.updateMemberStatus(request.memberId, request.status);
+            sendResponse({ success: true });
+          } else {
+            sendResponse({ success: false, error: 'Worker不存在' });
+          }
+        } catch (error) {
+          sendResponse({ success: false, error: error.message });
+        }
+      })();
       return true;
 
     case 'getConversations':
@@ -1803,8 +1974,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case 'openFlowDesigner':
       (async () => {
         try {
-          const url = request.flowId 
-            ? `flow-designer/flow-designer.html?flowId=${encodeURIComponent(request.flowId)}`
+          const url = request.expertId 
+            ? `flow-designer/flow-designer.html?expertId=${encodeURIComponent(request.expertId)}`
             : `flow-designer/flow-designer.html?modelId=${encodeURIComponent(request.modelId)}`;
           
           const tab = await chrome.tabs.create({

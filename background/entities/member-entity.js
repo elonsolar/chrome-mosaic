@@ -15,6 +15,12 @@ class MemberEntity extends BaseEntity {
     this.webUrl = modelConfig?.webUrl || memberData.webUrl || '';
 
     this.senderFactory = senderFactory;
+    
+    // 成员状态
+    this.status = 'online';  // 'online' | 'offline'
+    this.offlineReason = '';
+    this.consecutiveErrors = 0;
+    this.maxConsecutiveErrors = 3;
   }
 
   async validate(input, context) {
@@ -60,9 +66,12 @@ class MemberEntity extends BaseEntity {
           : this._buildWebMessageParallel(input, context);
       }
 
+      const savedUrl = context.getMemberUrl(this.id);
+      console.log(`[MemberEntity] ${this.name} 发送前 memberUrl:`, savedUrl, '| webUrl:', this.webUrl, '| memberId:', this.id);
+
       const response = await sender.send(message, {
         model: this.model,
-        conversationUrl: context.getMemberUrl(this.id),
+        conversationUrl: savedUrl,
         conversationId: context.conversationId,
         conversation: context.conversation,
         memberId: this.id,
@@ -70,6 +79,8 @@ class MemberEntity extends BaseEntity {
         apiKey: this.apiKey,
         webUrl: this.webUrl
       });
+
+      console.log(`[MemberEntity] ${this.name} 收到响应 conversationUrl:`, response.conversationUrl);
 
       this.reportProgress({
         type: 'status',
@@ -79,7 +90,13 @@ class MemberEntity extends BaseEntity {
 
       if (response.conversationUrl) {
         context.setMemberUrl(this.id, response.conversationUrl);
+        console.log(`[MemberEntity] ${this.name} 已保存 memberUrl:`, response.conversationUrl);
+      } else {
+        console.warn(`[MemberEntity] ${this.name} 响应中没有 conversationUrl!`);
       }
+
+      // 成功后重置错误计数
+      this.consecutiveErrors = 0;
 
       return {
         success: true,
@@ -90,6 +107,14 @@ class MemberEntity extends BaseEntity {
       };
 
     } catch (error) {
+      // 累计错误，检查是否需要自动离线
+      this.consecutiveErrors++;
+      if (this.consecutiveErrors >= this.maxConsecutiveErrors) {
+        this.status = 'offline';
+        this.offlineReason = `连续${this.consecutiveErrors}次失败`;
+        console.warn(`[MemberEntity] ${this.name} 自动离线: ${this.offlineReason}`);
+      }
+
       this.reportProgress({
         type: 'status',
         status: 'error',
@@ -325,6 +350,25 @@ ${this.systemPrompt}
 
   _cleanTipContentSimple(content) {
     return this._cleanTipContent(content);
+  }
+
+  setStatus(status, reason = '') {
+    this.status = status;
+    this.offlineReason = reason;
+    if (status === 'online') {
+      this.consecutiveErrors = 0;
+    }
+    console.log(`[MemberEntity] ${this.name} 状态设置为: ${status}${reason ? ' (' + reason + ')' : ''}`);
+  }
+
+  getStatus() {
+    return {
+      id: this.id,
+      name: this.name,
+      status: this.status,
+      offlineReason: this.offlineReason,
+      consecutiveErrors: this.consecutiveErrors
+    };
   }
 }
 

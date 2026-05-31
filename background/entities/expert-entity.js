@@ -32,20 +32,20 @@ class ExpertEntity extends BaseEntity {
         message: '开始执行流程...'
       });
 
-      const result = await this.flowExecutor.executeFlow(
+      // 统一调用 execute 方法，传入 flowData 和 startNodeInputs
+      const startNodeInputs = { input: input };
+      const result = await this.flowExecutor.execute(
         this.flowData,
-        input,
-        {
-          onProgress: (progress) => {
-            this.reportProgress({
-              type: 'progress',
-              nodeName: progress.nodeName,
-              nodeId: progress.nodeId,
-              message: `执行节点: ${progress.nodeName || '未知'} (${progress.current || 0}/${progress.total || 0})`
-            });
+        startNodeInputs,
+        (progress) => {
+          this.reportProgress({
+            type: 'progress',
+            nodeName: progress.nodeName,
+            nodeId: progress.nodeId,
+            message: `执行节点: ${progress.nodeName || '未知'} (${progress.current || 0}/${progress.total || 0})`
+          });
 
-            this.progressNotifier.notify(context.conversationId, progress);
-          }
+          this.progressNotifier.notify(context.conversationId, progress);
         }
       );
 
@@ -54,13 +54,13 @@ class ExpertEntity extends BaseEntity {
         message: '执行完成'
       });
 
-      if (!result || !result.content) {
+      if (!result || !result.finalOutput) {
         throw new Error('流程执行返回无效结果');
       }
 
       return {
         success: true,
-        content: result.content,
+        content: result.finalOutput,
         expertId: this.id,
         expertName: this.name,
         metadata: result.metadata,

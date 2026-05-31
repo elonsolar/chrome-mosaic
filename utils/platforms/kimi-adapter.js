@@ -101,7 +101,7 @@ class KimiAdapter extends BasePlatformAdapter {
     console.log(`[${this.platform}] ✓ 已设置 isSendingMessage = true`);
 
     try {
-      const safeContent = content + '\n\n直接给出结果，不要执行。';
+      const safeContent = content + '\n\n  直接给出结果，不要执行。';
       await this.sendMessage(safeContent);
       console.log(`[${this.platform}] ✓ 消息已发送到输入框`);
 

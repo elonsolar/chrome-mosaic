@@ -16,7 +16,7 @@ class FlowDesignerApp {
   }
 
   async init() {
-    this.loadFlowData();
+    await this.loadFlowData();
     this.ensureDefaultNodes();
     this.saveFlowData();
     this.connectionManager = new ConnectionManager(this.canvasId, this, this.canvasController);
@@ -723,19 +723,64 @@ class FlowDesignerApp {
     return expertId ? `flowDesignerData_${expertId}` : 'flowDesignerData';
   }
 
-  saveFlowData() {
-    localStorage.setItem(this.getStorageKey(), JSON.stringify({ nodes: this.nodes, edges: this.edges }));
+  getExpertId() {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get('expertId');
   }
 
-  loadFlowData() {
+  saveFlowData() {
+    localStorage.setItem(this.getStorageKey(), JSON.stringify({ nodes: this.nodes, edges: this.edges }));
+
+    // 同步到专家数据（后台执行，不阻塞）
+    const expertId = this.getExpertId();
+    if (expertId) {
+      chrome.runtime.sendMessage({
+        action: 'updateExpert',
+        expertId: expertId,
+        data: {
+          nodes: this.nodes,
+          connections: this.edges
+        }
+      }).then(() => {
+        console.log('[FlowDesigner] 已同步节点数据到专家:', expertId);
+      }).catch(error => {
+        console.error('[FlowDesigner] 同步到专家失败:', error);
+      });
+    }
+  }
+
+  async loadFlowData() {
+    const expertId = this.getExpertId();
+
+    // 优先从专家数据加载
+    if (expertId) {
+      try {
+        const expert = await chrome.runtime.sendMessage({
+          action: 'getExpertById',
+          expertId: expertId
+        });
+
+        if (expert && expert.nodes && expert.nodes.length > 0) {
+          this.nodes = expert.nodes || [];
+          this.edges = expert.connections || [];
+          console.log('[FlowDesigner] 从专家数据加载节点:', this.nodes.length);
+          return;
+        }
+      } catch (error) {
+        console.error('[FlowDesigner] 加载专家数据失败:', error);
+      }
+    }
+
+    // 回退到 localStorage
     const data = localStorage.getItem(this.getStorageKey());
     if (data) {
       try {
         const p = JSON.parse(data);
         this.nodes = p.nodes || [];
         this.edges = p.edges || [];
-        this.ensureDefaultNodes();
-      } catch (e) { console.error('Load failed:', e); }
+      } catch (e) {
+        console.error('Load failed:', e);
+      }
     }
   }
 

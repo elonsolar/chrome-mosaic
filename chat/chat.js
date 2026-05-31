@@ -204,9 +204,8 @@ const MODE_EXAMPLES = {
 const state = {
   conversation: null,
   members: [],
-  isLoading: false,
-  isLooping: false,
-  pendingWebMemberIds: null
+  memberStatus: {}, // memberId -> { status: 'online'|'offline', isBusy: boolean }
+  flowExecutionLogs: [] // 流程执行日志
 };
 
 // Dashboard 动画状态
@@ -322,12 +321,18 @@ function initElements() {
   elements.smartPanelToggle = document.getElementById('smartPanelToggle');
   elements.loopProgressFixed = document.getElementById('loopProgressFixed');
 
-  // 创建滚动到底部按钮
+  // 创建滚动到底部按钮（微信风格：箭头 + 未读数气泡）
   elements.scrollBottomBtn = document.createElement('button');
   elements.scrollBottomBtn.className = 'scroll-bottom-btn';
-  elements.scrollBottomBtn.innerHTML = '↓';
-  elements.scrollBottomBtn.title = '滚动到底部';
-  elements.messagesContainer.appendChild(elements.scrollBottomBtn);
+  elements.scrollBottomBtn.title = '回到底部';
+  elements.scrollBottomBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
+  elements.scrollBottomBadge = document.createElement('span');
+  elements.scrollBottomBadge.className = 'scroll-bottom-badge';
+  elements.scrollBottomBtn.appendChild(elements.scrollBottomBadge);
+  const chatContainer = document.querySelector('.chat-container');
+  if (chatContainer) {
+    chatContainer.appendChild(elements.scrollBottomBtn);
+  }
 }
 
 // 修复DOM结构，确保关键元素在正确的位置
@@ -517,8 +522,14 @@ function bindEvents() {
 
   // 滚动到底部按钮
   elements.scrollBottomBtn.addEventListener('click', () => {
+    if (hasPendingRender) {
+      hasPendingRender = false;
+      appendNewMessages();
+    }
     scrollToBottom();
     elements.scrollBottomBtn.classList.remove('visible');
+    unreadCount = 0;
+    updateNewMessagesBadge();
   });
 
   // 监听消息容器滚动
@@ -526,6 +537,10 @@ function bindEvents() {
     const { scrollTop, scrollHeight, clientHeight } = elements.messagesContainer;
     const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
     elements.scrollBottomBtn.classList.toggle('visible', !isNearBottom);
+    if (isNearBottom && !hasPendingRender) {
+      unreadCount = 0;
+      updateNewMessagesBadge();
+    }
   });
 
   // 智能面板切换
@@ -561,13 +576,7 @@ function bindEvents() {
     });
   }
 
-  // 会话信息面板
-  const conversationName = document.getElementById('conversationName');
-  if (conversationName) {
-    conversationName.addEventListener('click', openConversationInfo);
-    conversationName.style.cursor = 'pointer';
-  }
-
+  // 会话信息面板关闭按钮
   const conversationInfoClose = document.getElementById('conversationInfoClose');
   if (conversationInfoClose) {
     conversationInfoClose.addEventListener('click', closeConversationInfo);
@@ -602,6 +611,9 @@ function bindEvents() {
       }
     });
   }
+
+  initScrollDetection();
+  initNewMessagesObserver();
 }
 
 function openConversationInfo() {
@@ -779,47 +791,50 @@ async function handleStorageChange(change) {
   const updatedConversation = newConversations.find(c => c.id === conversationId);
 
   if (updatedConversation) {
-    // 过滤掉自我介绍消息，只统计真实对话消息
     const oldMessageCount = (state.conversation?.messages || []).filter(msg => !msg.isIntro).length;
     const newMessageCount = (updatedConversation?.messages || []).filter(msg => !msg.isIntro).length;
-
-    console.log(`[Chat] 消息数变化: ${oldMessageCount} → ${newMessageCount}`);
+    const hasNewMessages = newMessageCount > oldMessageCount;
 
     state.conversation = updatedConversation;
-    renderMessages();
+
+    if (isUserScrolling) {
+      updateConversationName();
+      updateSmartPanelContent();
+      if (hasNewMessages) {
+        unreadCount += newMessageCount - oldMessageCount;
+        hasPendingRender = true;
+        updateNewMessagesBadge();
+      }
+      return;
+    }
+
+    if (hasNewMessages) {
+      hideThinkingIndicator();
+      removeTempMessages();
+      appendNewMessages();
+      const diff = newMessageCount - oldMessageCount;
+      requestAnimationFrame(() => {
+        const { scrollTop, scrollHeight, clientHeight } = elements.messagesContainer;
+        if (scrollHeight - scrollTop - clientHeight > 100) {
+          unreadCount += diff;
+          updateNewMessagesBadge();
+        }
+      });
+    }
+
     updateConversationName();
+    
+    fetchMemberStatus();
 
-    // 更新输入状态（loop/Loading/pendingWebMemberIds期间不更新，保持禁用）
-    if (!state.isLooping && !state.isLoading && !state.pendingWebMemberIds) {
-      const hasMembers = (state.conversation.members && state.conversation.members.length > 0) ||
-        (state.conversation.mode === 'expertqa' && state.conversation.expertId);
-      if (elements.messageInput) {
-        elements.messageInput.disabled = !hasMembers;
-        elements.messageInput.placeholder = hasMembers ? '输入消息...' : '请先添加成员后再发送消息';
-      }
-      updateSendButtonState();
+    const hasMembers = (state.conversation.members && state.conversation.members.length > 0) ||
+      (state.conversation.mode === 'expertqa' && state.conversation.expertId);
+    if (elements.messageInput) {
+      elements.messageInput.disabled = !hasMembers;
+      elements.messageInput.placeholder = hasMembers ? '输入消息...' : '请先添加成员后再发送消息';
     }
+    updateSendButtonState();
 
-    // pendingWebMemberIds: 检查本次发送中参与的web成员是否都已有url
-    if (state.pendingWebMemberIds) {
-      const memberUrls = state.conversation.memberUrls || {};
-      const resolved = [...state.pendingWebMemberIds].filter(id => memberUrls[id]);
-      resolved.forEach(id => state.pendingWebMemberIds.delete(id));
-      if (state.pendingWebMemberIds.size === 0) {
-        console.log('[Chat] 所有参与发送的web成员已获得会话URL，恢复输入');
-        state.pendingWebMemberIds = null;
-        state.isLoading = false;
-        setInputState(false);
-      }
-    }
-
-    // 更新智能面板内容
     updateSmartPanelContent();
-
-    if (newMessageCount > oldMessageCount) {
-      console.log(`[Chat] 新增了 ${newMessageCount - oldMessageCount} 条消息`);
-      scrollToBottom();
-    }
   }
 }
 
@@ -875,6 +890,9 @@ function render() {
   // 渲染消息
   renderMessages();
 
+  // 初始加载滚动到底部
+  scrollToBottom();
+
   // 根据是否有成员或专家来启用/禁用输入
   const hasMembers = (state.conversation.members && state.conversation.members.length > 0) ||
     (state.conversation.mode === 'expertqa' && state.conversation.expertId);
@@ -925,15 +943,91 @@ function renderMembersTags() {
   elements.membersTags.innerHTML = state.conversation.members.map(member => {
     const memberIndex = (state.conversation.memberOrder || memberIds).indexOf(member.id);
     const color = member.color || '#667eea';
-    return `<span class="member-tag${hasOrdering ? ' draggable' : ''}" data-member-id="${member.id}" title="点击查看和 ${escapeHtml(member.name)} 的对话历史">
+    const status = state.memberStatus[member.id]?.status || 'online';
+    const isBusy = state.memberStatus[member.id]?.isBusy || false;
+    const statusColor = status === 'online' ? '#43e97b' : '#e74c3c';
+    const statusTitle = status === 'online' ? '在线 - 点击切换为离线' : '离线 - 点击切换为在线';
+    const offlineClass = status === 'offline' ? ' offline' : '';
+    const avatarUrl = generateAvatarUrl(member.name);
+    
+    return `<span class="member-tag${hasOrdering ? ' draggable' : ''}${offlineClass}" data-member-id="${member.id}" title="点击查看和 ${escapeHtml(member.name)} 的对话历史">
       ${hasOrdering ? `<span class="member-tag-drag-handle">#${memberIndex + 1}</span>` : ''}
-      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:2px;"></span>
-      ${escapeHtml(member.name)}
+      <span class="member-status-dot" data-member-id="${member.id}" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${statusColor};cursor:pointer;margin-right:2px;" title="${statusTitle}"></span>
+      <img class="member-tag-avatar" src="${avatarUrl}" alt="${escapeHtml(member.name)}" style="width:14px;height:14px;border-radius:50%;${status === 'offline' ? 'filter:grayscale(100%);' : ''}">
+      ${escapeHtml(member.name)}${isBusy ? ' <span class="member-busy-indicator">⏳</span>' : ''}
       <span class="member-tag-remove" title="移除成员">×</span>
     </span>`;
   }).join('');
 
+  // 绑定状态切换事件
+  elements.membersTags.querySelectorAll('.member-status-dot').forEach(dot => {
+    dot.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const memberId = dot.dataset.memberId;
+      const currentStatus = state.memberStatus[memberId]?.status || 'online';
+      const newStatus = currentStatus === 'online' ? 'offline' : 'online';
+      toggleMemberStatus(memberId, newStatus);
+    });
+  });
+
   console.log('[Chat] renderMembersTags - Members tags HTML:', elements.membersTags.innerHTML);
+}
+
+async function toggleMemberStatus(memberId, newStatus) {
+  try {
+    // 更新本地状态
+    if (!state.memberStatus[memberId]) {
+      state.memberStatus[memberId] = { status: 'online', isBusy: false };
+    }
+    state.memberStatus[memberId].status = newStatus;
+    
+    // 通知后台
+    const response = await chrome.runtime.sendMessage({
+      action: 'setMemberStatus',
+      conversationId,
+      memberId,
+      status: newStatus
+    });
+    
+    if (response?.success) {
+      console.log(`[Chat] 成员 ${memberId} 状态已更新为: ${newStatus}`);
+      renderMembersTags();
+    } else {
+      console.error('[Chat] 更新成员状态失败:', response?.error);
+      // 回滚本地状态
+      state.memberStatus[memberId].status = newStatus === 'online' ? 'offline' : 'online';
+    }
+  } catch (error) {
+    console.error('[Chat] 更新成员状态失败:', error);
+    // 回滚本地状态
+    state.memberStatus[memberId].status = newStatus === 'online' ? 'offline' : 'online';
+  }
+}
+
+async function fetchMemberStatus() {
+  if (!state.conversation?.members) return;
+  
+  for (const member of state.conversation.members) {
+    try {
+      const response = await chrome.runtime.sendMessage({
+        action: 'getMemberStatus',
+        conversationId,
+        memberId: member.id
+      });
+      
+      if (response?.success && response.status) {
+        state.memberStatus[member.id] = response.status;
+      } else {
+        // 默认在线
+        state.memberStatus[member.id] = { status: 'online', isBusy: false };
+      }
+    } catch (error) {
+      console.warn(`[Chat] 获取成员 ${member.id} 状态失败:`, error);
+      state.memberStatus[member.id] = { status: 'online', isBusy: false };
+    }
+  }
+  
+  renderMembersTags();
 }
 
 // ==================== 成员配置模态框 ====================
@@ -1234,8 +1328,197 @@ function renderModeBadge() {
   }
 }
 
+function buildMessageHtml(msg, index) {
+  const msgId = msg.id || `msg_${index}_${msg.timestamp || Date.now()}`;
+  if (msg.type === 'tip') {
+    return `
+      <div class="message tip-message" data-msg-id="${msgId}">
+        <div class="tip-content">${msg.content}</div>
+      </div>
+    `;
+  }
+
+  const member = state.conversation.members.find(m => m.id === msg.memberId);
+  const roleSetting = state.conversation.memberSettings?.[msg.memberId] || {};
+  const displayName = roleSetting.nickname || msg.memberName || member?.name || '未知成员';
+  const platformName = member ? (member.platformName || '') : '';
+  const modelCode = member ? (member.modelCode || member.provider) : null;
+
+  if (msg.isUser) {
+    return `
+      <div class="message user-message" data-msg-id="${msgId}">
+        <div class="message-avatar user-avatar">
+          <img src="${generateAvatarUrl('Me')}" alt="我" loading="lazy">
+        </div>
+        <div class="message-body">
+          <div class="message-header-row">
+            <span class="message-sender-name">我</span>
+            <span class="message-time">${formatTime(msg.timestamp)}</span>
+          </div>
+          <div class="message-text">${escapeHtml(msg.content).replace(/\n/g, '<br>')}</div>
+          <div class="message-actions">
+            <button class="copy-msg-btn" data-msg-index="${index}" title="复制消息">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  const clickableClass = 'clickable';
+  const providerAttr = `data-provider="${modelCode || ''}" data-member-id="${msg.memberId}"`;
+
+  const isExpertQa = state.conversation.mode === 'expertqa';
+  const hasLogs = state.flowExecutionLogs && state.flowExecutionLogs.length > 0;
+  const viewProcessBtn = isExpertQa && hasLogs ? `
+    <button class="view-process-btn" data-action="view-process" title="查看执行过程">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+        <polyline points="14 2 14 8 20 8"></polyline>
+        <line x1="16" y1="13" x2="8" y2="13"></line>
+        <line x1="16" y1="17" x2="8" y2="17"></line>
+        <polyline points="10 9 9 9 8 9"></polyline>
+      </svg>
+      <span>查看过程</span>
+    </button>
+  ` : '';
+
+  return `
+    <div class="message ai-message" data-msg-id="${msgId}">
+      <div class="message-avatar ai-avatar ${clickableClass}" ${providerAttr} title="点击配置成员" style="cursor: pointer;">
+        <img src="${generateAvatarUrl(displayName)}" alt="${escapeHtml(displayName)}" loading="lazy">
+      </div>
+      <div class="message-body">
+        <div class="message-header-row">
+          <span class="message-sender-name ${clickableClass}" ${providerAttr}>${escapeHtml(displayName)}</span>
+          <span class="message-time">${formatTime(msg.timestamp)}</span>
+        </div>
+        <div class="message-text">${formatMessage(msg.content)}</div>
+        <div class="message-actions">
+          ${viewProcessBtn}
+          <button class="copy-msg-btn" data-msg-index="${index}" title="复制消息">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function removeTempMessages() {
+  elements.messagesContainer.querySelectorAll('.temp-message').forEach(el => el.remove());
+}
+
+function appendNewMessages() {
+  const messages = state.conversation.messages || [];
+  if (messages.length <= lastRenderedMsgCount) return;
+
+  // 第一条消息到来时，移除"开始对话"提示
+  if (lastRenderedMsgCount === 0) {
+    const emptyMessages = elements.messagesContainer.querySelector('.empty-messages');
+    if (emptyMessages) {
+      emptyMessages.remove();
+    }
+  }
+
+  const newMsgs = messages.slice(lastRenderedMsgCount);
+
+  const temp = document.createElement('div');
+  temp.innerHTML = newMsgs.map((msg, i) =>
+    buildMessageHtml(msg, lastRenderedMsgCount + i)
+  ).join('');
+
+  while (temp.firstChild) {
+    elements.messagesContainer.appendChild(temp.firstChild);
+  }
+
+  const newElements = elements.messagesContainer.querySelectorAll('.message:not([data-bound])');
+  const typewriterMessages = []; // 收集需要打字机效果的消息
+
+  newElements.forEach((el, idx) => {
+    el.setAttribute('data-bound', '1');
+    el.querySelectorAll('.clickable').forEach(c => {
+      c.addEventListener('click', (e) => {
+        const memberId = c.dataset.memberId;
+        if (memberId && state.conversation?.members) {
+          const member = state.conversation.members.find(m => m.id === memberId);
+          if (member) {
+            e.preventDefault();
+            e.stopPropagation();
+            openMemberConfigModal(memberId);
+            return;
+          }
+        }
+        const provider = c.dataset.provider;
+        if (provider) {
+          let targetUrl = null;
+          if (memberId && state.conversation?.memberUrls) {
+            targetUrl = state.conversation.memberUrls[memberId] || null;
+          }
+          chrome.runtime.sendMessage({
+            action: 'activatePlatformTab',
+            targetUrl
+          }).catch(() => {});
+        }
+      });
+    });
+    el.querySelectorAll('.copy-msg-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.msgIndex);
+        const msgs = state.conversation.messages || [];
+        if (msgs[idx]) {
+          navigator.clipboard.writeText(msgs[idx].content).then(() => {
+            btn.textContent = '✓';
+            setTimeout(() => { btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>'; }, 1000);
+          });
+        }
+      });
+    });
+    el.querySelectorAll('.tip-link').forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const memberId = link.dataset.memberId;
+        if (memberId) openMemberConfigModal(memberId);
+      });
+    });
+
+    // 收集 AI 消息用于打字机效果
+    const msg = newMsgs[idx];
+    if (msg && !msg.isUser && msg.type !== 'tip') {
+      const messageText = el.querySelector('.message-text');
+      if (messageText) {
+        typewriterMessages.push({
+          element: messageText,
+          content: messageText.innerHTML
+        });
+      }
+    }
+  });
+
+  addCodeCopyButtons(elements.messagesContainer);
+  renderMathFormulas(elements.messagesContainer);
+
+  lastRenderedMsgCount = messages.length;
+
+  // 应用打字机效果（延迟一点确保 DOM 已更新）
+  setTimeout(() => {
+    typewriterMessages.forEach(({ element, content }, index) => {
+      // 错开每条消息的开始时间
+      setTimeout(() => {
+        typewriterEffect(element, content, 15);
+      }, index * 200);
+    });
+  }, 50);
+}
+
 function renderMessages() {
-  // 专家问答模式有专家ID即可
   const hasParticipants = (state.conversation.members && state.conversation.members.length > 0) ||
     (state.conversation.mode === 'expertqa' && state.conversation.expertId);
 
@@ -1248,10 +1531,10 @@ function renderMessages() {
       </div>
     `;
     updateSendButtonState();
+    lastRenderedMsgCount = 0;
     return;
   }
 
-  // 获取所有消息（包括打招呼消息）
   const messages = state.conversation.messages || [];
 
   if (messages.length === 0) {
@@ -1263,84 +1546,19 @@ function renderMessages() {
       </div>
     `;
     updateSendButtonState();
+    lastRenderedMsgCount = 0;
     return;
   }
 
-  elements.messagesContainer.innerHTML = messages.map((msg, index) => {
-    // 系统提示消息（支持HTML，用于"修改成员信息"链接）
-    if (msg.type === 'tip') {
-      return `
-        <div class="message tip-message">
-          <div class="tip-content">${msg.content}</div>
-        </div>
-      `;
-    }
-
-    const member = state.conversation.members.find(m => m.id === msg.memberId);
-    const roleSetting = state.conversation.memberSettings?.[msg.memberId] || {};
-    // 优先使用消息快照中的成员名称，其次使用角色昵称，最后使用当前成员名称
-    const displayName = roleSetting.nickname || msg.memberName || member?.name || '未知成员';
-    const platformName = member ? (member.platformName || '') : '';
-    const modelCode = member ? (member.modelCode || member.provider) : null;
-
-    if (msg.isUser) {
-      return `
-        <div class="message user-message">
-          <div class="message-avatar user-avatar">
-            <img src="${generateAvatarUrl('Me')}" alt="我" loading="lazy">
-          </div>
-          <div class="message-body">
-            <div class="message-header-row">
-              <span class="message-sender-name">我</span>
-              <span class="message-time">${formatTime(msg.timestamp)}</span>
-            </div>
-            <div class="message-text">${escapeHtml(msg.content).replace(/\n/g, '<br>')}</div>
-            <div class="message-actions">
-              <button class="copy-msg-btn" data-msg-index="${index}" title="复制消息">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
-      `;
-    } else {
-      const color = member?.color || '#667eea';
-      const clickableClass = 'clickable';
-      const providerAttr = `data-provider="${modelCode || ''}" data-member-id="${msg.memberId}"`;
-
-      return `
-        <div class="message ai-message">
-          <div class="message-avatar ai-avatar ${clickableClass}" ${providerAttr} title="点击配置成员" style="cursor: pointer;">
-            <img src="${generateAvatarUrl(displayName)}" alt="${escapeHtml(displayName)}" loading="lazy">
-          </div>
-          <div class="message-body">
-            <div class="message-header-row">
-              <span class="message-sender-name ${clickableClass}" ${providerAttr}>${escapeHtml(displayName)}</span>
-              <span class="message-time">${formatTime(msg.timestamp)}</span>
-            </div>
-            <div class="message-text">${formatMessage(msg.content)}</div>
-            <div class="message-actions">
-              <button class="copy-msg-btn" data-msg-index="${index}" title="复制消息">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-  }).join('');
+  elements.messagesContainer.innerHTML = messages.map((msg, index) =>
+    buildMessageHtml(msg, index)
+  ).join('');
 
   bindMemberClickEvents();
   bindCopyButtonEvents();
   addCodeCopyButtons(elements.messagesContainer);
+  renderMathFormulas(elements.messagesContainer);
 
-  // 绑定 Tip 消息中的"修改成员信息"链接点击事件
   const tipLinks = elements.messagesContainer.querySelectorAll('.tip-link');
   tipLinks.forEach(link => {
     link.addEventListener('click', (e) => {
@@ -1352,14 +1570,16 @@ function renderMessages() {
     });
   });
 
-  // 滚动到底部
-  scrollToBottom();
+  elements.messagesContainer.querySelectorAll('.message').forEach(el => el.setAttribute('data-bound', '1'));
+
+  lastRenderedMsgCount = messages.length;
+  setTimeout(observeNewMessages, 50);
 }
 
 async function sendMessage() {
   const content = elements.messageInput.value.trim();
 
-  if (!content || state.isLoading) {
+  if (!content) {
     return;
   }
 
@@ -1369,91 +1589,40 @@ async function sendMessage() {
     return;
   }
 
-  state.isLoading = true;
   elements.messageInput.value = '';
   elements.sendBtn.classList.add('sending');
-
-  const isExpertQa = state.conversation.mode === 'expertqa' && state.conversation.expertId;
-  const pendingIds = getWebMemberIdsWithoutUrl();
-  const webFirst = pendingIds.size > 0;
-
-  if (isExpertQa) {
-    setInputState(true, '专家处理中，请稍候...');
-    showInitialExpertProgress();
-  } else if (webFirst) {
-    state.pendingWebMemberIds = pendingIds;
-    setInputState(true, '等待网页模型首次响应，请稍候...');
-  } else {
-    state.isLoading = false;
-    updateSendButtonState();
-  }
 
   try {
     addTempMessage(content, true);
     showThinkingIndicator();
 
+    const isExpertQa = state.conversation.mode === 'expertqa' && state.conversation.expertId;
+    
     if (isExpertQa) {
-      sendMessageToBackend(conversationId, content)
-        .then(updatedConversation => {
-          if (updatedConversation) {
-            state.conversation = updatedConversation;
-            renderMessages();
-            updateConversationName();
-          }
-        })
-        .catch(error => {
-          console.error('发送消息失败:', error);
-          showError('发送消息失败: ' + error.message);
-        })
-        .finally(() => {
-          removeProgressIndicator();
-          hideThinkingIndicator();
-          resetInputState();
-          scrollToBottom();
-        });
-    } else if (webFirst) {
-      sendMessageToBackend(conversationId, content)
-        .then(updatedConversation => {
-          if (updatedConversation) {
-            state.conversation = updatedConversation;
-            renderMessages();
-            updateConversationName();
-          }
-        })
-        .catch(error => {
-          console.error('发送消息失败:', error);
-          showError('发送消息失败: ' + error.message);
-          state.pendingWebMemberIds = null;
-          resetInputState();
-        })
-        .finally(() => {
-          hideThinkingIndicator();
-          scrollToBottom();
-        });
-    } else {
-      sendMessageToBackend(conversationId, content)
-        .then(updatedConversation => {
-          if (updatedConversation) {
-            state.conversation = updatedConversation;
-            renderMessages();
-            updateConversationName();
-          }
-        })
-        .catch(error => {
-          console.error('发送消息失败:', error);
-          showError('发送消息失败: ' + error.message);
-        })
-        .finally(() => {
-          hideThinkingIndicator();
-          scrollToBottom();
-        });
+      showInitialExpertProgress();
     }
+
+    sendMessageToBackend(conversationId, content)
+      .then(updatedConversation => {
+        if (updatedConversation) {
+          state.conversation = updatedConversation;
+          removeTempMessages();
+          appendNewMessages();
+          updateConversationName();
+        }
+      })
+      .catch(error => {
+        console.error('发送消息失败:', error);
+        showError('发送消息失败: ' + error.message);
+      })
+      .finally(() => {
+        removeProgressIndicator();
+        hideThinkingIndicator();
+      });
   } catch (error) {
     console.error('发送消息失败:', error);
     showError('发送消息失败: ' + error.message);
-    resetInputState();
     hideThinkingIndicator();
-    scrollToBottom();
   }
 }
 
@@ -1478,6 +1647,10 @@ function showInitialExpertProgress() {
           </div>
           <span class="thinking-text">开始执行流程...</span>
         </div>
+        <div class="expert-progress-node" id="currentFlowNodeName" title="点击查看执行日志">
+          <span class="node-icon">📋</span>
+          <span class="node-name">准备中...</span>
+        </div>
         <div class="expert-progress-bar-wrapper">
           <div class="expert-progress-bar">
             <div class="expert-progress-fill" id="currentFlowProgressBar"></div>
@@ -1491,43 +1664,13 @@ function showInitialExpertProgress() {
   const messagesContainer = document.getElementById('messagesContainer');
   if (messagesContainer) {
     messagesContainer.insertAdjacentHTML('beforeend', progressHtml);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-  }
-}
 
-function setInputState(disabled, reason = '') {
-  if (elements.messageInput) {
-    elements.messageInput.disabled = disabled;
-    if (disabled && reason) {
-      elements.messageInput.placeholder = reason;
-    } else if (!disabled) {
-      const hasMembers = (state.conversation?.members?.length > 0) ||
-        (state.conversation?.mode === 'expertqa' && state.conversation?.expertId);
-      elements.messageInput.placeholder = hasMembers ? '输入消息，按 Enter 发送...' : '请先添加成员后再发送消息';
-      elements.messageInput.focus();
+    // 绑定点击查看日志事件
+    const nodeNameEl = document.getElementById('currentFlowNodeName');
+    if (nodeNameEl) {
+      nodeNameEl.addEventListener('click', showFlowExecutionLogs);
     }
   }
-  if (elements.sendBtn) {
-    elements.sendBtn.disabled = disabled;
-  }
-}
-
-function hasWebMembersWithoutUrl(memberIds) {
-  if (!state.conversation?.members) return false;
-  const memberUrls = state.conversation.memberUrls || {};
-  return state.conversation.members
-    .filter(m => !memberIds || memberIds.has(m.id))
-    .some(m => m.accessMethod === 'web' && !memberUrls[m.id]);
-}
-
-function getWebMemberIdsWithoutUrl() {
-  if (!state.conversation?.members) return new Set();
-  const memberUrls = state.conversation.memberUrls || {};
-  return new Set(
-    state.conversation.members
-      .filter(m => m.accessMethod === 'web' && !memberUrls[m.id])
-      .map(m => m.id)
-  );
 }
 
 function updateSendButtonState() {
@@ -1535,12 +1678,7 @@ function updateSendButtonState() {
   const hasMembers = (state.conversation?.members?.length > 0) ||
     (state.conversation?.mode === 'expertqa' && state.conversation?.expertId);
   const hasText = elements.messageInput.value.trim().length > 0;
-  elements.sendBtn.disabled = !hasMembers || !hasText || state.isLoading;
-}
-
-function resetInputState() {
-  state.isLoading = false;
-  setInputState(false);
+  elements.sendBtn.disabled = !hasMembers || !hasText;
 }
 
 function showThinkingIndicator() {
@@ -1556,7 +1694,6 @@ function showThinkingIndicator() {
     </div>
   `;
   elements.messagesContainer.appendChild(indicator);
-  scrollToBottom();
 }
 
 function hideThinkingIndicator() {
@@ -1595,8 +1732,6 @@ let newStatusTimeout = null;
 
 async function handleNewCommand() {
   try {
-    setInputState(true, '正在清除会话...');
-
     const response = await chrome.runtime.sendMessage({
       action: 'clearConversationLocal',
       conversationId
@@ -1622,7 +1757,6 @@ async function handleNewCommand() {
   } catch (error) {
     console.error('[Chat] 清除会话失败:', error);
     showNewStatus('failed');
-    setInputState(false);
   }
 }
 
@@ -1647,7 +1781,7 @@ function showNewStatus(status) {
     newStatusTimeout = setTimeout(() => indicator.remove(), 3000);
   }
 
-  document.querySelector('.chat-header-top').appendChild(indicator);
+  document.querySelector('.chat-header').appendChild(indicator);
 }
 
 let messageListenerAttached = false;
@@ -1657,14 +1791,11 @@ function attachMessageListener() {
     chrome.runtime.onMessage.addListener((request) => {
       if (request.type === 'clearComplete') {
         showNewStatus(request.success ? 'done' : 'failed');
-        setInputState(false);
       } else if (request.type === 'loopDiscussionProgress') {
         showLoopProgress(request.currentRound, request.totalRounds);
       } else if (request.type === 'loopDiscussionComplete') {
         removeLoopProgress();
         showSuccess(`多轮讨论完成（共 ${request.rounds} 轮）`);
-        state.isLooping = false;
-        setInputState(false);
       } else if (request.type === 'flowExecutionProgress') {
         handleFlowExecutionProgress(request.progress);
       } else if (request.type === 'flowExecutionComplete') {
@@ -1739,6 +1870,10 @@ function handleFlowExecutionProgress(progress) {
             </div>
             <span class="thinking-text">${progress.message || '正在处理...'}</span>
           </div>
+          <div class="expert-progress-node" id="currentFlowNodeName" title="点击查看执行日志">
+            <span class="node-icon">📋</span>
+            <span class="node-name">${progress.nodeName || '准备中...'}</span>
+          </div>
           <div class="expert-progress-bar-wrapper">
             <div class="expert-progress-bar">
               <div class="expert-progress-fill" id="currentFlowProgressBar"></div>
@@ -1753,6 +1888,12 @@ function handleFlowExecutionProgress(progress) {
     if (messagesContainer) {
       messagesContainer.insertAdjacentHTML('beforeend', progressHtml);
       progressElement = document.getElementById('currentFlowProgressIndicator');
+
+      // 绑定点击查看日志事件
+      const nodeNameEl = document.getElementById('currentFlowNodeName');
+      if (nodeNameEl) {
+        nodeNameEl.addEventListener('click', showFlowExecutionLogs);
+      }
     }
   }
 
@@ -1773,13 +1914,66 @@ function handleFlowExecutionProgress(progress) {
     progressBar.style.width = `${percentage}%`;
   }
 
+  // 更新当前节点名称
+  const nodeNameEl = document.getElementById('currentFlowNodeName');
+  if (nodeNameEl && progress.nodeName) {
+    const nodeNameSpan = nodeNameEl.querySelector('.node-name');
+    if (nodeNameSpan) {
+      nodeNameSpan.textContent = progress.nodeName;
+    }
+    // 保存执行日志到状态中
+    if (!state.flowExecutionLogs) {
+      state.flowExecutionLogs = [];
+    }
+    
+    // 只记录完成的日志，或者合并开始和完成
+    const existingLog = state.flowExecutionLogs.find(
+      log => log.nodeId === progress.nodeId && log.status === 'started'
+    );
+    
+    if (progress.status === 'completed') {
+      // 如果有对应的开始日志，更新为完成
+      if (existingLog) {
+        existingLog.status = 'completed';
+        existingLog.completedAt = Date.now();
+        existingLog.duration = Date.now() - existingLog.timestamp;
+      } else {
+        // 没有开始日志，直接添加完成日志
+        state.flowExecutionLogs.push({
+          timestamp: Date.now(),
+          completedAt: Date.now(),
+          nodeName: progress.nodeName,
+          nodeId: progress.nodeId,
+          status: 'completed',
+          current: progress.current,
+          total: progress.total,
+          duration: 0
+        });
+      }
+    } else if (progress.status === 'started' && !existingLog) {
+      // 只有开始状态且不存在时才添加
+      state.flowExecutionLogs.push({
+        timestamp: Date.now(),
+        nodeName: progress.nodeName,
+        nodeId: progress.nodeId,
+        status: 'started',
+        current: progress.current,
+        total: progress.total
+      });
+      
+      // 第一个日志被收集时，重新渲染消息以显示"查看过程"按钮
+      if (state.flowExecutionLogs.length === 1) {
+        renderMessages();
+      }
+    }
+  }
+
   if (thinkingText && progress.message) {
     thinkingText.textContent = progress.message;
   }
 
   const messagesContainer = document.getElementById('messagesContainer');
   if (messagesContainer) {
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }
 }
 
@@ -1788,6 +1982,133 @@ function removeProgressIndicator() {
   if (progressElement) {
     progressElement.remove();
   }
+}
+
+function showFlowExecutionLogs() {
+  const logs = state.flowExecutionLogs || [];
+  
+  // 格式化时间
+  const formatTime = (timestamp) => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
+
+  // 格式化时长
+  const formatDuration = (ms) => {
+    if (!ms || ms <= 0) return '';
+    if (ms < 1000) return `${ms}ms`;
+    return `${(ms / 1000).toFixed(1)}s`;
+  };
+
+  // 生成日志 HTML - 只显示完成的节点
+  let logsHtml = '';
+  const completedLogs = logs.filter(log => log.status === 'completed');
+  
+  if (completedLogs.length === 0) {
+    logsHtml = `
+      <div class="flow-logs-empty">
+        <div class="empty-icon">📋</div>
+        <p>暂无执行日志</p>
+      </div>
+    `;
+  } else {
+    logsHtml = completedLogs.map((log, index) => `
+      <div class="flow-log-item log-completed" data-log-index="${index}">
+        <div class="log-main">
+          <span class="log-index">${index + 1}</span>
+          <span class="log-status">✅</span>
+          <span class="log-node">${escapeHtml(log.nodeName || '未知节点')}</span>
+          <span class="log-duration">${formatDuration(log.duration)}</span>
+          <span class="log-expand">▼</span>
+        </div>
+        <div class="log-detail">
+          <div class="log-detail-row">
+            <span class="log-detail-label">开始时间:</span>
+            <span class="log-detail-value">${formatTime(log.timestamp)}</span>
+          </div>
+          <div class="log-detail-row">
+            <span class="log-detail-label">完成时间:</span>
+            <span class="log-detail-value">${formatTime(log.completedAt)}</span>
+          </div>
+          <div class="log-detail-row">
+            <span class="log-detail-label">节点进度:</span>
+            <span class="log-detail-value">${log.current}/${log.total}</span>
+          </div>
+          ${log.duration ? `
+          <div class="log-detail-row">
+            <span class="log-detail-label">执行耗时:</span>
+            <span class="log-detail-value">${formatDuration(log.duration)}</span>
+          </div>
+          ` : ''}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // 创建弹窗
+  const modalHtml = `
+    <div class="modal-overlay active" id="flowLogsModal">
+      <div class="modal-content flow-logs-modal">
+        <div class="modal-header">
+          <h3>📋 流程执行日志</h3>
+          <button class="modal-close" id="closeFlowLogsModal">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="flow-logs-summary">
+            共 ${completedLogs.length} 个节点执行完成
+          </div>
+          <div class="flow-logs-list">
+            ${logsHtml}
+          </div>
+        </div>
+        <div class="modal-footer">
+          ${logs.length > 0 ? '<button class="btn-secondary" id="clearFlowLogs">清除日志</button>' : ''}
+          <button class="btn-primary" id="closeFlowLogsBtn">关闭</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // 移除已存在的弹窗
+  const existingModal = document.getElementById('flowLogsModal');
+  if (existingModal) {
+    existingModal.remove();
+  }
+
+  // 添加弹窗到页面
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+  // 绑定关闭事件
+  document.getElementById('closeFlowLogsModal').addEventListener('click', () => {
+    document.getElementById('flowLogsModal').remove();
+  });
+  document.getElementById('closeFlowLogsBtn').addEventListener('click', () => {
+    document.getElementById('flowLogsModal').remove();
+  });
+  
+  // 清除日志按钮
+  const clearBtn = document.getElementById('clearFlowLogs');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      state.flowExecutionLogs = [];
+      document.getElementById('flowLogsModal').remove();
+      showSuccess('日志已清除');
+    });
+  }
+
+  // 点击背景关闭
+  document.getElementById('flowLogsModal').addEventListener('click', (e) => {
+    if (e.target.id === 'flowLogsModal') {
+      e.target.remove();
+    }
+  });
+
+  // 绑定展开/折叠事件
+  document.querySelectorAll('.flow-log-item').forEach(item => {
+    item.addEventListener('click', () => {
+      item.classList.toggle('expanded');
+    });
+  });
 }
 
 function handleFlowExecutionError(error) {
@@ -1823,7 +2144,6 @@ function handleFlowExecutionError(error) {
   const messagesContainer = document.getElementById('messagesContainer');
   if (messagesContainer) {
     messagesContainer.insertAdjacentHTML('beforeend', errorHtml);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }
 }
 
@@ -1845,9 +2165,6 @@ async function handleLoopCommand(args) {
   }
 
   try {
-    state.isLooping = true;
-    setInputState(true, '多轮讨论中...');
-
     const response = await chrome.runtime.sendMessage({
       action: 'startLoopDiscussion',
       conversationId,
@@ -1859,16 +2176,14 @@ async function handleLoopCommand(args) {
       throw new Error(response?.error || '启动多轮讨论失败');
     }
 
-    if (problemDesc) {
-      showSuccess(`正在执行多轮讨论：${problemDesc}（${maxIterations} 轮）`);
-    } else {
-      showSuccess(`正在执行多轮讨论（${maxIterations} 轮）`);
-    }
+    const tipContent = problemDesc
+      ? `📋 多轮讨论已加入队列：${problemDesc}（${maxIterations} 轮）`
+      : `📋 多轮讨论已加入队列（${maxIterations} 轮）`;
+    
+    await addTipMessage(conversationId, tipContent, 'loop_queued');
   } catch (error) {
     console.error('[Chat] 启动多轮讨论失败:', error);
     showError(error.message);
-    state.isLooping = false;
-    setInputState(false);
   }
 }
 
@@ -1908,7 +2223,6 @@ function addTempMessage(content, isUser) {
     </div>
   `;
   elements.messagesContainer.appendChild(tempDiv);
-  scrollToBottom();
 }
 
 // 工具函数
@@ -2091,6 +2405,59 @@ function escapeHtml(text) {
 function formatMessage(content) {
   if (!content) return '';
 
+  // 清理剪贴板粘贴标记 [Pasted ~X l...] 和其他剪贴板标记
+  content = content.replace(/\[Pasted[^\]]*\]/g, '');
+  content = content.replace(/\[Pas\$\$/g, '');
+  content = content.replace(/\$\$_k/g, '');
+
+  // 处理公式（在其他处理之前，避免公式内容被误处理）
+  // 先处理转义的 LaTeX 分隔符
+  // \[...\] 是块级公式的另一种表示
+  const latexBlockFormulas = [];
+  content = content.replace(/\\\[([\s\S]*?)\\\]/g, (match, formula) => {
+    latexBlockFormulas.push(formula);
+    return `__LATEX_BLOCK_FORMULA_${latexBlockFormulas.length - 1}__`;
+  });
+
+  // \(...\) 是行内公式的另一种表示
+  const latexInlineFormulas = [];
+  content = content.replace(/\\\((.*?)\\\)/g, (match, formula) => {
+    latexInlineFormulas.push(formula);
+    return `__LATEX_INLINE_FORMULA_${latexInlineFormulas.length - 1}__`;
+  });
+
+  // 块级公式 $$...$$
+  const blockFormulas = [];
+  content = content.replace(/\$\$([\s\S]*?)\$\$/g, (match, formula) => {
+    blockFormulas.push(formula);
+    return `__BLOCK_FORMULA_${blockFormulas.length - 1}__`;
+  });
+
+  // 行内公式 $...$（避免匹配到货币符号）
+  const inlineFormulas = [];
+  content = content.replace(/\$([^\$\n]+?)\$/g, (match, formula) => {
+    inlineFormulas.push(formula);
+    return `__INLINE_FORMULA_${inlineFormulas.length - 1}__`;
+  });
+
+  // 将转义的 HTML 实体还原（如 &lt;strong&gt; -> <strong>）
+  content = content
+    .replace(/&lt;strong&gt;/gi, '<strong>')
+    .replace(/&lt;\/strong&gt;/gi, '</strong>')
+    .replace(/&lt;b&gt;/gi, '<b>')
+    .replace(/&lt;\/b&gt;/gi, '</b>')
+    .replace(/&lt;em&gt;/gi, '<em>')
+    .replace(/&lt;\/em&gt;/gi, '</em>')
+    .replace(/&lt;i&gt;/gi, '<i>')
+    .replace(/&lt;\/i&gt;/gi, '</i>');
+
+  // 将已存在的 HTML 标签转换为 Markdown 格式
+  content = content
+    .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
+    .replace(/<b>(.*?)<\/b>/gi, '**$1**')
+    .replace(/<em>(.*?)<\/em>/gi, '*$1*')
+    .replace(/<i>(.*?)<\/i>/gi, '*$1*');
+
   // 先处理代码块，避免内部被处理
   const codeBlocks = [];
   const codeBlockRegex = /```(\w*)\n([\s\S]*?)```/g;
@@ -2131,12 +2498,15 @@ function formatMessage(content) {
   // 处理引用
   contentWithoutCode = contentWithoutCode.replace(/^> (.*$)/gm, '<blockquote>$1</blockquote>');
 
-  // 处理标题
+  // 处理标题（从高级到低级，避免误匹配）
+  // 使用 (?<=^|>) 前瞻断言，匹配行首或标签后的内容
   contentWithoutCode = contentWithoutCode
-    .replace(/^#### (.*$)/gm, '<h4>$1</h4>')
-    .replace(/^### (.*$)/gm, '<h3>$1</h3>')
-    .replace(/^## (.*$)/gm, '<h2>$1</h2>')
-    .replace(/^# (.*$)/gm, '<h1>$1</h1>');
+    .replace(/(?<=^|>)###### (.*$)/gm, '<h6>$1</h6>')
+    .replace(/(?<=^|>)##### (.*$)/gm, '<h5>$1</h5>')
+    .replace(/(?<=^|>)#### (.*$)/gm, '<h4>$1</h4>')
+    .replace(/(?<=^|>)### (.*$)/gm, '<h3>$1</h3>')
+    .replace(/(?<=^|>)## (.*$)/gm, '<h2>$1</h2>')
+    .replace(/(?<=^|>)# (.*$)/gm, '<h1>$1</h1>');
 
   // 清除标题前的多余换行
   contentWithoutCode = contentWithoutCode.replace(/\n\n+(<h[1-6])/g, '\n$1');
@@ -2179,7 +2549,10 @@ function formatMessage(content) {
   if (inOl) {
     contentWithoutCode = contentWithoutCode.replace(/(<\/ol>\n*)?<ol class="message-list">/g, '');
     contentWithoutCode = contentWithoutCode.replace(/__OL_ITEM_(\d+)__\n?/g, (match, index) => {
-      return `<li>${escapeHtml(orderedItems[parseInt(index)])}</li>`;
+      const text = orderedItems[parseInt(index)]
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>');
+      return `<li>${escapeHtml(text).replace(/&lt;strong&gt;/g, '<strong>').replace(/&lt;\/strong&gt;/g, '</strong>').replace(/&lt;em&gt;/g, '<em>').replace(/&lt;\/em&gt;/g, '</em>')}</li>`;
     });
     contentWithoutCode = contentWithoutCode.replace(/(<li>.*?<\/li>\n?)*$/, (match) => {
       if (match.includes('<li>')) {
@@ -2201,7 +2574,10 @@ function formatMessage(content) {
   if (inUl) {
     contentWithoutCode = contentWithoutCode.replace(/(<\/ul>\n*)?<ul class="message-list">/g, '');
     contentWithoutCode = contentWithoutCode.replace(/__UL_ITEM_(\d+)__\n?/g, (match, index) => {
-      return `<li>${escapeHtml(unorderedItems[parseInt(index)])}</li>`;
+      const text = unorderedItems[parseInt(index)]
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>');
+      return `<li>${escapeHtml(text).replace(/&lt;strong&gt;/g, '<strong>').replace(/&lt;\/strong&gt;/g, '</strong>').replace(/&lt;em&gt;/g, '<em>').replace(/&lt;\/em&gt;/g, '</em>')}</li>`;
     });
     contentWithoutCode = contentWithoutCode.replace(/(<li>.*?<\/li>\n?)*$/, (match) => {
       if (match.includes('<li>')) {
@@ -2223,6 +2599,31 @@ function formatMessage(content) {
     return `<pre data-lang="${escapeHtml(lang)}"><code class="language-${escapeHtml(lang)}">${escapeHtml(code)}</code></pre>`;
   });
 
+  // 恢复公式（使用 KaTeX 渲染）
+  // LaTeX 块级公式 \[...\]
+  contentWithoutCode = contentWithoutCode.replace(/__LATEX_BLOCK_FORMULA_(\d+)__/g, (match, index) => {
+    const formula = latexBlockFormulas[parseInt(index)];
+    return `<div class="math-block" data-formula="${escapeHtml(formula)}" style="background: #f6f8fa; padding: 12px; border-radius: 6px; margin: 8px 0; overflow-x: auto;"></div>`;
+  });
+
+  // LaTeX 行内公式 \(...\)
+  contentWithoutCode = contentWithoutCode.replace(/__LATEX_INLINE_FORMULA_(\d+)__/g, (match, index) => {
+    const formula = latexInlineFormulas[parseInt(index)];
+    return `<span class="math-inline" data-formula="${escapeHtml(formula)}" style="background: #f6f8fa; padding: 2px 4px; border-radius: 3px;"></span>`;
+  });
+
+  // 块级公式 $$...$$
+  contentWithoutCode = contentWithoutCode.replace(/__BLOCK_FORMULA_(\d+)__/g, (match, index) => {
+    const formula = blockFormulas[parseInt(index)];
+    return `<div class="math-block" data-formula="${escapeHtml(formula)}" style="background: #f6f8fa; padding: 12px; border-radius: 6px; margin: 8px 0; overflow-x: auto;"></div>`;
+  });
+
+  // 行内公式 $...$
+  contentWithoutCode = contentWithoutCode.replace(/__INLINE_FORMULA_(\d+)__/g, (match, index) => {
+    const formula = inlineFormulas[parseInt(index)];
+    return `<span class="math-inline" data-formula="${escapeHtml(formula)}" style="background: #f6f8fa; padding: 2px 4px; border-radius: 3px;"></span>`;
+  });
+
   return contentWithoutCode;
 }
 
@@ -2239,6 +2640,80 @@ function generateAvatarUrl(name) {
 
 function scrollToBottom() {
   elements.messagesContainer.scrollTop = elements.messagesContainer.scrollHeight;
+}
+
+let isUserScrolling = false;
+let unreadCount = 0;
+let hasPendingRender = false;
+let lastRenderedMsgCount = 0;
+
+function updateNewMessagesBadge() {
+  const badge = elements.scrollBottomBadge;
+  const btn = elements.scrollBottomBtn;
+  if (!badge || !btn) return;
+  if (unreadCount > 0) {
+    badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+    badge.classList.add('visible');
+    btn.classList.add('visible');
+  } else {
+    badge.classList.remove('visible');
+  }
+}
+
+let newMsgObserver = null;
+const observedMsgIds = new WeakSet();
+
+function initNewMessagesObserver() {
+  if (newMsgObserver) newMsgObserver.disconnect();
+
+  newMsgObserver = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (entry.isIntersecting) {
+        const el = entry.target;
+        const msgId = el.dataset.msgId;
+        if (msgId && !el.dataset.seen) {
+          el.dataset.seen = '1';
+        }
+      }
+    }
+  }, {
+    root: elements.messagesContainer,
+    threshold: 0.1
+  });
+}
+
+function observeNewMessages() {
+  if (!newMsgObserver) return;
+  const msgs = elements.messagesContainer.querySelectorAll('.message:not([data-seen])');
+  msgs.forEach(el => {
+    if (!observedMsgIds.has(el)) {
+      observedMsgIds.add(el);
+      newMsgObserver.observe(el);
+    }
+  });
+}
+
+function initScrollDetection() {
+  let scrollTimeout = null;
+  
+  elements.messagesContainer.addEventListener('scroll', () => {
+    const { scrollTop, scrollHeight, clientHeight } = elements.messagesContainer;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    
+    isUserScrolling = distanceFromBottom > 200;
+    
+    clearTimeout(scrollTimeout);
+    scrollTimeout = setTimeout(() => {
+      const { scrollTop: st, scrollHeight: sh, clientHeight: ch } = elements.messagesContainer;
+      isUserScrolling = (sh - st - ch) > 200;
+      if (!isUserScrolling && hasPendingRender) {
+        hasPendingRender = false;
+        unreadCount = 0;
+        updateNewMessagesBadge();
+        appendNewMessages();
+      }
+    }, 300);
+  });
 }
 
 function showError(message) {
@@ -2662,6 +3137,15 @@ function bindCopyButtonEvents() {
       await copyToClipboard(text, btn);
     });
   });
+
+  // 绑定查看过程按钮事件
+  const viewProcessBtns = elements.messagesContainer.querySelectorAll('.view-process-btn');
+  viewProcessBtns.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      showFlowExecutionLogs();
+    });
+  });
 }
 
 function addCodeCopyButtons(container) {
@@ -2684,6 +3168,43 @@ function addCodeCopyButtons(container) {
     };
 
     pre.appendChild(copyBtn);
+  });
+}
+
+function renderMathFormulas(container) {
+  if (typeof katex === 'undefined') {
+    console.warn('[Math] KaTeX 未加载，跳过公式渲染');
+    return;
+  }
+
+  // 渲染块级公式
+  container.querySelectorAll('.math-block[data-formula]').forEach(el => {
+    try {
+      const formula = el.getAttribute('data-formula');
+      katex.render(formula, el, {
+        displayMode: true,
+        throwOnError: false,
+        trust: true
+      });
+    } catch (e) {
+      console.error('[Math] 块级公式渲染失败:', e);
+      el.textContent = el.getAttribute('data-formula');
+    }
+  });
+
+  // 渲染行内公式
+  container.querySelectorAll('.math-inline[data-formula]').forEach(el => {
+    try {
+      const formula = el.getAttribute('data-formula');
+      katex.render(formula, el, {
+        displayMode: false,
+        throwOnError: false,
+        trust: true
+      });
+    } catch (e) {
+      console.error('[Math] 行内公式渲染失败:', e);
+      el.textContent = el.getAttribute('data-formula');
+    }
   });
 }
 
@@ -3024,34 +3545,59 @@ function renderSidebarList() {
     return;
   }
 
-  const groups = groupConversationsByDate(conversations);
+  // 按模式分组显示会话
+  const groups = groupConversationsByMode(conversations);
 
   const threeDotSvg = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4.55146 8.00001C4.55146 8.63513 4.03659 9.15001 3.40146 9.15001C2.76634 9.15001 2.25146 8.63513 2.25146 8.00001C2.25146 7.36488 2.76634 6.85001 3.40146 6.85001C4.03659 6.85001 4.55146 7.36488 4.55146 8.00001Z" fill="currentColor"></path><path d="M9.1476 8.00001C9.1476 8.63513 8.63273 9.15001 7.9976 9.15001C7.36248 9.15001 6.8476 8.63513 6.8476 8.00001C6.8476 7.36488 7.36248 6.85001 7.9976 6.85001C8.63273 6.85001 9.1476 7.36488 9.1476 8.00001Z" fill="currentColor"></path><path d="M13.7486 8.00001C13.7486 8.63513 13.2338 9.15001 12.5986 9.15001C11.9635 9.15001 11.4486 8.63513 11.4486 8.00001C11.4486 7.36488 11.9635 6.85001 12.5986 6.85001C13.2338 6.85001 13.7486 7.36488 13.7486 8.00001Z" fill="currentColor"></path></svg>';
 
-  const modeIcons = {
-    brainstorming: '💡',
-    discussion: '🪑',
-    expertqa: '🎓'
-  };
+  const collapseSvg = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
-  container.innerHTML = groups.map(group => `
-    <div class="sidebar-date-group">
-      <div class="sidebar-date-label">${group.label}</div>
-      ${group.items.map(conv => {
-        const isActive = conv.id === conversationId;
-        const modeIcon = modeIcons[conv.mode] || modeIcons.brainstorming;
-        return `
-          <div class="sidebar-conv-item ${isActive ? 'active' : ''}"
-               data-conv-id="${conv.id}"
-               title="${escapeHtml(conv.name)}">
-            <span class="sidebar-conv-mode-icon">${modeIcon}</span>
-            <div class="sidebar-conv-name">${escapeHtml(conv.name)}</div>
-            <button class="sidebar-conv-more" data-conv-id="${conv.id}" title="更多操作">${threeDotSvg}</button>
-          </div>
-        `;
-      }).join('')}
-    </div>
-  `).join('');
+  // 加载折叠状态
+  const collapsedGroups = JSON.parse(localStorage.getItem('sidebarCollapsedGroups') || '{}');
+
+  container.innerHTML = groups.map(group => {
+    const isCollapsed = collapsedGroups[group.key] || false;
+    return `
+      <div class="sidebar-date-group" data-group-key="${group.key}">
+        <div class="sidebar-date-label" data-group-key="${group.key}">
+          <span class="sidebar-date-collapse-icon ${isCollapsed ? 'collapsed' : ''}">${collapseSvg}</span>
+          ${group.label}
+          <span class="sidebar-date-count">${group.items.length}</span>
+        </div>
+        <div class="sidebar-group-items ${isCollapsed ? 'collapsed' : ''}">
+          ${group.items.map(conv => {
+            const isActive = conv.id === conversationId;
+            return `
+              <div class="sidebar-conv-item ${isActive ? 'active' : ''}"
+                   data-conv-id="${conv.id}"
+                   title="${escapeHtml(conv.name)}">
+                <div class="sidebar-conv-name">${escapeHtml(conv.name)}</div>
+                <button class="sidebar-conv-more" data-conv-id="${conv.id}" title="更多操作">${threeDotSvg}</button>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // 绑定折叠/展开事件
+  container.querySelectorAll('.sidebar-date-label').forEach(label => {
+    label.addEventListener('click', (e) => {
+      const groupKey = label.dataset.groupKey;
+      const group = label.closest('.sidebar-date-group');
+      const items = group.querySelector('.sidebar-group-items');
+      const icon = label.querySelector('.sidebar-date-collapse-icon');
+
+      const isCollapsed = items.classList.toggle('collapsed');
+      icon.classList.toggle('collapsed', isCollapsed);
+
+      // 保存折叠状态
+      const collapsedGroups = JSON.parse(localStorage.getItem('sidebarCollapsedGroups') || '{}');
+      collapsedGroups[groupKey] = isCollapsed;
+      localStorage.setItem('sidebarCollapsedGroups', JSON.stringify(collapsedGroups));
+    });
+  });
 
   container.querySelectorAll('.sidebar-conv-item').forEach(item => {
     item.addEventListener('click', (e) => {
@@ -3102,6 +3648,39 @@ function groupConversationsByDate(conversations) {
       groups.week.items.push(conv);
     } else {
       groups.older.items.push(conv);
+    }
+  });
+
+  return Object.values(groups).filter(g => g.items.length > 0);
+}
+
+function groupConversationsByMode(conversations) {
+  // 先按时间排序所有会话
+  const sorted = [...conversations].sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt));
+
+  // 最近会话分组（取前10个）
+  const recentItems = sorted.slice(0, 10);
+
+  const groups = {
+    recent: { key: 'recent', label: '最近会话', items: recentItems },
+    brainstorming: { key: 'brainstorming', label: '头脑风暴', items: [] },
+    discussion: { key: 'discussion', label: '圆桌讨论', items: [] },
+    expertqa: { key: 'expertqa', label: '专家问答', items: [] }
+  };
+
+  conversations.forEach(conv => {
+    const mode = conv.mode || 'brainstorming';
+    if (groups[mode]) {
+      groups[mode].items.push(conv);
+    } else {
+      groups.brainstorming.items.push(conv);
+    }
+  });
+
+  // 每个模式组内按时间排序
+  Object.values(groups).forEach(g => {
+    if (g.key !== 'recent') {
+      g.items.sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt));
     }
   });
 
@@ -4582,6 +5161,137 @@ async function executeBatchDelete() {
     console.error('[BatchDelete] 批量删除失败:', error);
     alert('批量删除失败: ' + error.message);
   }
+}
+
+// ==================== 打字机效果 ====================
+
+// 存储正在执行打字机效果的元素
+const typewriterAnimations = new Map();
+
+/**
+ * 打字机效果函数
+ * @param {HTMLElement} element - 要应用效果的元素
+ * @param {string} htmlContent - 原始 HTML 内容
+ * @param {number} speed - 打字速度（毫秒/字符）
+ * @param {Function} onComplete - 完成回调
+ */
+function typewriterEffect(element, htmlContent, speed = 20, onComplete = null) {
+  // 如果该元素已有动画，先取消
+  if (typewriterAnimations.has(element)) {
+    cancelAnimationFrame(typewriterAnimations.get(element).rafId);
+    typewriterAnimations.delete(element);
+  }
+
+  // 解析 HTML 内容为文本和标签
+  const tokens = parseHtmlTokens(htmlContent);
+  let currentIndex = 0;
+  let currentHtml = '';
+  const state = { rafId: null, cancelled: false };
+
+  typewriterAnimations.set(element, state);
+
+  function type() {
+    if (state.cancelled || currentIndex >= tokens.length) {
+      typewriterAnimations.delete(element);
+      element.classList.remove('typewriting');
+      if (onComplete) onComplete();
+      return;
+    }
+
+    const token = tokens[currentIndex];
+    if (token.type === 'tag') {
+      // 标签直接添加
+      currentHtml += token.value;
+      currentIndex++;
+      type(); // 立即处理下一个
+    } else {
+      // 文本逐字添加
+      if (token.charIndex < token.value.length) {
+        currentHtml += token.value[token.charIndex];
+        token.charIndex++;
+        element.innerHTML = currentHtml;
+
+        // 保持滚动到底部
+        const container = elements.messagesContainer;
+        if (container) {
+          const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+          if (isNearBottom) {
+            container.scrollTop = container.scrollHeight;
+          }
+        }
+
+        setTimeout(type, speed);
+      } else {
+        currentIndex++;
+        setTimeout(type, speed);
+      }
+    }
+  }
+
+  element.classList.add('typewriting');
+  type();
+}
+
+/**
+ * 解析 HTML 为 token 数组
+ */
+function parseHtmlTokens(html) {
+  const tokens = [];
+  let i = 0;
+  let textBuffer = '';
+
+  while (i < html.length) {
+    if (html[i] === '<') {
+      // 保存之前的文本
+      if (textBuffer) {
+        tokens.push({ type: 'text', value: textBuffer, charIndex: 0 });
+        textBuffer = '';
+      }
+
+      // 找到标签结束
+      let tagEnd = html.indexOf('>', i);
+      if (tagEnd === -1) tagEnd = html.length - 1;
+
+      const tag = html.substring(i, tagEnd + 1);
+      tokens.push({ type: 'tag', value: tag });
+      i = tagEnd + 1;
+    } else {
+      textBuffer += html[i];
+      i++;
+    }
+  }
+
+  // 保存剩余文本
+  if (textBuffer) {
+    tokens.push({ type: 'text', value: textBuffer, charIndex: 0 });
+  }
+
+  return tokens;
+}
+
+/**
+ * 取消指定元素的打字机效果
+ */
+function cancelTypewriter(element) {
+  if (typewriterAnimations.has(element)) {
+    const state = typewriterAnimations.get(element);
+    state.cancelled = true;
+    cancelAnimationFrame(state.rafId);
+    typewriterAnimations.delete(element);
+    element.classList.remove('typewriting');
+  }
+}
+
+/**
+ * 取消所有打字机效果
+ */
+function cancelAllTypewriters() {
+  typewriterAnimations.forEach((state, element) => {
+    state.cancelled = true;
+    cancelAnimationFrame(state.rafId);
+    element.classList.remove('typewriting');
+  });
+  typewriterAnimations.clear();
 }
 
 // 启动

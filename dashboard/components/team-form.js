@@ -7,7 +7,7 @@ class TeamForm {
   constructor() {
     this.currentTeam = null; // null = 创建模式, 有值 = 编辑模式
     this.models = [];
-    this.flows = [];
+    this.experts = [];
     this.tempMembers = []; // 临时存储正在创建的团队成员
     this.elements = {};
   }
@@ -18,7 +18,7 @@ class TeamForm {
     this.initElements();
     this.bindEvents();
     await this.loadModels();
-    await this.loadFlows();
+    await this.loadExperts();
 
     console.log('[TeamForm] 初始化完成');
   }
@@ -37,7 +37,7 @@ class TeamForm {
     // 内联成员表单元素
     this.elements.inlineMemberName = document.getElementById('inlineMemberName');
     this.elements.inlineMemberModel = document.getElementById('inlineMemberModel');
-    this.elements.inlineMemberFlow = document.getElementById('inlineMemberFlow');
+    this.elements.inlineMemberExpert = document.getElementById('inlineMemberExpert');
     this.elements.addTeamMemberBtn = document.getElementById('addTeamMemberBtn');
     this.elements.cancelInlineMemberBtn = document.getElementById('cancelInlineMemberBtn');
     this.elements.saveInlineMemberBtn = document.getElementById('saveInlineMemberBtn');
@@ -126,8 +126,8 @@ class TeamForm {
       this.elements.addTeamMemberBtn.style.display = 'none';
 
       // 聚焦到第一个选择框（角色）
-      if (this.elements.inlineMemberFlow) {
-        this.elements.inlineMemberFlow.focus();
+      if (this.elements.inlineMemberExpert) {
+        this.elements.inlineMemberExpert.focus();
       }
     }
   }
@@ -143,20 +143,20 @@ class TeamForm {
   }
 
   resetInlineMemberForm() {
-    if (this.elements.inlineMemberFlow) this.elements.inlineMemberFlow.value = '';
+    if (this.elements.inlineMemberExpert) this.elements.inlineMemberExpert.value = '';
     if (this.elements.inlineMemberModel) this.elements.inlineMemberModel.value = '';
     if (this.elements.inlineMemberName) this.elements.inlineMemberName.value = '';
   }
 
   async saveInlineMember() {
-    const flowId = this.elements.inlineMemberFlow?.value;
+    const expertId = this.elements.inlineMemberExpert?.value;
     const modelId = this.elements.inlineMemberModel?.value;
     let nickname = this.elements.inlineMemberName?.value?.trim();
 
     // 验证
-    if (!flowId) {
+    if (!expertId) {
       alert('请选择角色');
-      if (this.elements.inlineMemberFlow) this.elements.inlineMemberFlow.focus();
+      if (this.elements.inlineMemberExpert) this.elements.inlineMemberExpert.focus();
       return;
     }
 
@@ -168,8 +168,8 @@ class TeamForm {
 
     // 如果昵称为空，使用角色名称
     if (!nickname) {
-      const flow = this.flows.find(f => f.id === flowId);
-      nickname = flow?.name || '未命名';
+      const expert = this.experts.find(e => e.id === expertId);
+      nickname = expert?.name || '未命名';
     }
 
     // 添加到临时成员列表
@@ -177,7 +177,7 @@ class TeamForm {
       id: `temp_${Date.now()}`,
       name: nickname,
       modelId,
-      flowId
+      expertId
     });
 
     // 重新渲染成员列表
@@ -201,17 +201,17 @@ class TeamForm {
     }
   }
 
-  async loadFlows() {
+  async loadExperts() {
     try {
-      const result = await chrome.runtime.sendMessage({ action: 'getFlows' });
-      this.flows = result || [];
-      console.log('[TeamForm] 加载流程:', this.flows.length);
+      const result = await chrome.runtime.sendMessage({ action: 'getExperts' });
+      this.experts = result || [];
+      console.log('[TeamForm] 加载专家:', this.experts.length);
 
-      // 填充流程选择器
-      this.populateFlowSelector();
+      // 填充专家选择器
+      this.populateExpertSelector();
     } catch (error) {
-      console.error('[TeamForm] 加载流程失败:', error);
-      this.flows = [];
+      console.error('[TeamForm] 加载专家失败:', error);
+      this.experts = [];
     }
   }
 
@@ -227,13 +227,13 @@ class TeamForm {
     `;
   }
 
-  populateFlowSelector() {
-    if (!this.elements.inlineMemberFlow) return;
+  populateExpertSelector() {
+    if (!this.elements.inlineMemberExpert) return;
 
-    this.elements.inlineMemberFlow.innerHTML = `
+    this.elements.inlineMemberExpert.innerHTML = `
       <option value="">请选择角色</option>
-      ${this.flows.map(flow => `
-        <option value="${flow.id}">${this.escapeHtml(flow.name)}</option>
+      ${this.experts.map(expert => `
+        <option value="${expert.id}">${this.escapeHtml(expert.name)}</option>
       `).join('')}
     `;
   }
@@ -254,11 +254,11 @@ class TeamForm {
     }
 
     this.elements.teamMembersList.innerHTML = members.map((member, index) => {
-      const flow = this.flows.find(f => f.id === member.flowId);
+      const expert = this.experts.find(e => e.id === member.expertId);
       const model = this.models.find(m => m.id === member.modelId);
       const providerName = model?.platformName || model?.code || '未知';
       const modelName = model?.code || '未知';
-      const displayName = member.name || (flow?.name || '未命名');
+      const displayName = member.name || (expert?.name || '未命名');
 
       return `
         <div class="team-member-item" style="background: #fff; border: 2px solid #e8e8ed; border-radius: 10px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s ease;">
@@ -267,7 +267,7 @@ class TeamForm {
               ${this.escapeHtml(displayName)}
             </div>
             <div style="font-size: 12px; color: #86868b; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-              <span>🎭 ${this.escapeHtml(flow?.name || '无角色')}</span>
+              <span>🎭 ${this.escapeHtml(expert?.name || '无角色')}</span>
               <span>🤖 ${this.escapeHtml(modelName)}(${this.escapeHtml(providerName)})</span>
             </div>
           </div>
@@ -416,10 +416,10 @@ class TeamForm {
 
           // 获取流程内容
           let systemPrompt = '';
-          if (tempMember.flowId) {
-            const flow = this.flows.find(f => f.id === tempMember.flowId);
-            if (flow) {
-              systemPrompt = flow.content || '';
+          if (tempMember.expertId) {
+            const expert = this.experts.find(e => e.id === tempMember.expertId);
+            if (expert) {
+              systemPrompt = expert.content || '';
             }
           }
 
