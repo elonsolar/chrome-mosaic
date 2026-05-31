@@ -1,12 +1,17 @@
 # Mosaic - 多平台 AI 模型协作工具
 
 > 📢 **项目更名**
-> 
+>
 > 本项目已从 `FreeAI` 更名为 `Mosaic`，GitHub 仓库地址已更新。
 
 > 🙏 **致谢**
-> 
-> 感谢国内模型厂商（豆包、千问、DeepSeek、Kimi等）一如既往为广大用户提供免费网页服务，让更多人能够体验 AI 的魅力。
+>
+> 感谢以下模型厂商为广大用户提供免费网页服务，让更多人能够体验 AI 的魅力：
+>
+> - DeepSeek: https://chat.deepseek.com/
+> - 豆包: https://www.doubao.com/chat/
+> - Kimi: https://kimi.moonshot.cn/
+> - 千问: https://www.qianwen.com/chat
 
 > ⚠️ **免责声明**
 > 
@@ -43,51 +48,44 @@ Mosaic 是一款 Chrome/Edge 浏览器扩展，统一管理多个 AI 平台，�
 
 ## 快速开始
 
+### 1. 获取代码
+
 ```bash
 git clone https://github.com/elonsolar/chrome-mosaic.git
+cd chrome-mosaic
 ```
 
-1. 打开 `edge://extensions/` 或 `chrome://extensions/`
-2. 启用"开发者模式"
-3. 点击"加载已解压的扩展程序"，选择项目根目录
-4. 点击扩展图标 → 开启新对话
+### 2. 安装扩展
+
+> ⚠️ **提示**：本扩展暂时没有上架 Chrome/Edge 商店，需要本地加载使用。
+
+1. 打开浏览器扩展管理页面
+   - Chrome: `chrome://extensions/`
+   - Edge: `edge://extensions/`
+2. **开启"开发者模式"**（右上角开关）
+3. 点击"加载已解压的扩展程序"
+4. 选择项目根目录（包含 `manifest.json` 的文件夹）
+
+### 3. 开始使用
+
+**网页模式（无需 API Key）**
+- 点击浏览器工具栏的 Mosaic 图标
+- 选择"网页"访问方式
+- 直接使用 DeepSeek、豆包、千问、Kimi 等平台
+
+**API 模式（更稳定）**
+- 在成员配置中选择"API"访问方式
+- 填入对应平台的 API Key
+- 享受更稳定的服务
 
 ## 支持的集成
 
 ### 平台支持
-- **API 平台**：OpenAI、DeepSeek、Kimi、豆包、千问等
+- **API 平台**：DeepSeek、Kimi、豆包、千问等
 - **网页平台**：DeepSeek、豆包、千问、Kimi（无需 API Key）
 - 通过 API Key 接入
 
-### 本地工具集成（可选）
-通过 WebSocket 连接到本地服务器，集成到其他应用：
-
-```bash
-cd server && npm install && npm start
-```
-
-配置 `~/.config/opencode/opencode.json`：
-```json
-{
-  "provider": {
-    "mosaic": {
-      "npm": "@ai-sdk/openai-compatible",
-      "options": {
-        "baseURL": "http://localhost:3000/v1",
-        "apiKey": "any"
-      }
-    }
-  }
-}
-```
-
-## 技术特性
-
-- **Chrome Extension Manifest V3**：最新扩展规范
-- **Service Worker**：后台任务处理
-- **KaTeX**：数学公式渲染
-- **LeaderLine**：流程图连线
-- **WebSocket**：本地工具集成
+### TODO：MCP 开发中
 
 ## 系统要求
 
@@ -116,6 +114,4 @@ A: 在 Dashboard → 专家页面创建，可设置专家名称、提示词和�
 
 MIT
 
----
 
-**推荐使用方式**：通过各平台官方 API 接入，享受稳定、合规的服务。网页平台模式仅供体验和对比测试。
