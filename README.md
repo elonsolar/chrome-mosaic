@@ -4,21 +4,17 @@
 >
 > 本项目已从 `FreeAI` 更名为 `Mosaic`，GitHub 仓库地址已更新。
 
-> 🙏 **致谢**
->
-> 感谢以下模型厂商为广大用户提供免费网页服务，让更多人能够体验 AI 的魅力：
->
-> - DeepSeek: https://chat.deepseek.com/
-> - 豆包: https://www.doubao.com/chat/
-> - Kimi: https://kimi.moonshot.cn/
-> - 千问: https://www.qianwen.com/chat
-
 > ⚠️ **免责声明**
-> 
+>
 > - 本项目仅供学习交流和技术研究，**禁止商业用途**
 > - 内置的网页平台仅用于**交叉比较各厂商模型能力**，日常学习使用
 > - 使用者需遵守各平台服务条款，因使用本项目导致的任何后果（包括但不限于账号封禁）由使用者自行承担
 > - 平台更新可能导致内置网页调用功能失效
+> - 建议前往各模型厂商官网体验更新、更全的 AI 服务：
+>   - [DeepSeek](https://chat.deepseek.com/)
+>   - [豆包](https://www.doubao.com/chat/)
+>   - [Kimi](https://kimi.moonshot.cn/)
+>   - [千问](https://www.qianwen.com/chat)
 
 Mosaic 是一款 Chrome/Edge 浏览器扩展，统一管理多个 AI 平台，支持多模型协作对话、可视化流程编排、专家系统和提示词管理。
 
