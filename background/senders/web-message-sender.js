@@ -15,7 +15,7 @@ class WebMessageSender extends AbstractMessageSender {
 
     const response = await this.sendToPlatform(
       'sendMessage',
-      { content, conversationId: conversation },
+      { content, conversationId: conversationId },
       forceNewTab,
       conversationUrl || webUrl
     );

@@ -17,8 +17,13 @@ class SettingsManager {
   async init() {
     console.log('[SettingsManager] 初始化');
 
+    this.wsRealStatus = 'disconnected'; // disconnected | connecting | connected | error
+    this.retryCount = 0;
+    this.maxRetries = 3;
+
     this.initElements();
     this.bindEvents();
+    this.listenWSStatus();
     await this.loadData();
     this.loadSettingsToUI();
     this.loadHelperModels();
@@ -40,15 +45,20 @@ class SettingsManager {
 
   async loadData() {
     try {
-      const [settings, models] = await Promise.all([
+      const [settings, models, wsStatus] = await Promise.all([
         this.sendMessage({ action: 'getSettings' }),
-        this.sendMessage({ action: 'getModels' })
+        this.sendMessage({ action: 'getModels' }),
+        this.sendMessage({ action: 'getWSStatus' }).catch(() => null)
       ]);
 
       this.state.settings = settings || this.state.settings;
       this.state.models = models || [];
 
-      console.log('[SettingsManager] 数据加载完成', { settings: this.state.settings, models: this.state.models.length });
+      if (wsStatus) {
+        this.wsRealStatus = wsStatus.connected ? 'connected' : 'disconnected';
+      }
+
+      console.log('[SettingsManager] 数据加载完成', { settings: this.state.settings, models: this.state.models.length, wsStatus: this.wsRealStatus });
     } catch (error) {
       console.error('[SettingsManager] 加载数据失败:', error);
     }
@@ -232,6 +242,19 @@ class SettingsManager {
     if (existingError) existingError.remove();
   }
 
+  listenWSStatus() {
+    chrome.runtime.onMessage.addListener((message) => {
+      if (message.type === 'ws_status_update') {
+        console.log('[SettingsManager] 收到WS状态更新:', message);
+        this.wsRealStatus = message.connected ? 'connected' : (message.status || 'disconnected');
+        if (message.connected) {
+          this.retryCount = 0;
+        }
+        this.updateWebSocketStatus();
+      }
+    });
+  }
+
   updateWebSocketStatus() {
     if (!this.elements.wsStatusBadge || !this.elements.wsStatusDot || !this.elements.wsStatusLabel) return;
 
@@ -243,12 +266,45 @@ class SettingsManager {
     badge.classList.remove('connected', 'connecting', 'error');
     dot.classList.remove('pulse');
 
-    if (wsEnabled) {
-      badge.classList.add('connected');
-      label.textContent = '已连接';
-    } else {
+    if (!wsEnabled) {
       label.textContent = '未连接';
+      return;
     }
+
+    switch (this.wsRealStatus) {
+      case 'connected':
+        badge.classList.add('connected');
+        label.textContent = '已连接';
+        break;
+      case 'connecting':
+      case 'reconnecting':
+        badge.classList.add('connecting');
+        dot.classList.add('pulse');
+        label.textContent = '连接中...';
+        break;
+      case 'error':
+        badge.classList.add('error');
+        label.textContent = '连接失败';
+        this.tryRetry();
+        break;
+      default:
+        badge.classList.add('error');
+        label.textContent = '未连接';
+        this.tryRetry();
+    }
+  }
+
+  tryRetry() {
+    if (this.retryCount >= this.maxRetries) {
+      console.log('[SettingsManager] 已达最大重试次数');
+      return;
+    }
+    this.retryCount++;
+    const delay = Math.min(2000 * this.retryCount, 10000);
+    console.log(`[SettingsManager] ${delay}ms 后重试 (${this.retryCount}/${this.maxRetries})`);
+    setTimeout(() => {
+      this.sendMessage({ action: 'reconnectWebSocket' });
+    }, delay);
   }
 
   showToast(message, type = 'success') {

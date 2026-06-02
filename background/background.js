@@ -2164,8 +2164,28 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
 
     case 'updateSettings':
-      StorageManager.saveSettings(request.settings)
-        .then(() => sendResponse({ success: true }));
+      (async () => {
+        try {
+          const oldSettings = await StorageManager.getSettings();
+          await StorageManager.saveSettings(request.settings);
+
+          // 处理 WebSocket 连接
+          if (wsManager) {
+            if (request.settings.wsEnabled && !oldSettings.wsEnabled) {
+              wsManager.connect(request.settings.wsUrl);
+            } else if (!request.settings.wsEnabled && oldSettings.wsEnabled) {
+              wsManager.disconnect();
+            } else if (request.settings.wsUrl !== oldSettings.wsUrl && request.settings.wsEnabled) {
+              wsManager.disconnect();
+              setTimeout(() => wsManager.connect(request.settings.wsUrl), 500);
+            }
+          }
+
+          sendResponse({ success: true });
+        } catch (error) {
+          sendResponse({ error: error.message });
+        }
+      })();
       return true;
 
     case 'activatePlatformTab':
@@ -2177,6 +2197,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case 'getSettings':
       StorageManager.getSettings().then(sendResponse);
       return true;
+
+    case 'getWSStatus':
+      sendResponse({
+        connected: wsManager ? wsManager.connected : false,
+        status: wsManager ? (wsManager.connected ? 'connected' : 'disconnected') : 'disabled'
+      });
+      return false;
 
     // ========== 新架构：提示词管理 ==========
     case 'getPrompts':
