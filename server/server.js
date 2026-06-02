@@ -2,23 +2,23 @@ const WebSocket = require('ws');
 const config = require('./config');
 const MessageRouter = require('./message-router');
 const OpenAIAPIServer = require('./openai-api-server');
+const WSManagerHandler = require('./ws-manager-handler');
 
 const messageRouter = new MessageRouter();
 const apiServer = new OpenAIAPIServer(messageRouter);
+const managerHandler = new WSManagerHandler(messageRouter);
 
 const PORT = config.wsPort;
 const wss = new WebSocket.Server({ port: PORT });
 
 console.log(`WebSocket服务器运行在 ws://localhost:${PORT}`);
 
-// 存储所有连接的客户端
-const clients = new Set();
-
 wss.on('connection', (ws, req) => {
   const clientId = req.socket.remoteAddress;
   console.log(`新客户端连接: ${clientId}`);
-  
+
   messageRouter.registerWebSocketClient(ws);
+  managerHandler.registerClient(ws);
 
   ws.send(JSON.stringify({
     type: 'connected',
@@ -33,6 +33,11 @@ wss.on('connection', (ws, req) => {
 
       if (data.type === 'chat_request') {
         console.log('  聊天请求:', data.model);
+        return;
+      }
+
+      if (data.type === 'manager_response') {
+        messageRouter.handleManagerResponse(data);
         return;
       }
 
@@ -59,7 +64,7 @@ wss.on('connection', (ws, req) => {
           break;
 
         default:
-          console.log('  未知消息类型:', data.type);
+          console.log('  消息类型:', data.type);
       }
     } catch (error) {
       console.error('解析消息失败:', error);
@@ -68,18 +73,16 @@ wss.on('connection', (ws, req) => {
 
   ws.on('close', () => {
     console.log(`客户端断开连接: ${clientId}`);
-    clients.delete(ws);
   });
 
   ws.on('error', (error) => {
     console.error(`客户端错误: ${clientId}`, error);
-    clients.delete(ws);
   });
 });
 
 // 广播消息给其他客户端
 function broadcastToOthers(sender, message) {
-  clients.forEach(client => {
+  messageRouter.wsClients.forEach(client => {
     if (client !== sender && client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify(message));
     }
@@ -88,7 +91,7 @@ function broadcastToOthers(sender, message) {
 
 // 广播消息给所有客户端
 function broadcastToAll(message) {
-  clients.forEach(client => {
+  messageRouter.wsClients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify(message));
     }
@@ -104,6 +107,7 @@ async function startServers() {
     console.log('=================================');
     console.log(`📡 WebSocket 服务器: ws://localhost:${config.wsPort}`);
     console.log(`🌐 OpenAI API 端点: http://localhost:${config.port}/v1`);
+    console.log(`🔧 MCP 端点: http://localhost:${config.port}/mcp`);
     console.log(`📚 快速开始指南: 查看 QUICKSTART.md`);
     console.log('=================================');
     console.log('');

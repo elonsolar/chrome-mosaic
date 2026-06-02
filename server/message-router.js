@@ -5,6 +5,7 @@ class MessageRouter {
   constructor() {
     this.pendingRequests = new Map();
     this.wsClients = new Set();
+    this.pendingManagerRequests = new Map();
   }
 
   registerWebSocketClient(ws) {
@@ -77,6 +78,11 @@ class MessageRouter {
         request.reject(new Error('WebSocket client disconnected'));
         this.pendingRequests.delete(requestId);
       }
+    }
+    // 同时清理管理请求
+    for (const [requestId, request] of this.pendingManagerRequests.entries()) {
+      request.reject(new Error('WebSocket client disconnected'));
+      this.pendingManagerRequests.delete(requestId);
     }
   }
 
@@ -151,6 +157,72 @@ class MessageRouter {
 
   getPendingRequestsCount() {
     return this.pendingRequests.size;
+  }
+
+  /**
+   * 发送管理消息到Chrome插件并等待响应
+   */
+  sendManagerMessage(requestData) {
+    return new Promise((resolve, reject) => {
+      const { requestId, type, data, timeout = 30000 } = requestData;
+
+      if (this.wsClients.size === 0) {
+        return reject(new Error('No WebSocket clients connected'));
+      }
+
+      const message = {
+        type: 'manager_request',
+        requestId,
+        action: type,
+        data,
+        timestamp: Date.now()
+      };
+
+      let clientSent = false;
+
+      for (const ws of this.wsClients) {
+        if (ws.readyState === 1) {
+          ws.send(JSON.stringify(message));
+          clientSent = true;
+          break;
+        }
+      }
+
+      if (!clientSent) {
+        return reject(new Error('No active WebSocket clients available'));
+      }
+
+      const timer = setTimeout(() => {
+        this.pendingManagerRequests.delete(requestId);
+        reject(new Error('Manager request timeout'));
+      }, timeout);
+
+      this.pendingManagerRequests.set(requestId, {
+        resolve: (response) => {
+          clearTimeout(timer);
+          resolve(response);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+        timestamp: Date.now()
+      });
+    });
+  }
+
+  /**
+   * 处理来自Chrome插件的管理响应
+   */
+  handleManagerResponse(message) {
+    const { requestId } = message;
+    if (!requestId) return;
+
+    const pending = this.pendingManagerRequests.get(requestId);
+    if (pending) {
+      pending.resolve(message.data || message);
+      this.pendingManagerRequests.delete(requestId);
+    }
   }
 }
 

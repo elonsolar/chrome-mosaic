@@ -85,13 +85,17 @@ class PromptManager {
    * 搜索提示词
    */
   async searchPrompts(keyword) {
+    if (!keyword) {
+      return [];
+    }
+    
     const prompts = await this.getPrompts();
     const lowerKeyword = keyword.toLowerCase();
 
     return prompts.filter(p =>
       p.name.toLowerCase().includes(lowerKeyword) ||
       p.content.toLowerCase().includes(lowerKeyword) ||
-      p.description.toLowerCase().includes(lowerKeyword)
+      (p.description && p.description.toLowerCase().includes(lowerKeyword))
     );
   }
 

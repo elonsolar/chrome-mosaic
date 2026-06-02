@@ -14,7 +14,6 @@ class FlowExecutor {
       throw new Error('流程没有节点');
     }
 
-    // 统一连接格式：支持 edges/connections，支持 source/target 和 from/to
     const rawConnections = flow.connections || flow.edges || [];
     flow.connections = rawConnections.map(conn => ({
       id: conn.id,
@@ -45,11 +44,104 @@ class FlowExecutor {
           totalDuration: finalResult?.metadata?.totalDuration || 0
         }
       };
+    } catch (error) {
+      console.error('[FlowExecutor] 流程执行出错:', error.message);
+
+      if (error.resumeInfo) {
+        return {
+          success: false,
+          content: '',
+          error: error.message,
+          canResume: true,
+          resumeInfo: {
+            flow: { nodes: flow.nodes, connections: flow.connections },
+            userInput,
+            context: {
+              startNodeInputs: context.startNodeInputs,
+              conversationId: context.conversationId,
+              memberId: context.memberId
+            },
+            completedNodeIds: error.resumeInfo.completedNodeIds,
+            executionContextSnapshot: error.resumeInfo.executionContextSnapshot,
+            nodeResultsSnapshot: error.resumeInfo.nodeResultsSnapshot,
+            failedNodeId: error.resumeInfo.failedNodeId,
+            failedNodeName: error.resumeInfo.failedNodeName,
+            errorMessage: error.resumeInfo.errorMessage
+          }
+        };
+      }
+
+      throw error;
     } finally {
       console.log('[FlowExecutor] 流程执行结束，清理资源');
       await sessionPool.cleanup();
-      this.pendingExecutions?.clear();
-      this.nodeResults?.clear();
+    }
+  }
+
+  async resumeFlow(resumeState) {
+    const { flow, userInput, context, completedNodeIds, executionContextSnapshot, nodeResultsSnapshot, failedNodeId, failedNodeName, errorMessage } = resumeState;
+
+    console.log('[FlowExecutor] ========== 恢复执行流程 ==========');
+    console.log('[FlowExecutor] 已完成节点:', completedNodeIds);
+    console.log('[FlowExecutor] 失败节点:', failedNodeId);
+
+    const rawConnections = flow.connections || flow.edges || [];
+    flow.connections = rawConnections.map(conn => ({
+      id: conn.id,
+      from: conn.from || conn.source,
+      to: conn.to || conn.target
+    }));
+
+    const sessionPool = new TemporarySessionPool(this.conversationManager);
+    const executionGraph = this.buildExecutionGraph(flow);
+    const onProgress = context.onProgress || null;
+
+    try {
+      const finalResult = await this.executeGraph(executionGraph, userInput, context, sessionPool, flow, {
+        completedNodeIds: new Set(completedNodeIds),
+        executionContextSnapshot: new Map(Object.entries(executionContextSnapshot || {})),
+        nodeResultsSnapshot: nodeResultsSnapshot || {},
+        failedNodeId
+      });
+
+      console.log('[FlowExecutor] ========== 流程恢复执行完成 ==========');
+      return {
+        success: true,
+        content: finalResult ? finalResult.content : '',
+        nodeResults: finalResult?.nodeResults || [],
+        metadata: {
+          totalNodes: executionGraph.nodes.size,
+          totalDuration: finalResult?.metadata?.totalDuration || 0
+        }
+      };
+    } catch (error) {
+      console.error('[FlowExecutor] 流程恢复执行出错:', error.message);
+      if (error.resumeInfo) {
+        return {
+          success: false,
+          content: '',
+          error: error.message,
+          canResume: true,
+          resumeInfo: {
+            flow: { nodes: flow.nodes, connections: flow.connections },
+            userInput,
+            context: {
+              startNodeInputs: context.startNodeInputs,
+              conversationId: context.conversationId,
+              memberId: context.memberId
+            },
+            completedNodeIds: error.resumeInfo.completedNodeIds,
+            executionContextSnapshot: error.resumeInfo.executionContextSnapshot,
+            nodeResultsSnapshot: error.resumeInfo.nodeResultsSnapshot,
+            failedNodeId: error.resumeInfo.failedNodeId,
+            failedNodeName: error.resumeInfo.failedNodeName,
+            errorMessage: error.resumeInfo.errorMessage
+          }
+        };
+      }
+      throw error;
+    } finally {
+      await sessionPool.cleanup();
     }
   }
 
@@ -101,7 +193,7 @@ class FlowExecutor {
     };
   }
 
-  async executeGraph(graph, userInput, context, sessionPool, flow) {
+  async executeGraph(graph, userInput, context, sessionPool, flow, resumeState = null) {
     const { nodes, outgoingConnections, incomingConnections, startNode } = graph;
     const nodeResults = new Map();
     const pendingExecutions = new Map();
@@ -110,10 +202,17 @@ class FlowExecutor {
     let executionOrder = 0;
     const startTime = Date.now();
 
-    // Create execution context for variable references
     const executionContext = new Map();
 
-    // Initialize from start node outputs
+    if (resumeState?.executionContextSnapshot) {
+      const snapshot = resumeState.executionContextSnapshot instanceof Map
+        ? resumeState.executionContextSnapshot
+        : Object.entries(resumeState.executionContextSnapshot);
+      for (const [k, v] of snapshot) {
+        executionContext.set(k, v);
+      }
+    }
+
     const startNodeData = nodes.get(startNode.id);
     console.log('[FlowExecutor] 开始节点:', startNode.id, '数据:', startNodeData);
     if (startNodeData && startNodeData.data?.outputs) {
@@ -126,8 +225,70 @@ class FlowExecutor {
       });
     }
 
+    const completedNodeIds = resumeState ? new Set(resumeState.completedNodeIds || []) : new Set();
+
+    if (resumeState?.nodeResultsSnapshot) {
+      for (const [id, result] of Object.entries(resumeState.nodeResultsSnapshot)) {
+        nodeResults.set(id, result);
+      }
+    }
+
+    const _buildResumeInfo = (failedNodeId, failedNodeName, errorMessage) => {
+      const contextSnapshot = {};
+      for (const [k, v] of executionContext) {
+        contextSnapshot[k] = v;
+      }
+      const completedIds = [];
+      for (const id of nodeResults.keys()) {
+        if (id !== failedNodeId) completedIds.push(id);
+      }
+      for (const id of completedNodeIds) {
+        if (!completedIds.includes(id) && id !== failedNodeId) completedIds.push(id);
+      }
+      const nodeResultsSnapshot = {};
+      for (const [id, result] of nodeResults) {
+        if (id !== failedNodeId) {
+          nodeResultsSnapshot[id] = { success: result.success, content: result.content, timestamp: result.timestamp };
+        }
+      }
+      return {
+        completedNodeIds: completedIds,
+        executionContextSnapshot: contextSnapshot,
+        nodeResultsSnapshot,
+        failedNodeId,
+        failedNodeName,
+        errorMessage
+      };
+    };
+
     const executeNode = async (nodeId, input) => {
       console.log('[FlowExecutor] executeNode 被调用, nodeId:', nodeId, 'input:', input?.substring(0, 50));
+
+      if (completedNodeIds.has(nodeId) && nodeResults.has(nodeId)) {
+        console.log('[FlowExecutor] 跳过已完成节点:', nodeId);
+        const cachedResult = nodeResults.get(nodeId);
+        // 跳过已完成节点，但仍需继续执行下游节点
+        const connections = flow.connections || [];
+        const outgoing = connections.filter(c => (c.from || c.source) === nodeId);
+
+        if (outgoing.length === 0) {
+          console.log('[FlowExecutor] 已完成节点是终点:', nodeId);
+          return cachedResult;
+        }
+
+        if (outgoing.length > 1) {
+          console.log(`[FlowExecutor] 已完成节点并行执行 ${outgoing.length} 个子节点`);
+          const settled = await Promise.allSettled(
+            outgoing.map(conn => executeNode((conn.to || conn.target), cachedResult.content))
+          );
+          const failedBranch = settled.find(s => s.status === 'rejected');
+          if (failedBranch) throw failedBranch.reason;
+          return { success: true, content: cachedResult.content, branches: settled.map(s => s.value), metadata: { parallel: true } };
+        } else {
+          console.log('[FlowExecutor] 已完成节点串行执行子节点');
+          return await executeNode((outgoing[0].to || outgoing[0].target), cachedResult.content);
+        }
+      }
 
       if (pendingExecutions.has(nodeId)) {
         return await pendingExecutions.get(nodeId);
@@ -137,13 +298,11 @@ class FlowExecutor {
         return nodeResults.get(nodeId);
       }
 
-      // Phase 1: Node execution only — save result + executionContext
       const executionPromise = (async () => {
         const nodeStartTime = Date.now();
         const node = nodes.get(nodeId);
         console.log('[FlowExecutor] 执行节点:', node.name || node.data?.title || nodeId, '类型:', node.type);
 
-        // 节点开始执行时发送进度通知
         if (context.onProgress) {
           context.onProgress({
             current: executionOrder,
@@ -155,7 +314,6 @@ class FlowExecutor {
           });
         }
 
-        // 汇聚节点等待所有上游节点执行完成，确保 executionContext 有值
         const incomingConns = incomingConnections.get(nodeId) || [];
         if (incomingConns.length > 1) {
           console.log(`[FlowExecutor] 节点 ${node.name || nodeId} 是汇聚节点，等待 ${incomingConns.length} 个上游节点`);
@@ -172,23 +330,23 @@ class FlowExecutor {
 
         let result;
         switch (node.type) {
-          case '1':  // Start
-          case '2':  // End
+          case '1':
+          case '2':
             console.log('[FlowExecutor] 执行开始/结束节点');
             result = { success: true, content: input, timestamp: Date.now() };
             break;
 
-          case '3':  // LLM
+          case '3':
             console.log('[FlowExecutor] 执行LLM节点');
             result = await this.executeLLMNode(node, input, sessionPool, context, executionContext);
             break;
 
-          case '45':  // Http
+          case '45':
             console.log('[FlowExecutor] 执行HTTP节点');
             result = await this.executeHttpNode(node, input);
             break;
 
-          case '5':  // Code
+          case '5':
             console.log('[FlowExecutor] 执行代码节点');
             result = await this.executeCodeNode(node, input);
             break;
@@ -205,7 +363,6 @@ class FlowExecutor {
 
         nodeResults.set(nodeId, result);
 
-        // Save node outputs to execution context for variable resolution
         if (result.success && node.data?.outputs && node.type !== '1' && node.type !== '2') {
           node.data.outputs.forEach(output => {
             const contextKey = `${node.id}.${output.name}`;
@@ -233,13 +390,16 @@ class FlowExecutor {
             nodeName: detail.nodeName,
             nodeId,
             duration: nodeDuration,
-            status: 'completed'  // 添加完成状态
+            status: 'completed'
           });
         }
 
         if (!result.success) {
-          const error = new Error(`节点 ${detail.nodeName} 执行失败: ${result.error || result.content || '未知错误'}`);
-          console.error('[FlowExecutor]', error.message);
+          const errorMsg = `节点 ${detail.nodeName} 执行失败: ${result.error || result.content || '未知错误'}`;
+          console.error('[FlowExecutor]', errorMsg);
+          const resumeInfo = _buildResumeInfo(nodeId, detail.nodeName, errorMsg);
+          const error = new Error(errorMsg);
+          error.resumeInfo = resumeInfo;
           throw error;
         }
 
@@ -248,12 +408,8 @@ class FlowExecutor {
 
       pendingExecutions.set(nodeId, executionPromise);
 
-      // Await node execution (result + executionContext ready), THEN handle outgoing
-      // 拆分原因：汇聚节点等待上游时，等待 pendingExecutions 只等执行完毕，
-      // 不会等到上游处理下游连接，避免死锁
       const result = await executionPromise;
 
-      // Phase 2: Handle outgoing connections - 照抄 FlowRunner 逻辑
       try {
         const connections = flow.connections || [];
         const outgoing = connections.filter(c => (c.from || c.source) === nodeId);
@@ -271,10 +427,16 @@ class FlowExecutor {
         if (outgoing.length > 1) {
           console.log(`[FlowExecutor] 并行执行 ${outgoing.length} 个子节点`);
 
-          const branchResults = await Promise.all(
+          const settled = await Promise.allSettled(
             outgoing.map(conn => executeNode((conn.to || conn.target), result.content))
           );
 
+          const failedBranch = settled.find(s => s.status === 'rejected');
+          if (failedBranch) {
+            throw failedBranch.reason;
+          }
+
+          const branchResults = settled.map(s => s.value);
           return {
             success: true,
             content: result.content,
@@ -375,17 +537,24 @@ class FlowExecutor {
     console.log('[FlowExecutor] 执行LLM节点:', node.name || node.data?.title, '节点ID:', node.id);
 
     const storedModel = node.data?.model;
-    const modelId = storedModel?.modelId || storedModel?.id;
+    let modelId = storedModel?.modelId || storedModel?.id;
+
     if (!modelId) {
-      return {
-        success: false,
-        content: '',
-        error: 'LLM 节点未配置模型',
-        timestamp: Date.now()
-      };
+      const allModels = await this.platformManager.getAllModels();
+      const available = allModels.filter(m => m.enabled !== false);
+      if (available.length === 0) {
+        return {
+          success: false,
+          content: '',
+          error: 'LLM 节点未配置模型，且没有可用的模型',
+          timestamp: Date.now()
+        };
+      }
+      const fallback = available[0];
+      modelId = fallback.id;
+      console.log('[FlowExecutor] LLM节点未配置模型，自动使用:', fallback.code, '(' + fallback.platformName + ')');
     }
 
-    // 实时查找最新模型配置
     const model = await this.platformManager.getModelById(modelId);
     if (!model) {
       return {
@@ -454,9 +623,19 @@ class FlowExecutor {
         memberId: context?.memberId
       });
 
+      // 删除网页平台的会话并关闭标签页
+      if (response.conversationUrl && this.tabManager) {
+        console.log('[FlowExecutor] 删除LLM节点会话:', response.conversationUrl);
+        // 先删除会话，再关闭标签页
+        await this.deletePlatformConversation(response.conversationUrl).catch(err => {
+          console.warn('[FlowExecutor] 删除会话失败:', err.message);
+        });
+      }
+
       return {
         success: true,
         content: response.content,
+        conversationUrl: response.conversationUrl,
         timestamp: Date.now()
       };
     } catch (error) {
@@ -467,6 +646,55 @@ class FlowExecutor {
         error: error.message,
         timestamp: Date.now()
       };
+    }
+  }
+
+  async deletePlatformConversation(conversationUrl) {
+    try {
+      const tab = await this.tabManager.openPlatformTab(conversationUrl, false);
+      
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      let pingSuccess = false;
+      for (let i = 0; i < 5; i++) {
+        try {
+          const pingResponse = await chrome.tabs.sendMessage(tab.id, { type: 'ping' });
+          if (pingResponse && pingResponse.status === 'ok') {
+            pingSuccess = true;
+            break;
+          }
+        } catch (pingError) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
+
+      if (!pingSuccess) {
+        throw new Error('Content Script未就绪');
+      }
+
+      // 发送删除会话消息
+      const response = await chrome.tabs.sendMessage(tab.id, {
+        type: 'deleteConversation',
+        conversationUrl: conversationUrl
+      });
+
+      if (!response || !response.success) {
+        throw new Error(response?.error || '删除失败');
+      }
+
+      console.log(`[FlowExecutor] 平台会话删除成功`);
+
+      try {
+        await chrome.tabs.remove(tab.id);
+        console.log(`[FlowExecutor] 已关闭删除操作标签页`);
+      } catch (closeError) {
+        console.warn(`[FlowExecutor] 关闭标签页失败（可能已被用户关闭）:`, closeError.message);
+      }
+
+      return true;
+    } catch (error) {
+      console.error('[FlowExecutor] 删除平台会话失败:', error);
+      return false;
     }
   }
 
@@ -606,6 +834,19 @@ class FlowExecutor {
   }
 
   transformToTestResult(result, flowData) {
+    if (!result.success && result.canResume) {
+      return {
+        success: false,
+        finalOutput: '',
+        error: result.error,
+        canResume: true,
+        resumeInfo: result.resumeInfo,
+        nodeResults: [],
+        executionContext: {},
+        executionLog: []
+      };
+    }
+
     const endNode = flowData.nodes.find(n => n.type === '2');
     let finalOutput = result.content || '';
 

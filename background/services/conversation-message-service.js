@@ -5,7 +5,8 @@ class ConversationMessageService {
     progressTracker,
     progressNotifier,
     floatWindowService,
-    tabManager
+    tabManager,
+    senderFactory
   ) {
     this.conversationManager = conversationManager;
     this.entityFactory = entityFactory;
@@ -13,6 +14,7 @@ class ConversationMessageService {
     this.progressNotifier = progressNotifier;
     this.floatWindowService = floatWindowService;
     this.tabManager = tabManager;
+    this.senderFactory = senderFactory;
     
     // 会话Worker管理
     this.workers = new Map(); // conversationId -> ConversationWorker
@@ -58,6 +60,9 @@ class ConversationMessageService {
     const userMsg = await this.conversationManager.addMessage(conversationId, null, userMessage, MessageType.USER);
     context.conversation.messages.push(userMsg);
 
+    // 异步生成标题（不阻塞主流程）
+    this._maybeGenerateTitle(conversationId, conversation, userMessage);
+
     const entities = await this.entityFactory.createEntitiesFromConversation(conversation);
     entities.forEach(entity => entity.setProgressTracker(this.progressTracker));
 
@@ -67,15 +72,28 @@ class ConversationMessageService {
       this.progressNotifier.notify(conversationId, progress);
     });
 
+    // 构建输入：如果有历史摘要，放在用户输入前面
+    let fullInput = userMessage;
+    if (conversation.expertSummary && !conversation.expertSummaryFailed) {
+      fullInput = this._formatSummary(conversation.expertSummary) + '\n\n' + userMessage;
+    }
+
     try {
       const results = [];
       for (const entity of entities) {
         try {
-          const result = await entity.execute(userMessage, context);
+          const result = await entity.execute(fullInput, context);
           results.push({ status: 'fulfilled', value: result });
 
           if (result.success && result.content) {
             const entityId = result.expertId;
+            
+            // 保存 conversationUrl 到 context
+            if (result.conversationUrl) {
+              context.setMemberUrl(entityId, result.conversationUrl);
+              console.log('[ConversationMessageService] 保存专家URL:', entityId, result.conversationUrl);
+            }
+            
             const message = await this.conversationManager.addMessage(
               context.conversationId,
               entityId,
@@ -89,11 +107,45 @@ class ConversationMessageService {
                 memberLastMessageIds: context.memberLastMessageIds
               });
             }
+
+            // 关闭 web 模型的标签页
+            await this._closePlatformTab(entityId, context);
+
+            // 异步生成摘要（不阻塞主流程）
+            if (this._updateExpertSummaryAsync) {
+              this._updateExpertSummaryAsync(
+                conversationId,
+                userMessage,
+                result.content,
+                conversation.expertSummary,
+                conversation.expertSummaryFailed,
+                conversation.summaryConversationUrl
+              ).catch(err => console.error('[ConversationMessageService] 摘要更新异常:', err));
+            }
           }
         } catch (error) {
           console.error('[ConversationMessageService] 专家执行异常:', error);
           results.push({ status: 'rejected', reason: error });
         }
+      }
+
+      const failedResult = results.find(r => r.status === 'fulfilled' && r.value?.canResume);
+      if (failedResult) {
+        const { resumeInfo, error: errorMsg, expertName } = failedResult.value;
+        console.log('[ConversationMessageService] 专家执行可恢复失败:', errorMsg);
+
+        await this.conversationManager.updateConversation(conversationId, {
+          pendingResume: resumeInfo
+        });
+
+        chrome.runtime.sendMessage({
+          type: 'flowExecutionError',
+          conversationId,
+          error: errorMsg,
+          canResume: true,
+          failedNodeName: resumeInfo.failedNodeName,
+          completedNodeIds: resumeInfo.completedNodeIds
+        }).catch(() => {});
       }
 
       await this._updateConversationContext(conversationId, context);
@@ -102,6 +154,291 @@ class ConversationMessageService {
       return await this.conversationManager.getConversation(conversationId);
     } finally {
       unsubscribe();
+    }
+  }
+
+  async _updateExpertSummaryAsync(conversationId, userMessage, assistantReply, oldSummary, expertSummaryFailed, summaryConversationUrl) {
+    // 如果已经失败，跳过
+    if (expertSummaryFailed) {
+      console.log('[ConversationMessageService] 摘要生成已标记为失败，跳过');
+      return;
+    }
+
+    try {
+      // 获取 helperModel 配置
+      const settings = await StorageManager.getSettings();
+      const helperModelId = settings.helperModel;
+      
+      console.log('[ConversationMessageService] 摘要生成 - helperModelId:', helperModelId);
+      
+      if (!helperModelId) {
+        console.warn('[ConversationMessageService] 未配置辅助模型，跳过摘要生成');
+        return;
+      }
+
+      const helperModel = await platformManager.getModelById(helperModelId);
+      console.log('[ConversationMessageService] 摘要生成 - helperModel:', helperModel?.code, helperModel?.platformName);
+      
+      if (!helperModel) {
+        console.warn('[ConversationMessageService] 辅助模型不存在，跳过摘要生成');
+        return;
+      }
+
+      // 生成摘要
+      console.log('[ConversationMessageService] 开始生成摘要...', { summaryConversationUrl });
+      const result = await this._generateExpertSummary(
+        userMessage, 
+        assistantReply, 
+        oldSummary, 
+        helperModel,
+        summaryConversationUrl
+      );
+
+      console.log('[ConversationMessageService] 摘要生成结果:', result.summary ? '成功' : '失败');
+
+      if (result.summary) {
+        // 成功：更新摘要和会话 URL
+        await this.conversationManager.updateConversation(conversationId, {
+          expertSummary: result.summary,
+          expertSummaryUpdatedAt: Date.now(),
+          expertSummaryFailed: false,
+          summaryConversationUrl: result.conversationUrl
+        });
+        console.log('[ConversationMessageService] 摘要已更新');
+      } else {
+        // 失败：标记失败，发送提示
+        await this.conversationManager.updateConversation(conversationId, {
+          expertSummaryFailed: true
+        });
+        console.warn('[ConversationMessageService] 摘要生成失败，已标记为失败');
+        
+        // 发送"去登陆"提示
+        if (this.floatWindowService) {
+          await this.floatWindowService.addMessage({
+            role: '系统',
+            content: '⚠️ 摘要生成失败，可能是网页模型未登录。请点击"去登陆"按钮登录后重试。',
+            isUser: false,
+            isError: false
+          });
+        }
+      }
+    } catch (error) {
+      console.error('[ConversationMessageService] 摘要更新异常:', error);
+    }
+  }
+
+  async _generateExpertSummary(userMessage, assistantReply, oldSummary, model, summaryConversationUrl) {
+    let prompt;
+    
+    if (!summaryConversationUrl) {
+      // 第一次：发送系统提示词 + 问题 + 答案
+      prompt = `你是摘要助手，每次接收新问题和答案，生成新的摘要。
+
+格式要求：
+之前讨论了：[一句话总结]
+关键信息：[关键点1, 关键点2]
+
+要求：
+1. 一句话总结之前讨论的内容
+2. 列出关键信息点
+3. 长度控制在300字以内
+4. 用于下一轮对话的上下文参考
+
+用户问题：${userMessage}
+
+AI回答：${assistantReply}
+
+请直接输出摘要内容，不要添加任何前缀或解释：`;
+    } else {
+      // 后续：只发送 问题 + 答案
+      prompt = `用户问题：${userMessage}
+
+AI回答：${assistantReply}
+
+请结合历史对话，生成新的摘要（格式：之前讨论了：... 关键信息：...）：`;
+    }
+
+    const sender = this.senderFactory?.getSender(model.accessMethod || 'web');
+    
+    if (!sender) {
+      console.error('[ConversationMessageService] 无法获取发送器');
+      return { summary: null, conversationUrl: null };
+    }
+
+    // 设置超时（60秒）
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('摘要生成超时')), 60000);
+    });
+
+    try {
+      const result = await Promise.race([
+        sender.send(prompt, {
+          ...model,
+          conversationUrl: summaryConversationUrl || undefined
+        }),
+        timeoutPromise
+      ]);
+
+      if (result && result.content) {
+        // 截断过长的摘要
+        const summary = result.content.substring(0, 300);
+        return { 
+          summary, 
+          conversationUrl: result.conversationUrl || summaryConversationUrl 
+        };
+      }
+      return { summary: null, conversationUrl: null };
+    } catch (error) {
+      console.error('[ConversationMessageService] 摘要生成错误:', error.message);
+      return { summary: null, conversationUrl: null };
+    }
+  }
+
+  _formatSummary(summary) {
+    return `<summary>
+# 专家会话历史摘要
+
+提示：这是历史摘要，可能不一定和当前任务相关
+
+---
+
+${summary}
+</summary>`;
+  }
+
+  async _maybeGenerateTitle(conversationId, conversation, userMessage) {
+    // 只有默认标题才自动生成
+    if (!conversation.nameIsDefault) {
+      return;
+    }
+
+    // 异步执行，不阻塞主流程
+    this._generateTitle(conversationId, userMessage).catch(err => {
+      console.error('[ConversationMessageService] 标题生成异常:', err);
+    });
+  }
+
+  async _generateTitle(conversationId, userMessage) {
+    let conversationUrl = null;
+    try {
+      const settings = await StorageManager.getSettings();
+      const helperModelId = settings.helperModel;
+
+      if (!helperModelId) {
+        console.warn('[ConversationMessageService] 未配置辅助模型，跳过标题生成');
+        return;
+      }
+
+      const helperModel = await platformManager.getModelById(helperModelId);
+      if (!helperModel) {
+        console.warn('[ConversationMessageService] 辅助模型不存在，跳过标题生成');
+        return;
+      }
+
+      const sender = this.senderFactory?.getSender(helperModel.accessMethod || 'web');
+      if (!sender) {
+        console.error('[ConversationMessageService] 无法获取发送器');
+        return;
+      }
+
+      const prompt = `You are a title generator. Generate a short, concise title (max 20 characters) for the following message. Output ONLY the title, nothing else.
+
+Message: ${userMessage}`;
+
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('标题生成超时')), 30000);
+      });
+
+      const result = await Promise.race([
+        sender.send(prompt, helperModel),
+        timeoutPromise
+      ]);
+
+      // 记录会话URL，用于后续关闭标签页
+      if (result && result.conversationUrl) {
+        conversationUrl = result.conversationUrl;
+      }
+
+      if (result && result.content) {
+        let title = result.content.trim();
+        // 去除可能的引号
+        title = title.replace(/^["'"「「【【]|["'"」」】】]$/g, '');
+        // 限制长度
+        if (title.length > 30) {
+          title = title.substring(0, 30) + '...';
+        }
+
+        if (title) {
+          // 检查是否仍然是默认标题（防止并发修改）
+          const conversation = await this.conversationManager.getConversation(conversationId);
+          if (conversation && conversation.nameIsDefault) {
+            await this.conversationManager.updateConversation(conversationId, {
+              name: title,
+              nameIsDefault: false
+            });
+            console.log('[ConversationMessageService] 标题已生成:', title);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[ConversationMessageService] 标题生成失败:', error.message);
+    } finally {
+      // 删除平台会话并关闭标签页（仅 web 模型）
+      if (conversationUrl && this.tabManager) {
+        try {
+          await this._deletePlatformConversation(conversationUrl);
+          console.log('[ConversationMessageService] 标题生成平台会话已删除:', conversationUrl);
+        } catch (e) {
+          console.warn('[ConversationMessageService] 删除标题生成平台会话失败:', e.message);
+        }
+      }
+    }
+  }
+
+  async _deletePlatformConversation(conversationUrl) {
+    try {
+      const tab = await this.tabManager.openPlatformTab(conversationUrl, false);
+      
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      let pingSuccess = false;
+      for (let i = 0; i < 5; i++) {
+        try {
+          const pingResponse = await chrome.tabs.sendMessage(tab.id, { type: 'ping' });
+          if (pingResponse && pingResponse.status === 'ok') {
+            pingSuccess = true;
+            break;
+          }
+        } catch (pingError) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
+
+      if (!pingSuccess) {
+        throw new Error('Content Script未就绪');
+      }
+
+      // 发送删除会话消息
+      const response = await chrome.tabs.sendMessage(tab.id, {
+        type: 'deleteConversation',
+        conversationUrl: conversationUrl
+      });
+
+      if (!response || !response.success) {
+        throw new Error(response?.error || '删除失败');
+      }
+
+      // 关闭标签页
+      try {
+        await chrome.tabs.remove(tab.id);
+      } catch (closeError) {
+        console.warn('[ConversationMessageService] 关闭标签页失败:', closeError.message);
+      }
+
+      return true;
+    } catch (error) {
+      console.error('[ConversationMessageService] 删除平台会话失败:', error);
+      throw error;
     }
   }
 
@@ -138,6 +475,9 @@ class ConversationMessageService {
     if (conversation.memberOrder) {
       worker.setMemberOrder(conversation.memberOrder);
     }
+
+    // 异步生成标题（不阻塞主流程）
+    this._maybeGenerateTitle(conversationId, conversation, userMessage);
 
     // 创建实体并添加到Worker
     const entities = await this.entityFactory.createEntitiesFromConversation(conversation);
@@ -229,12 +569,16 @@ class ConversationMessageService {
   }
 
   async _closePlatformTab(entityId, context) {
+    console.log('[ConversationMessageService] _closePlatformTab 调用:', { entityId, hasTabManager: !!this.tabManager });
+    
     if (!this.tabManager) {
       console.warn('[ConversationMessageService] tabManager 未初始化，跳过关闭标签页');
       return;
     }
 
     const url = context.getMemberUrl(entityId);
+    console.log('[ConversationMessageService] 成员URL:', { entityId, url, memberUrls: context.memberUrls });
+    
     if (!url) {
       console.log('[ConversationMessageService] 成员无平台URL，跳过关闭标签页:', entityId);
       return;

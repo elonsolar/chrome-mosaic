@@ -307,12 +307,180 @@ class WebSocketManager {
         this.handleChatRequest(message);
         break;
 
+      case 'manager_request':
+        this.handleManagerRequest(message);
+        break;
+
       case 'heartbeat':
         // 心跳消息，不需要处理
         break;
 
       default:
         console.log('[WS] 未知消息类型:', message.type);
+    }
+  }
+
+  async handleManagerRequest(message) {
+    const { requestId, action, data } = message;
+    console.log('[WS] 处理管理请求:', action, requestId);
+
+    try {
+      // 支持复合操作如 expert.update
+      const parts = action.split('.');
+      const resource = parts[0];
+      const operation = parts.slice(1).join('.');
+      let result = null;
+
+      switch (resource) {
+        case 'conversation':
+          result = await this.handleConversationManager(operation, data);
+          break;
+        case 'prompt':
+          result = await this.handlePromptManager(operation, data);
+          break;
+        case 'model':
+          result = await this.handleModelManager(operation, data);
+          break;
+        case 'expert':
+          result = await this.handleExpertManager(operation, data);
+          break;
+        case 'system':
+          result = this.handleSystemManager(operation, data);
+          break;
+        default:
+          throw new Error(`未知的资源类型: ${resource}`);
+      }
+
+      this.send({
+        type: 'manager_response',
+        requestId,
+        success: true,
+        data: result,
+        timestamp: Date.now()
+      });
+    } catch (error) {
+      console.error('[WS] 管理请求处理失败:', error);
+      this.send({
+        type: 'manager_response',
+        requestId,
+        success: false,
+        error: {
+          code: 'MANAGER_ERROR',
+          message: error.message
+        },
+        timestamp: Date.now()
+      });
+    }
+  }
+
+  async handleConversationManager(operation, data) {
+    switch (operation) {
+      case 'list':
+        return await StorageManager.getConversations();
+      case 'get':
+        return await conversationManager.getConversation(data.conversationId);
+      case 'messages':
+        const conv = await conversationManager.getConversation(data.conversationId);
+        return conv ? conv.messages : [];
+      case 'members':
+        const convMembers = await conversationManager.getConversation(data.conversationId);
+        return convMembers ? convMembers.members : [];
+      case 'create':
+        return await conversationManager.createConversation(
+          data.name,
+          data.members,
+          data.mode,
+          data.options
+        );
+      case 'update':
+        return await conversationManager.updateConversation(data.conversationId, data.updates);
+      case 'delete':
+        await conversationManager.deleteConversation(data.conversationId);
+        return { success: true };
+      case 'send':
+        return await aiMessageManager.processUserMessage(data.conversationId, data.message);
+      default:
+        throw new Error(`未知的会话操作: ${operation}`);
+    }
+  }
+
+  async handlePromptManager(operation, data) {
+    switch (operation) {
+      case 'list':
+        return await promptManager.getPrompts();
+      case 'get':
+        return await promptManager.getPromptById(data.promptId);
+      case 'create':
+        return await promptManager.createPrompt(data);
+      case 'update':
+        return await promptManager.updatePrompt(data.promptId, data);
+      case 'delete':
+        await promptManager.deletePrompt(data.promptId);
+        return { success: true };
+      case 'search':
+        return await promptManager.searchPrompts(data.keyword);
+      default:
+        throw new Error(`未知的提示词操作: ${operation}`);
+    }
+  }
+
+  async handleModelManager(operation, data) {
+    switch (operation) {
+      case 'list':
+        return await platformManager.getAllModels();
+      case 'get':
+        return await platformManager.getModelById(data.modelId);
+      case 'create':
+        return await platformManager.addModel(data.platformId, data);
+      case 'update':
+        return await platformManager.updateModel(data.platformId, data.modelId, data);
+      case 'delete':
+        await platformManager.deleteModel(data.platformId, data.modelId);
+        return { success: true };
+      case 'toggle':
+        return await platformManager.toggleModelEnabled(data.platformId, data.modelId);
+      case 'platforms':
+        return await platformManager.getPlatforms();
+      default:
+        throw new Error(`未知的模型操作: ${operation}`);
+    }
+  }
+
+  async handleExpertManager(operation, data) {
+    switch (operation) {
+      case 'list':
+        return await expertManager.getExperts();
+      case 'get':
+        return await expertManager.getExpertById(data.expertId);
+      case 'create':
+        return await expertManager.createExpert(data);
+      case 'update':
+        return await expertManager.updateExpert(data.expertId, data);
+      case 'delete':
+        await expertManager.deleteExpert(data.expertId);
+        return { success: true };
+      case 'duplicate':
+        return await expertManager.duplicateExpert(data.expertId);
+      case 'search':
+        return await expertManager.searchExperts(data.keyword);
+      default:
+        throw new Error(`未知的专家操作: ${operation}`);
+    }
+  }
+
+  handleSystemManager(operation, data) {
+    switch (operation) {
+      case 'info':
+        return {
+          version: '1.0.0',
+          timestamp: Date.now()
+        };
+      case 'heartbeat':
+        return {
+          time: new Date().toISOString()
+        };
+      default:
+        throw new Error(`未知的系统操作: ${operation}`);
     }
   }
 
@@ -458,6 +626,20 @@ class AIMessageManager {
     return await conversationMessageService.processUserMessage(conversationId, question);
   }
 
+  formatSummary(summary) {
+    if (!summary) return '';
+    
+    return `<summary>
+# 专家会话历史摘要
+
+提示：这是历史摘要，可能不一定和当前任务相关
+
+---
+
+${summary}
+</summary>`;
+  }
+
   async executeExpertQA(conversation, userMessage, useFloatWindow) {
     let flow = null;
 
@@ -489,6 +671,16 @@ class AIMessageManager {
       return;
     }
 
+    // 构建输入：如果有历史摘要，放在用户输入前面
+    let fullInput = userMessage;
+    if (conversation.expertSummary && !conversation.expertSummaryFailed) {
+      fullInput = this.formatSummary(conversation.expertSummary) + '\n\n' + userMessage;
+    }
+
+    // 获取 start 节点的输出变量名
+    const startNode = flow.nodes.find(n => n.type === '1' || n.type === 'start');
+    const startOutputName = startNode?.data?.outputs?.[0]?.name || 'user_input';
+
     if (useFloatWindow) {
       await this.sendToFloatWindow('addMessage', {
         role: '系统',
@@ -498,7 +690,10 @@ class AIMessageManager {
       });
     }
 
-    const result = await flowExecutor.executeFlow(flow, userMessage, {
+    const result = await flowExecutor.executeFlow(flow, fullInput, {
+      startNodeInputs: { [startOutputName]: fullInput },
+      conversationId: conversation.id,
+      memberId: conversation.expertId,
       onProgress: async (progress) => {
         // 发送进度到 chat 页面
         chrome.runtime.sendMessage({
@@ -538,6 +733,118 @@ class AIMessageManager {
     await this.conversationManager.updateConversation(conversation.id, {
       flowHistory: conversation.flowHistory
     });
+
+    // 异步生成摘要（不阻塞主流程）
+    this.updateExpertSummaryAsync(conversation.id, userMessage, finalContent, conversation.expertSummary, conversation.expertSummaryFailed)
+      .catch(err => console.error('[ExpertQA] 摘要更新未处理异常:', err));
+  }
+
+  async generateExpertSummary(userMessage, assistantReply, oldSummary, model) {
+    const prompt = `请根据以下信息生成简洁的对话摘要：
+
+历史摘要：${oldSummary || "无"}
+
+用户问题：${userMessage}
+
+AI回答：${assistantReply}
+
+要求：
+1. 保留关键信息（主题、结论、用户偏好）
+2. 长度控制在300字以内
+3. 用于下一轮对话的上下文参考
+4. 如果有新的关键信息，合并到历史摘要中
+
+请直接输出摘要内容，不要添加任何前缀或解释：`;
+
+    const sender = this.senderFactory.getSender(model.accessMethod || 'web');
+    
+    // 设置超时（60秒）
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('摘要生成超时')), 60000)
+    );
+    
+    try {
+      const response = await Promise.race([
+        sender.send(prompt, {
+          model: model.code,
+          baseUrl: model.baseUrl || '',
+          apiKey: model.apiKey || '',
+          webUrl: model.webUrl || ''
+        }),
+        timeoutPromise
+      ]);
+      
+      return response.content || null;
+    } catch (error) {
+      console.error('[ExpertQA] 摘要生成失败:', error.message);
+      return null;
+    }
+  }
+
+  async updateExpertSummaryAsync(conversationId, userMessage, assistantReply, oldSummary, expertSummaryFailed) {
+    // 如果已经失败，跳过
+    if (expertSummaryFailed) {
+      console.log('[ExpertQA] 摘要生成已标记为失败，跳过');
+      return;
+    }
+
+    try {
+      // 获取 helperModel 配置
+      const settings = await StorageManager.getSettings();
+      const helperModelId = settings.helperModel;
+      
+      console.log('[ExpertQA] 摘要生成 - helperModelId:', helperModelId);
+      
+      if (!helperModelId) {
+        console.warn('[ExpertQA] 未配置辅助模型，跳过摘要生成');
+        return;
+      }
+
+      const helperModel = await platformManager.getModelById(helperModelId);
+      console.log('[ExpertQA] 摘要生成 - helperModel:', helperModel?.code, helperModel?.platformName);
+      
+      if (!helperModel) {
+        console.warn('[ExpertQA] 辅助模型不存在，跳过摘要生成');
+        return;
+      }
+
+      // 生成摘要
+      console.log('[ExpertQA] 开始生成摘要...');
+      const newSummary = await this.generateExpertSummary(
+        userMessage, 
+        assistantReply, 
+        oldSummary, 
+        helperModel
+      );
+
+      console.log('[ExpertQA] 摘要生成结果:', newSummary ? '成功' : '失败');
+
+      if (newSummary) {
+        // 成功：更新摘要
+        await this.conversationManager.updateConversation(conversationId, {
+          expertSummary: newSummary,
+          expertSummaryUpdatedAt: Date.now(),
+          expertSummaryFailed: false
+        });
+        console.log('[ExpertQA] 摘要已更新');
+      } else {
+        // 失败：标记失败，发送提示
+        await this.conversationManager.updateConversation(conversationId, {
+          expertSummaryFailed: true
+        });
+        console.log('[ExpertQA] 摘要生成失败，已标记');
+
+        if (helperModel.accessMethod === 'web') {
+          await this.conversationManager.addMessage(conversationId, null, 
+            `⚠️ 摘要生成失败，请<a href="${helperModel.webUrl}" target="_blank" class="tip-link">去登陆</a>后重试`, 
+            MessageType.TIP
+          );
+        }
+      }
+    } catch (error) {
+      // 不阻塞主流程
+      console.error('[ExpertQA] 摘要生成异常:', error);
+    }
   }
 
   async sendToFloatWindow(action, data) {
@@ -677,10 +984,11 @@ class StorageManager {
   static async getSettings() {
     const result = await chrome.storage.local.get('settings');
     return result.settings || {
-      wsUrl: 'ws://localhost:8080',
+      wsUrl: 'ws://localhost:12606',
       wsEnabled: false,
       contextMode: 'self',
-      floatWindow: true
+      floatWindow: true,
+      helperModel: ''
     };
   }
 
@@ -822,9 +1130,11 @@ class ConversationManager {
       // 从 members 数组提取 ID
       const memberIds = members?.map(m => m.id) || [];
 
+      const hasCustomName = !!name;
       const newConversation = {
         id: this.generateId(),
         name: name || `会话 ${conversations.length + 1}`,
+        nameIsDefault: !hasCustomName,
         mode: mode || 'brainstorming',
         contextMode,
         sendMode,
@@ -832,6 +1142,10 @@ class ConversationManager {
         memberSettings: options.memberSettings || {},
         memberOrder: options.memberOrder || memberIds,
         expertId: options.expertId || null,
+        expertSummary: '',                    // 专家会话摘要
+        expertSummaryUpdatedAt: null,         // 摘要更新时间
+        expertSummaryFailed: false,           // 摘要生成是否失败
+        flowHistory: [],                      // 专家流程执行历史
         memberUrls: {},
         memberLastMessageIds: {},
         messages: [],
@@ -843,6 +1157,67 @@ class ConversationManager {
       await StorageManager.saveConversations(conversations);
 
       console.log('[Background] 会话创建完成，ID:', newConversation.id, '成员数:', newConversation.members?.length);
+
+      // 创建会话后立即写入成员加入 Tip 消息
+      if (members && members.length > 0) {
+        try {
+          const allPrompts = await promptManager.getPrompts();
+
+          for (const member of members) {
+            let promptInfo = '';
+            if (member.systemPrompt) {
+              const prompt = allPrompts.find(p => p.content === member.systemPrompt);
+              const promptName = prompt ? prompt.name : '自定义提示词';
+              promptInfo = `，提示词是 ${promptName}`;
+            }
+
+            let loginLink = '';
+            if (member.accessMethod === 'web' && member.webUrl) {
+              loginLink = `，<a href="${member.webUrl}" class="tip-link tip-login-link" target="_blank">去登陆</a>`;
+            }
+            const tipContent = `${member.name} 加入会话，模型是 ${member.modelCode}(${member.platformName})${promptInfo}${loginLink}，<a href="#" class="tip-link" data-member-id="${member.id}">修改成员信息</a>`;
+            await this.addMessage(newConversation.id, null, tipContent, MessageType.TIP);
+          }
+
+          if (mode === 'discussion') {
+            const roundtableTip = `你正在【圆桌讨论】模式中。所有成员共享完整的对话上下文，按顺序依次发言。使用 <code>/loop 问题 次数</code> 可发起多轮讨论。`;
+            await this.addMessage(newConversation.id, null, roundtableTip, MessageType.TIP);
+          }
+
+          console.log('[Background] 成员加入 Tip 消息已写入');
+        } catch (tipError) {
+          console.error('[Background] 写入成员加入 Tip 失败:', tipError);
+        }
+      }
+
+      // expertqa 模式的 tip 消息（独立于 members）
+      if (mode === 'expertqa') {
+        try {
+          const settings = await StorageManager.getSettings();
+          const helperModelId = settings.helperModel;
+          
+          let tipContent = '🎓 专家辅助已加入会话';
+          
+          if (helperModelId) {
+            const helperModel = await platformManager.getModelById(helperModelId);
+            if (helperModel) {
+              if (helperModel.accessMethod === 'web') {
+                tipContent += `，摘要模型是 ${helperModel.code}(${helperModel.platformName})`;
+                tipContent += `，<a href="${helperModel.webUrl}" target="_blank" class="tip-link">去登陆</a>`;
+              } else {
+                tipContent += `，摘要模型是 ${helperModel.code}(${helperModel.platformName})`;
+              }
+            }
+          } else {
+            tipContent += '，<a href="#" class="tip-link" data-action="settings">请先配置辅助模型</a>';
+          }
+          
+          await this.addMessage(newConversation.id, null, tipContent, MessageType.TIP);
+          console.log('[Background] 专家辅助 Tip 消息已写入');
+        } catch (tipError) {
+          console.error('[Background] 写入专家辅助 Tip 失败:', tipError);
+        }
+      }
 
       // 验证保存是否成功（重试机制）
       let verified = null;
@@ -878,27 +1253,33 @@ class ConversationManager {
   }
 
   async updateConversation(conversationId, updates) {
-    const conversations = await StorageManager.getConversations();
-    const conversation = conversations.find(c => c.id === conversationId);
+    return withStorageLock(async () => {
+      const conversations = await StorageManager.getConversations();
+      const conversation = conversations.find(c => c.id === conversationId);
 
-    if (conversation) {
-      if (updates.mode) {
-        const modeToContextMode = {
-          brainstorming: 'self',
-          discussion: 'full',
-          expertqa: 'self'
-        };
-        updates.contextMode = modeToContextMode[updates.mode] || 'self';
-        updates.sendMode = updates.mode === 'discussion' ? 'sequential' : 'parallel';
-      } else if (updates.contextMode && updates.contextMode !== conversation.contextMode && !updates.mode) {
-        throw new Error('会话模式不可修改');
+      if (conversation) {
+        if (updates.mode) {
+          const modeToContextMode = {
+            brainstorming: 'self',
+            discussion: 'full',
+            expertqa: 'self'
+          };
+          updates.contextMode = modeToContextMode[updates.mode] || 'self';
+          updates.sendMode = updates.mode === 'discussion' ? 'sequential' : 'parallel';
+        } else if (updates.contextMode && updates.contextMode !== conversation.contextMode && !updates.mode) {
+          throw new Error('会话模式不可修改');
+        }
+        // 用户手动更新标题时，清除默认标题标志
+        if (updates.name !== undefined) {
+          updates.nameIsDefault = false;
+        }
+        Object.assign(conversation, updates, { updatedAt: Date.now() });
+        await StorageManager.saveConversations(conversations);
+        return conversation;
       }
-      Object.assign(conversation, updates, { updatedAt: Date.now() });
-      await StorageManager.saveConversations(conversations);
-      return conversation;
-    }
 
-    return null;
+      return null;
+    });
   }
 
   async addMessageWithMeta(conversationId, memberId, content, msgType, metaUpdates) {
@@ -985,6 +1366,10 @@ class ConversationManager {
       conversation.messages = [];
       conversation.memberUrls = {};
       conversation.memberLastMessageIds = {};
+      conversation.expertSummary = '';
+      conversation.expertSummaryUpdatedAt = null;
+      conversation.expertSummaryFailed = false;
+      conversation.flowHistory = [];
       conversation.updatedAt = Date.now();
       await StorageManager.saveConversations(conversations);
       return conversation;
@@ -993,7 +1378,7 @@ class ConversationManager {
     return null;
   }
 
-  async addMessage(conversationId, memberId, content, msgType = MessageType.MEMBER) {
+  async addMessage(conversationId, memberId, content, msgType = MessageType.MEMBER, tipSubType = null, options = {}) {
     const queueKey = conversationId;
 
     if (!this.messageQueues.has(queueKey)) {
@@ -1047,6 +1432,19 @@ class ConversationManager {
           message.isIntro = true;
         } else if (msgType === MessageType.TIP) {
           message.isTip = true;
+          if (tipSubType) {
+            message.tipSubType = tipSubType;
+          }
+          // 新增：ui, target, exclude 属性
+          if (options.ui !== undefined) {
+            message.ui = options.ui;
+          }
+          if (options.target && options.target.length > 0) {
+            message.target = options.target;
+          }
+          if (options.exclude && options.exclude.length > 0) {
+            message.exclude = options.exclude;
+          }
         }
 
         conversation.messages.push(message);
@@ -1089,6 +1487,7 @@ let tabManager;
 let conversationManager;
 let aiMessageManager;
 let senderFactory;
+let conversationMessageService;
 const pendingResponses = new Map();
 const pollingIntervals = new Map();
 let wsManager = null;
@@ -1189,7 +1588,8 @@ async function init() {
     progressTracker,
     progressNotificationService,
     floatWindowService,
-    tabManager
+    tabManager,
+    senderFactory
   );
 
   // 确保模型已导入
@@ -1350,8 +1750,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           wsManager.wsRequestQueue.delete(conversationId);
           stopPolling(conversationId);
 
-          const conversation = await this.conversationManager.getConversation(conversationId);
-          const combinedContent = await wsManager.combineResponses(responses, conversation);
+          const conversation = await conversationManager.getConversation(conversationId);
+          const combinedContent = await aiMessageManager.combineResponses(responses, conversation);
 
           wsManager.send({
             type: 'ai_response',
@@ -1438,6 +1838,23 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case 'deleteConversation':
       conversationManager.deleteConversation(request.conversationId)
         .then(() => sendResponse({ success: true }));
+      return true;
+
+    case 'deletePlatformConversation':
+      (async () => {
+        try {
+          const { conversationUrl } = request;
+          if (!conversationUrl) {
+            sendResponse({ error: '缺少 conversationUrl 参数' });
+            return;
+          }
+          await aiMessageManager.deletePlatformConversation(conversationUrl);
+          sendResponse({ success: true });
+        } catch (error) {
+          console.error('[Background] 删除平台会话失败:', error.message);
+          sendResponse({ error: error.message });
+        }
+      })();
       return true;
 
     case 'updateConversation':
@@ -1687,7 +2104,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         request.conversationId,
         request.memberId,
         request.content,
-        request.msgType  // 直接使用前端传来的枚举值
+        request.msgType,
+        request.tipSubType,
+        {
+          ui: request.ui,
+          target: request.target,
+          exclude: request.exclude
+        }
       )
         .then(message => {
           return conversationManager.getConversation(request.conversationId);
@@ -2019,7 +2442,86 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             request.node,
             request.inputs || {}
           );
+
           sendResponse({ success: true, result });
+        } catch (error) {
+          sendResponse({ success: false, error: error.message });
+        }
+      })();
+      return true;
+
+    case 'resumeFlow':
+      (async () => {
+        try {
+          const conversationId = request.conversationId;
+          const conversation = await conversationManager.getConversation(conversationId);
+          if (!conversation || !conversation.pendingResume) {
+            throw new Error('没有可恢复的执行状态');
+          }
+
+          const resumeState = conversation.pendingResume;
+
+          // 确保 context 中包含必要的 conversationId 和 memberId
+          if (!resumeState.context) {
+            resumeState.context = {};
+          }
+          resumeState.context.conversationId = conversationId;
+          resumeState.context.memberId = conversation.expertId;
+
+          chrome.runtime.sendMessage({
+            type: 'flowExecutionProgress',
+            conversationId,
+            progress: { current: 0, total: 0, status: 'started', nodeName: '恢复执行...' }
+          }).catch(() => {});
+
+          resumeState.context.onProgress = (progress) => {
+            chrome.runtime.sendMessage({
+              type: 'flowExecutionProgress',
+              conversationId,
+              progress
+            }).catch(() => {});
+          };
+
+          const result = await flowExecutor.resumeFlow(resumeState);
+
+          if (result.success) {
+            await conversationManager.updateConversation(conversationId, {
+              pendingResume: null
+            });
+            const entityId = conversation.expertId;
+            const content = result.content || '未能获取答案';
+
+            const message = await conversationManager.addMessage(conversationId, entityId, content);
+            if (message && message.id) {
+              await conversationManager.updateConversation(conversationId, {
+                memberLastMessageIds: { [entityId]: message.id }
+              });
+            }
+
+            chrome.runtime.sendMessage({
+              type: 'flowExecutionComplete',
+              conversationId
+            }).catch(() => {});
+
+            sendResponse({ success: true, conversation: await conversationManager.getConversation(conversationId) });
+          } else if (result.canResume) {
+            await conversationManager.updateConversation(conversationId, {
+              pendingResume: result.resumeInfo
+            });
+
+            chrome.runtime.sendMessage({
+              type: 'flowExecutionError',
+              conversationId,
+              error: result.error,
+              canResume: true,
+              failedNodeName: result.resumeInfo.failedNodeName,
+              completedNodeIds: result.resumeInfo.completedNodeIds
+            }).catch(() => {});
+
+            sendResponse({ success: false, error: result.error, canResume: true });
+          } else {
+            throw new Error(result.error || '恢复执行失败');
+          }
         } catch (error) {
           sendResponse({ success: false, error: error.message });
         }
@@ -2040,7 +2542,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     // ========== 新架构：专家管理 ==========
     case 'getExperts':
-      expertManager.getExperts().then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      (async () => {
+        let experts = await expertManager.getExperts();
+        if (!experts || experts.length === 0) {
+          await initializeBuiltinExperts();
+          experts = await expertManager.getExperts();
+        }
+        sendResponse(experts);
+      })();
       return true;
 
     case 'getExpertById':
@@ -2053,6 +2562,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     case 'updateExpert':
       expertManager.updateExpert(request.expertId, request.data).then(sendResponse).catch(error => sendResponse({ error: error.message }));
+      return true;
+
+    case 'initializeBuiltinExperts':
+      initializeBuiltinExperts().then(() => sendResponse({ success: true }));
       return true;
 
     case 'deleteExpert':
@@ -2416,18 +2929,143 @@ async function initializeBuiltinPrompts() {
   }
 }
 
+const BUILTIN_EXPERTS = [
+  {
+    name: '代码审查专家',
+    description: '多角度审查代码，分别从安全和性能两个维度独立分析，最后汇总给出完整改进方案',
+    icon: '🔍',
+    nodes: [
+      { id: 'start', type: '1', position: { x: 80, y: 300 }, data: { title: '开始', description: '流程的起始点', outputs: [{ key: 'user_input', name: 'input', type: 'string' }], nodeMeta: { title: '开始', description: '流程的起始点', icon: '/nodes/start.svg', mainColor: '#52C41A' } } },
+      { id: 'node-analyze', type: '3', position: { x: 320, y: 300 }, data: { title: '需求分析', description: '分析代码深层问题', batchMode: 'single', model: {}, $$input_decorator$$: { inputParameters: [{ name: 'input', input: { type: 'ref', content: { source: 'block-output', blockID: 'start', name: 'input' } } }], chatHistorySetting: { enableChatHistory: false, chatHistoryRound: 5 } }, $$prompt_decorator$$: { systemPrompt: '你是一位资深技术分析师。', prompt: '请分析以下代码，找出其中存在的深层问题：\n1. 代码的核心逻辑是什么\n2. 存在哪些安全隐患、性能瓶颈、设计缺陷\n3. 哪些地方需要优先改进\n\n代码：\n{{input}}' }, batch: { batchSize: 10 }, fcParam: [], outputs: [{ key: 'output', name: 'analysis', type: 'string' }], nodeMeta: { title: '需求分析', description: '分析代码深层问题', icon: '/nodes/llm.svg', mainColor: '#1890FF' } } },
+      { id: 'node-security', type: '3', position: { x: 580, y: 160 }, data: { title: '安全审查', description: '从安全角度审查', batchMode: 'single', model: {}, $$input_decorator$$: { inputParameters: [{ name: 'analysis', input: { type: 'ref', content: { source: 'block-output', blockID: 'node-analyze', name: 'analysis' } } }], chatHistorySetting: { enableChatHistory: false, chatHistoryRound: 5 } }, $$prompt_decorator$$: { systemPrompt: '你是一位安全专家，专注于代码安全审计。', prompt: '基于以下代码分析结果，从安全角度给出详细审查报告和修复方案：\n\n{{analysis}}' }, batch: { batchSize: 10 }, fcParam: [], outputs: [{ key: 'output', name: 'security_report', type: 'string' }], nodeMeta: { title: '安全审查', description: '从安全角度审查', icon: '/nodes/llm.svg', mainColor: '#F5222D' } } },
+      { id: 'node-perf', type: '3', position: { x: 580, y: 440 }, data: { title: '性能审查', description: '从性能角度审查', batchMode: 'single', model: {}, $$input_decorator$$: { inputParameters: [{ name: 'analysis', input: { type: 'ref', content: { source: 'block-output', blockID: 'node-analyze', name: 'analysis' } } }], chatHistorySetting: { enableChatHistory: false, chatHistoryRound: 5 } }, $$prompt_decorator$$: { systemPrompt: '你是一位性能优化专家，专注于代码质量和运行效率。', prompt: '基于以下代码分析结果，从性能和质量角度给出详细审查报告和优化方案：\n\n{{analysis}}' }, batch: { batchSize: 10 }, fcParam: [], outputs: [{ key: 'output', name: 'perf_report', type: 'string' }], nodeMeta: { title: '性能审查', description: '从性能角度审查', icon: '/nodes/llm.svg', mainColor: '#FA8C16' } } },
+      { id: 'node-summary', type: '3', position: { x: 840, y: 300 }, data: { title: '汇总建议', description: '汇总审查结果', batchMode: 'single', model: {}, $$input_decorator$$: { inputParameters: [{ name: 'security_report', input: { type: 'ref', content: { source: 'block-output', blockID: 'node-security', name: 'security_report' } } }, { name: 'perf_report', input: { type: 'ref', content: { source: 'block-output', blockID: 'node-perf', name: 'perf_report' } } }], chatHistorySetting: { enableChatHistory: false, chatHistoryRound: 5 } }, $$prompt_decorator$$: { systemPrompt: '你是一位技术总监，擅长整合多方审查意见，输出清晰可执行的改进方案。', prompt: '请整合以下两份审查报告，输出一份完整的代码改进方案，按优先级排列：\n\n【安全审查报告】\n{{security_report}}\n\n【性能审查报告】\n{{perf_report}}' }, batch: { batchSize: 10 }, fcParam: [], outputs: [{ key: 'output', name: 'summary', type: 'string' }], nodeMeta: { title: '汇总建议', description: '汇总审查结果', icon: '/nodes/llm.svg', mainColor: '#52C41A' } } },
+      { id: 'end', type: '2', position: { x: 1100, y: 300 }, data: { title: '结束', description: '流程的终止点', inputs: { terminatePlan: 'return_variables', content: { type: 'literal', content: '{{summary}}' }, inputParameters: [{ name: 'summary', type: 'string', value: { type: 'ref', content: { source: 'block-output', blockID: 'node-summary', name: 'summary' } } }], streamingOutput: false }, nodeMeta: { title: '结束', description: '流程的终止点', icon: '/nodes/end.svg', mainColor: '#FF4D4F' } } }
+    ],
+    connections: [
+      { id: 'c1', source: 'start', target: 'node-analyze' },
+      { id: 'c2', source: 'node-analyze', target: 'node-security' },
+      { id: 'c3', source: 'node-analyze', target: 'node-perf' },
+      { id: 'c4', source: 'node-security', target: 'node-summary' },
+      { id: 'c5', source: 'node-perf', target: 'node-summary' },
+      { id: 'c6', source: 'node-summary', target: 'end' }
+    ],
+    isBuiltin: true
+  },
+  {
+    name: '问题分析专家',
+    description: '深入分析问题根因，从创新思维和系统思维两个角度独立提出方案，最终汇总为最优解',
+    icon: '🎯',
+    nodes: [
+      { id: 'start', type: '1', position: { x: 80, y: 300 }, data: { title: '开始', description: '流程的起始点', outputs: [{ key: 'user_input', name: 'input', type: 'string' }], nodeMeta: { title: '开始', description: '流程的起始点', icon: '/nodes/start.svg', mainColor: '#52C41A' } } },
+      { id: 'node-analyze', type: '3', position: { x: 320, y: 300 }, data: { title: '根因分析', description: '挖掘问题深层需求', batchMode: 'single', model: {}, $$input_decorator$$: { inputParameters: [{ name: 'input', input: { type: 'ref', content: { source: 'block-output', blockID: 'start', name: 'input' } } }], chatHistorySetting: { enableChatHistory: false, chatHistoryRound: 5 } }, $$prompt_decorator$$: { systemPrompt: '你是一位问题分析专家，擅长挖掘表面问题背后的深层需求。', prompt: '请深入分析以下问题：\n1. 表面问题是什么\n2. 背后的深层需求和根本原因\n3. 利益相关者是谁，各自的诉求\n4. 约束条件和可用资源\n\n问题：{{input}}' }, batch: { batchSize: 10 }, fcParam: [], outputs: [{ key: 'output', name: 'analysis', type: 'string' }], nodeMeta: { title: '根因分析', description: '挖掘问题深层需求', icon: '/nodes/llm.svg', mainColor: '#1890FF' } } },
+      { id: 'node-creative', type: '3', position: { x: 580, y: 160 }, data: { title: '创新方案', description: '跳出框架思考', batchMode: 'single', model: {}, $$input_decorator$$: { inputParameters: [{ name: 'analysis', input: { type: 'ref', content: { source: 'block-output', blockID: 'node-analyze', name: 'analysis' } } }], chatHistorySetting: { enableChatHistory: false, chatHistoryRound: 5 } }, $$prompt_decorator$$: { systemPrompt: '你是一位创新思维专家，擅长跳出常规框架，提出有创造力的解决方案。', prompt: '基于以下问题分析，请从创新和突破性思维角度提出解决方案，不要受限于传统做法：\n\n{{analysis}}' }, batch: { batchSize: 10 }, fcParam: [], outputs: [{ key: 'output', name: 'creative_plan', type: 'string' }], nodeMeta: { title: '创新方案', description: '跳出框架思考', icon: '/nodes/llm.svg', mainColor: '#722ED1' } } },
+      { id: 'node-systematic', type: '3', position: { x: 580, y: 440 }, data: { title: '系统方案', description: '系统性结构化方案', batchMode: 'single', model: {}, $$input_decorator$$: { inputParameters: [{ name: 'analysis', input: { type: 'ref', content: { source: 'block-output', blockID: 'node-analyze', name: 'analysis' } } }], chatHistorySetting: { enableChatHistory: false, chatHistoryRound: 5 } }, $$prompt_decorator$$: { systemPrompt: '你是一位系统工程师，擅长用结构化、系统化的方法解决问题。', prompt: '基于以下问题分析，请从系统性和可落地角度提出解决方案，包含具体的实施步骤和资源规划：\n\n{{analysis}}' }, batch: { batchSize: 10 }, fcParam: [], outputs: [{ key: 'output', name: 'systematic_plan', type: 'string' }], nodeMeta: { title: '系统方案', description: '系统性结构化方案', icon: '/nodes/llm.svg', mainColor: '#13C2C2' } } },
+      { id: 'node-summary', type: '3', position: { x: 840, y: 300 }, data: { title: '最优方案', description: '汇总并择优', batchMode: 'single', model: {}, $$input_decorator$$: { inputParameters: [{ name: 'creative_plan', input: { type: 'ref', content: { source: 'block-output', blockID: 'node-creative', name: 'creative_plan' } } }, { name: 'systematic_plan', input: { type: 'ref', content: { source: 'block-output', blockID: 'node-systematic', name: 'systematic_plan' } } }], chatHistorySetting: { enableChatHistory: false, chatHistoryRound: 5 } }, $$prompt_decorator$$: { systemPrompt: '你是一位决策顾问，擅长整合不同视角的方案，给出最优推荐。', prompt: '请整合以下两份方案，对比优劣，给出最终推荐方案和实施路线图：\n\n【创新方案】\n{{creative_plan}}\n\n【系统方案】\n{{systematic_plan}}' }, batch: { batchSize: 10 }, fcParam: [], outputs: [{ key: 'output', name: 'summary', type: 'string' }], nodeMeta: { title: '最优方案', description: '汇总并择优', icon: '/nodes/llm.svg', mainColor: '#52C41A' } } },
+      { id: 'end', type: '2', position: { x: 1100, y: 300 }, data: { title: '结束', description: '流程的终止点', inputs: { terminatePlan: 'return_variables', content: { type: 'literal', content: '{{summary}}' }, inputParameters: [{ name: 'summary', type: 'string', value: { type: 'ref', content: { source: 'block-output', blockID: 'node-summary', name: 'summary' } } }], streamingOutput: false }, nodeMeta: { title: '结束', description: '流程的终止点', icon: '/nodes/end.svg', mainColor: '#FF4D4F' } } }
+    ],
+    connections: [
+      { id: 'c1', source: 'start', target: 'node-analyze' },
+      { id: 'c2', source: 'node-analyze', target: 'node-creative' },
+      { id: 'c3', source: 'node-analyze', target: 'node-systematic' },
+      { id: 'c4', source: 'node-creative', target: 'node-summary' },
+      { id: 'c5', source: 'node-systematic', target: 'node-summary' },
+      { id: 'c6', source: 'node-summary', target: 'end' }
+    ],
+    isBuiltin: true
+  },
+  {
+    name: '技术方案专家',
+    description: '分析技术需求，从架构简约派和工程实用派两个角度设计方案，汇总输出最优技术路线',
+    icon: '🏗️',
+    nodes: [
+      { id: 'start', type: '1', position: { x: 80, y: 300 }, data: { title: '开始', description: '流程的起始点', outputs: [{ key: 'user_input', name: 'input', type: 'string' }], nodeMeta: { title: '开始', description: '流程的起始点', icon: '/nodes/start.svg', mainColor: '#52C41A' } } },
+      { id: 'node-analyze', type: '3', position: { x: 320, y: 300 }, data: { title: '需求拆解', description: '拆解技术需求', batchMode: 'single', model: {}, $$input_decorator$$: { inputParameters: [{ name: 'input', input: { type: 'ref', content: { source: 'block-output', blockID: 'start', name: 'input' } } }], chatHistorySetting: { enableChatHistory: false, chatHistoryRound: 5 } }, $$prompt_decorator$$: { systemPrompt: '你是一位技术需求分析师。', prompt: '请拆解以下技术需求：\n1. 核心功能需求\n2. 非功能性需求（性能、安全、可扩展性）\n3. 技术约束和依赖\n4. 关键技术决策点\n\n需求：{{input}}' }, batch: { batchSize: 10 }, fcParam: [], outputs: [{ key: 'output', name: 'analysis', type: 'string' }], nodeMeta: { title: '需求拆解', description: '拆解技术需求', icon: '/nodes/llm.svg', mainColor: '#1890FF' } } },
+      { id: 'node-minimal', type: '3', position: { x: 580, y: 160 }, data: { title: '简约架构方案', description: '极简主义架构', batchMode: 'single', model: {}, $$input_decorator$$: { inputParameters: [{ name: 'analysis', input: { type: 'ref', content: { source: 'block-output', blockID: 'node-analyze', name: 'analysis' } } }], chatHistorySetting: { enableChatHistory: false, chatHistoryRound: 5 } }, $$prompt_decorator$$: { systemPrompt: '你是一位崇尚简约的架构师，信奉"大道至简"，优先选择最简单的技术方案。', prompt: '基于以下需求分析，设计一个尽量简约的技术方案：用最少的技术栈、最少的组件、最少的代码量来满足需求。给出架构图描述和核心接口设计。\n\n{{analysis}}' }, batch: { batchSize: 10 }, fcParam: [], outputs: [{ key: 'output', name: 'minimal_plan', type: 'string' }], nodeMeta: { title: '简约架构方案', description: '极简主义架构', icon: '/nodes/llm.svg', mainColor: '#EB2F96' } } },
+      { id: 'node-practical', type: '3', position: { x: 580, y: 440 }, data: { title: '工程实战方案', description: '生产级工程方案', batchMode: 'single', model: {}, $$input_decorator$$: { inputParameters: [{ name: 'analysis', input: { type: 'ref', content: { source: 'block-output', blockID: 'node-analyze', name: 'analysis' } } }], chatHistorySetting: { enableChatHistory: false, chatHistoryRound: 5 } }, $$prompt_decorator$$: { systemPrompt: '你是一位资深工程架构师，注重系统的可维护性、可观测性和生产级可靠性。', prompt: '基于以下需求分析，设计一个生产级的技术方案：包含完整的数据模型、接口设计、部署架构、监控告警、灰度发布策略。\n\n{{analysis}}' }, batch: { batchSize: 10 }, fcParam: [], outputs: [{ key: 'output', name: 'practical_plan', type: 'string' }], nodeMeta: { title: '工程实战方案', description: '生产级工程方案', icon: '/nodes/llm.svg', mainColor: '#FA541C' } } },
+      { id: 'node-summary', type: '3', position: { x: 840, y: 300 }, data: { title: '方案整合', description: '整合最优路线', batchMode: 'single', model: {}, $$input_decorator$$: { inputParameters: [{ name: 'minimal_plan', input: { type: 'ref', content: { source: 'block-output', blockID: 'node-minimal', name: 'minimal_plan' } } }, { name: 'practical_plan', input: { type: 'ref', content: { source: 'block-output', blockID: 'node-practical', name: 'practical_plan' } } }], chatHistorySetting: { enableChatHistory: false, chatHistoryRound: 5 } }, $$prompt_decorator$$: { systemPrompt: '你是一位CTO，擅长在简约和完备之间找到平衡点。', prompt: '请整合以下两个方案，取各自优点，给出最终推荐的技术路线和分阶段实施计划：\n\n【简约方案】\n{{minimal_plan}}\n\n【工程方案】\n{{practical_plan}}' }, batch: { batchSize: 10 }, fcParam: [], outputs: [{ key: 'output', name: 'summary', type: 'string' }], nodeMeta: { title: '方案整合', description: '整合最优路线', icon: '/nodes/llm.svg', mainColor: '#52C41A' } } },
+      { id: 'end', type: '2', position: { x: 1100, y: 300 }, data: { title: '结束', description: '流程的终止点', inputs: { terminatePlan: 'return_variables', content: { type: 'literal', content: '{{summary}}' }, inputParameters: [{ name: 'summary', type: 'string', value: { type: 'ref', content: { source: 'block-output', blockID: 'node-summary', name: 'summary' } } }], streamingOutput: false }, nodeMeta: { title: '结束', description: '流程的终止点', icon: '/nodes/end.svg', mainColor: '#FF4D4F' } } }
+    ],
+    connections: [
+      { id: 'c1', source: 'start', target: 'node-analyze' },
+      { id: 'c2', source: 'node-analyze', target: 'node-minimal' },
+      { id: 'c3', source: 'node-analyze', target: 'node-practical' },
+      { id: 'c4', source: 'node-minimal', target: 'node-summary' },
+      { id: 'c5', source: 'node-practical', target: 'node-summary' },
+      { id: 'c6', source: 'node-summary', target: 'end' }
+    ],
+    isBuiltin: true
+  }
+];
+
+async function initializeBuiltinExperts() {
+  try {
+    const existingExperts = await expertManager.getExperts();
+    const existingBuiltin = existingExperts.filter(e => e.isBuiltin);
+
+    const validBuiltinNames = new Set(BUILTIN_EXPERTS.map(b => b.name));
+    const invalidExperts = existingBuiltin.filter(e => !validBuiltinNames.has(e.name));
+    for (const invalid of invalidExperts) {
+      await expertManager.deleteExpert(invalid.id);
+      console.log('[Background] 清理旧版内置专家:', invalid.name);
+    }
+
+    const currentBuiltinNames = (invalidExperts.length > 0
+      ? await expertManager.getExperts()
+      : existingExperts).filter(e => e.isBuiltin).map(e => e.name);
+
+    if (currentBuiltinNames.length >= BUILTIN_EXPERTS.length) {
+      return;
+    }
+
+    const models = await platformManager.getAllModels();
+    const available = models.filter(m => m.enabled !== false);
+    if (available.length === 0) {
+      console.log('[Background] 暂无可用模型，跳过内置专家初始化');
+      return;
+    }
+
+    for (const builtin of BUILTIN_EXPERTS) {
+      if (!currentBuiltinNames.includes(builtin.name)) {
+        const expertData = JSON.parse(JSON.stringify(builtin));
+        let llmIndex = 0;
+        expertData.nodes = expertData.nodes.map(node => {
+          if (node.type === '3' && node.data) {
+            const model = available[llmIndex % available.length];
+            node.data.model = {
+              modelId: model.id,
+              platformId: model.platformId,
+              name: `${model.code}(${model.platformName})`
+            };
+            llmIndex++;
+          }
+          return node;
+        });
+        await expertManager.createExpert(expertData);
+        console.log('[Background] 初始化内置专家:', builtin.name, '使用', llmIndex, '个LLM节点');
+      }
+    }
+  } catch (error) {
+    console.error('[Background] 初始化内置专家失败:', error);
+  }
+}
+
 // 插件安装时初始化
 chrome.runtime.onInstalled.addListener(async (details) => {
   if (details.reason === 'install') {
-    console.log('[Background] 插件首次安装，初始化内置提示词');
+    console.log('[Background] 插件首次安装，初始化内置提示词和专家');
     await initializeBuiltinPrompts();
+    await initializeBuiltinExperts();
   }
 });
 
 // 启动时也检查一次（防止升级或其他情况）
 chrome.runtime.onStartup.addListener(async () => {
-  console.log('[Background] 插件启动，检查内置提示词');
+  console.log('[Background] 插件启动，检查内置提示词和专家');
   await initializeBuiltinPrompts();
+  await initializeBuiltinExperts();
 });
 
-init();
+init().then(async () => {
+  await initializeBuiltinExperts();
+});

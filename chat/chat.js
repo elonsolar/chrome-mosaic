@@ -245,36 +245,7 @@ async function init() {
   // 加载数据
   await loadData();
 
-  // 检查是否是新会话（没有消息且有成员），自动发送成员加入 Tip 提示
-  console.log('[Chat][Roundtable] 会话状态检查:', {
-    hasConversation: !!state.conversation,
-    hasMembers: !!state.conversation?.members,
-    memberCount: state.conversation?.members?.length || 0,
-    hasMessages: !!state.conversation?.messages,
-    messageCount: state.conversation?.messages?.length || 0,
-    mode: state.conversation?.mode
-  });
 
-  if (state.conversation &&
-      state.conversation.members &&
-      state.conversation.members.length > 0 &&
-      (!state.conversation.messages || state.conversation.messages.length === 0)) {
-    console.log('[Chat] 检测到新会话，发送成员加入 Tip 提示');
-    setTimeout(async () => {
-      await sendMemberJoinTipMessages(conversationId, state.conversation.members);
-
-      // 圆桌讨论模式：发送模式介绍提示
-      console.log('[Chat][Roundtable] 检查是否为圆桌模式:', state.conversation.mode);
-      if (state.conversation.mode === 'discussion') {
-        const roundtableTip = `你正在【圆桌讨论】模式中。所有成员共享完整的对话上下文，按顺序依次发言。使用 <code>/loop 问题 次数</code> 可发起多轮讨论。`;
-        console.log('[Chat][Roundtable] 准备发送圆桌提示消息...');
-        await addTipMessage(conversationId, roundtableTip, 'roundtable_intro');
-        console.log('[Chat][Roundtable] 圆桌提示消息发送完成');
-      }
-    }, 1000);
-  } else {
-    console.log('[Chat][Roundtable] 不满足新会话条件，跳过提示注入');
-  }
 
   // 检查是否需要自动发送消息
   const autoSendMessage = urlParams.get('autoSend');
@@ -687,7 +658,10 @@ function renderConversationMembers() {
 async function addSingleMember() {
   try {
     if (!state.models || state.models.length === 0) {
-      alert('暂无可用模型，请先在 Dashboard 中添加平台和模型');
+      showToast('暂无可用模型，请先配置平台', 'warning', {
+        text: '去配置',
+        onClick: () => { window.open(chrome.runtime.getURL('dashboard/dashboard.html#models')); }
+      });
       return;
     }
 
@@ -735,7 +709,7 @@ async function addSingleMember() {
     await sendMemberJoinTipMessages(state.conversation.id, [newMember]);
   } catch (error) {
     console.error('[Chat] 添加成员失败:', error);
-    alert('添加成员失败: ' + (error.message || error));
+    showToast('添加成员失败: ' + (error.message || error), 'error');
   }
 }
 
@@ -746,7 +720,7 @@ async function removeMember(memberId) {
   try {
     const member = state.conversation.members.find(m => m.id === memberId);
     if (!member) {
-      alert('成员不存在');
+      showToast('成员不存在', 'error');
       return;
     }
 
@@ -780,7 +754,7 @@ async function removeMember(memberId) {
     );
   } catch (error) {
     console.error('[Chat] 移除成员失败:', error);
-    alert('移除成员失败: ' + (error.message || error));
+    showToast('移除成员失败: ' + (error.message || error), 'error');
   }
 }
 
@@ -1090,19 +1064,19 @@ async function saveMemberConfig() {
   const promptId = promptSelect ? promptSelect.value : null;
 
   if (!memberName) {
-    alert('请输入成员名称');
+    showToast('请输入成员名称', 'warning');
     return;
   }
 
   if (!modelId) {
-    alert('请选择模型');
+    showToast('请选择模型', 'warning');
     return;
   }
 
   // 查找模型和提示词
   const model = state.models.find(m => m.id === modelId);
   if (!model) {
-    alert('模型不存在');
+    showToast('模型不存在', 'error');
     return;
   }
 
@@ -1115,7 +1089,7 @@ async function saveMemberConfig() {
   // 更新成员数据
   const member = state.conversation.members.find(m => m.id === currentConfigMemberId);
   if (!member) {
-    alert('成员不存在');
+    showToast('成员不存在', 'error');
     return;
   }
 
@@ -1166,16 +1140,56 @@ async function saveMemberConfig() {
     // 如果名称改变了，添加提示消息
     if (oldName !== memberName) {
       try {
+        // 给被更名的成员发送专属 tip（不在UI显示）
+        await chrome.runtime.sendMessage({
+          action: 'addMessageDirect',
+          conversationId: state.conversation.id,
+          memberId: null,
+          content: `你当前群聊名称改为 ${memberName}`,
+          msgType: MessageType.TIP,
+          tipSubType: 'rename',
+          ui: false,
+          target: [member.id]
+        });
+
+        // 给其他成员发送通用 tip（在UI显示）
         await chrome.runtime.sendMessage({
           action: 'addMessageDirect',
           conversationId: state.conversation.id,
           memberId: null,
           content: `${oldName} 改名为 ${memberName}`,
           msgType: MessageType.TIP,
-          tipSubType: 'rename'  // ✅ 改名 - 需要发送给 AI
+          tipSubType: 'rename',
+          ui: true,
+          exclude: [member.id]
         });
       } catch (error) {
         console.error('[Chat] 添加名称变更提示消息失败:', error);
+      }
+    }
+
+    // 如果提示词改变了，添加提示消息
+    const oldPrompt = member.systemPrompt;
+    if (oldPrompt !== systemPrompt) {
+      // 检查成员是否有历史消息
+      const hasHistory = (state.conversation.messages || []).some(msg => msg.memberId === member.id && !msg.isTip);
+
+      if (hasHistory && systemPrompt) {
+        try {
+          // 只有有历史消息的成员才发送角色设定变更提示（不在UI显示）
+          await chrome.runtime.sendMessage({
+            action: 'addMessageDirect',
+            conversationId: state.conversation.id,
+            memberId: null,
+            content: `你的角色设定变更为 ${systemPrompt}`,
+            msgType: MessageType.TIP,
+            tipSubType: 'prompt_change',
+            ui: false,
+            target: [member.id]
+          });
+        } catch (error) {
+          console.error('[Chat] 添加提示词变更提示消息失败:', error);
+        }
       }
     }
 
@@ -1199,7 +1213,7 @@ async function saveMemberConfig() {
     }
   } catch (error) {
     console.error('[Chat] saveMemberConfig - 保存失败:', error);
-    alert('保存失败: ' + (error.message || error));
+    showToast('保存失败: ' + (error.message || error), 'error');
   }
 }
 
@@ -1331,6 +1345,10 @@ function renderModeBadge() {
 function buildMessageHtml(msg, index) {
   const msgId = msg.id || `msg_${index}_${msg.timestamp || Date.now()}`;
   if (msg.type === 'tip') {
+    // 如果 ui === false，不在UI上显示
+    if (msg.ui === false) {
+      return '';
+    }
     return `
       <div class="message tip-message" data-msg-id="${msgId}">
         <div class="tip-content">${msg.content}</div>
@@ -1483,9 +1501,11 @@ function appendNewMessages() {
     });
     el.querySelectorAll('.tip-link').forEach(link => {
       link.addEventListener('click', (e) => {
-        e.preventDefault();
         const memberId = link.dataset.memberId;
-        if (memberId) openMemberConfigModal(memberId);
+        if (memberId) {
+          e.preventDefault();
+          openMemberConfigModal(memberId);
+        }
       });
     });
 
@@ -1557,9 +1577,9 @@ function renderMessages() {
   const tipLinks = elements.messagesContainer.querySelectorAll('.tip-link');
   tipLinks.forEach(link => {
     link.addEventListener('click', (e) => {
-      e.preventDefault();
       const memberId = e.currentTarget.dataset.memberId;
       if (memberId) {
+        e.preventDefault();
         openMemberConfigModal(memberId);
       }
     });
@@ -1622,12 +1642,43 @@ async function sendMessage() {
 }
 
 function showInitialExpertProgress() {
-  const expertName = state.experts?.find(e => e.id === state.conversation.expertId)?.name || 'AI助手';
+  const expert = state.experts?.find(e => e.id === state.conversation.expertId);
+  const expertName = expert?.name || 'AI助手';
+  const expertIcon = expert?.icon || '🤖';
+  const expertNodes = expert?.nodes || [];
+  
+  // 获取LLM节点（排除开始和结束节点）
+  const llmNodes = expertNodes.filter(n => n.type === '3');
+  const nodeCount = llmNodes.length;
+
+  // 生成节点步骤HTML
+  const stepsHtml = `
+    <div class="expert-steps">
+      <div class="expert-step active">
+        <div class="step-dot"></div>
+        <span class="step-label">开始</span>
+      </div>
+      ${llmNodes.map((node, i) => `
+        <div class="expert-step" data-node-id="${node.id}">
+          <div class="step-dot"></div>
+          <span class="step-label">${escapeHtml(node.data?.title || `节点${i+1}`)}</span>
+        </div>
+      `).join('')}
+      <div class="expert-step">
+        <div class="step-dot"></div>
+        <span class="step-label">结束</span>
+      </div>
+    </div>
+  `;
 
   const progressHtml = `
     <div class="message ai-message expert-progress-message" id="currentFlowProgressIndicator">
       <div class="message-avatar-wrapper">
-        <div class="message-avatar expert-avatar-thinking">⚙️</div>
+        <div class="message-avatar expert-avatar-thinking">
+          ${expertIcon.startsWith('http') 
+            ? `<img src="${escapeHtml(expertIcon)}" alt="专家图标" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` 
+            : escapeHtml(expertIcon)}
+        </div>
       </div>
       <div class="message-body">
         <div class="message-header-row">
@@ -1642,16 +1693,7 @@ function showInitialExpertProgress() {
           </div>
           <span class="thinking-text">开始执行流程...</span>
         </div>
-        <div class="expert-progress-node" id="currentFlowNodeName" title="点击查看执行日志">
-          <span class="node-icon">📋</span>
-          <span class="node-name">准备中...</span>
-        </div>
-        <div class="expert-progress-bar-wrapper">
-          <div class="expert-progress-bar">
-            <div class="expert-progress-fill" id="currentFlowProgressBar"></div>
-          </div>
-          <div class="expert-progress-text" id="currentFlowProgressText">0/0 节点</div>
-        </div>
+        ${stepsHtml}
       </div>
     </div>
   `;
@@ -1659,12 +1701,6 @@ function showInitialExpertProgress() {
   const messagesContainer = document.getElementById('messagesContainer');
   if (messagesContainer) {
     messagesContainer.insertAdjacentHTML('beforeend', progressHtml);
-
-    // 绑定点击查看日志事件
-    const nodeNameEl = document.getElementById('currentFlowNodeName');
-    if (nodeNameEl) {
-      nodeNameEl.addEventListener('click', showFlowExecutionLogs);
-    }
   }
 }
 
@@ -1796,7 +1832,7 @@ function attachMessageListener() {
       } else if (request.type === 'flowExecutionComplete') {
         removeProgressIndicator();
       } else if (request.type === 'flowExecutionError') {
-        handleFlowExecutionError(request.error);
+        handleFlowExecutionError(request);
       }
     });
     messageListenerAttached = true;
@@ -1841,16 +1877,46 @@ function handleFlowExecutionProgress(progress) {
     return;
   }
 
-  // 获取专家名称
-  const expertName = state.experts?.find(e => e.id === state.conversation.expertId)?.name || 'AI助手';
+  // 获取专家信息
+  const expert = state.experts?.find(e => e.id === state.conversation.expertId);
+  const expertName = expert?.name || 'AI助手';
+  const expertIcon = expert?.icon || '🤖';
+  const expertNodes = expert?.nodes || [];
 
   let progressElement = document.getElementById('currentFlowProgressIndicator');
 
   if (!progressElement) {
+    // 获取LLM节点（排除开始和结束节点）
+    const llmNodes = expertNodes.filter(n => n.type === '3');
+
+    // 生成节点步骤HTML
+    const stepsHtml = `
+      <div class="expert-steps">
+        <div class="expert-step active">
+          <div class="step-dot"></div>
+          <span class="step-label">开始</span>
+        </div>
+        ${llmNodes.map((node, i) => `
+          <div class="expert-step" data-node-id="${node.id}">
+            <div class="step-dot"></div>
+            <span class="step-label">${escapeHtml(node.data?.title || `节点${i+1}`)}</span>
+          </div>
+        `).join('')}
+        <div class="expert-step">
+          <div class="step-dot"></div>
+          <span class="step-label">结束</span>
+        </div>
+      </div>
+    `;
+
     const progressHtml = `
       <div class="message ai-message expert-progress-message" id="currentFlowProgressIndicator">
         <div class="message-avatar-wrapper">
-          <div class="message-avatar expert-avatar-thinking">⚙️</div>
+          <div class="message-avatar expert-avatar-thinking">
+            ${expertIcon.startsWith('http') 
+              ? `<img src="${escapeHtml(expertIcon)}" alt="专家图标" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` 
+              : escapeHtml(expertIcon)}
+          </div>
         </div>
         <div class="message-body">
           <div class="message-header-row">
@@ -1865,16 +1931,7 @@ function handleFlowExecutionProgress(progress) {
             </div>
             <span class="thinking-text">${progress.message || '正在处理...'}</span>
           </div>
-          <div class="expert-progress-node" id="currentFlowNodeName" title="点击查看执行日志">
-            <span class="node-icon">📋</span>
-            <span class="node-name">${progress.nodeName || '准备中...'}</span>
-          </div>
-          <div class="expert-progress-bar-wrapper">
-            <div class="expert-progress-bar">
-              <div class="expert-progress-fill" id="currentFlowProgressBar"></div>
-            </div>
-            <div class="expert-progress-text" id="currentFlowProgressText"></div>
-          </div>
+          ${stepsHtml}
         </div>
       </div>
     `;
@@ -1883,57 +1940,63 @@ function handleFlowExecutionProgress(progress) {
     if (messagesContainer) {
       messagesContainer.insertAdjacentHTML('beforeend', progressHtml);
       progressElement = document.getElementById('currentFlowProgressIndicator');
+    }
+  }
 
-      // 绑定点击查看日志事件
-      const nodeNameEl = document.getElementById('currentFlowNodeName');
-      if (nodeNameEl) {
-        nodeNameEl.addEventListener('click', showFlowExecutionLogs);
+  // 更新步骤条激活状态
+  if (progressElement && progress.nodeId) {
+    const steps = progressElement.querySelectorAll('.expert-step');
+    let foundCurrent = false;
+
+    steps.forEach(step => {
+      const stepNodeId = step.dataset.nodeId;
+      
+      if (stepNodeId === progress.nodeId) {
+        // 当前节点
+        step.classList.add('active');
+        step.classList.remove('completed');
+        foundCurrent = true;
+      } else if (!foundCurrent) {
+        // 当前节点之前的节点
+        step.classList.add('completed');
+        step.classList.remove('active');
+      } else {
+        // 当前节点之后的节点
+        step.classList.remove('active', 'completed');
+      }
+    });
+
+    // 如果是开始节点（没有nodeId），激活开始节点
+    if (!progress.nodeId && progress.status === 'started') {
+      const startStep = steps[0];
+      if (startStep) {
+        startStep.classList.add('active');
       }
     }
   }
 
-  const progressText = document.getElementById('currentFlowProgressText');
-  const progressBar = document.getElementById('currentFlowProgressBar');
-  const thinkingText = progressElement.querySelector('.thinking-text');
-
-  if (progressText) {
-    const current = progress.current || 0;
-    const total = progress.total || 0;
-    progressText.textContent = `${current}/${total} 节点`;
+  // 更新思考文本
+  const thinkingText = progressElement?.querySelector('.thinking-text');
+  if (thinkingText && progress.message) {
+    thinkingText.textContent = progress.message;
   }
 
-  if (progressBar) {
-    const current = progress.current || 0;
-    const total = progress.total || 1;
-    const percentage = total > 0 ? (current / total) * 100 : 0;
-    progressBar.style.width = `${percentage}%`;
-  }
-
-  // 更新当前节点名称
-  const nodeNameEl = document.getElementById('currentFlowNodeName');
-  if (nodeNameEl && progress.nodeName) {
-    const nodeNameSpan = nodeNameEl.querySelector('.node-name');
-    if (nodeNameSpan) {
-      nodeNameSpan.textContent = progress.nodeName;
-    }
-    // 保存执行日志到状态中
+  // 保存执行日志到状态中
+  if (progress.nodeId) {
     if (!state.flowExecutionLogs) {
       state.flowExecutionLogs = [];
     }
     
-    // 只记录完成的日志，或者合并开始和完成
     const existingLog = state.flowExecutionLogs.find(
       log => log.nodeId === progress.nodeId && log.status === 'started'
     );
     
     if (progress.status === 'completed') {
-      // 如果有对应的开始日志，更新为完成
       if (existingLog) {
         existingLog.status = 'completed';
         existingLog.completedAt = Date.now();
         existingLog.duration = Date.now() - existingLog.timestamp;
       } else {
-        // 没有开始日志，直接添加完成日志
         state.flowExecutionLogs.push({
           timestamp: Date.now(),
           completedAt: Date.now(),
@@ -1946,7 +2009,6 @@ function handleFlowExecutionProgress(progress) {
         });
       }
     } else if (progress.status === 'started' && !existingLog) {
-      // 只有开始状态且不存在时才添加
       state.flowExecutionLogs.push({
         timestamp: Date.now(),
         nodeName: progress.nodeName,
@@ -1956,19 +2018,10 @@ function handleFlowExecutionProgress(progress) {
         total: progress.total
       });
       
-      // 第一个日志被收集时，重新渲染消息以显示"查看过程"按钮
       if (state.flowExecutionLogs.length === 1) {
         renderMessages();
       }
     }
-  }
-
-  if (thinkingText && progress.message) {
-    thinkingText.textContent = progress.message;
-  }
-
-  const messagesContainer = document.getElementById('messagesContainer');
-  if (messagesContainer) {
   }
 }
 
@@ -2106,10 +2159,11 @@ function showFlowExecutionLogs() {
   });
 }
 
-function handleFlowExecutionError(error) {
-  console.error('[Chat] 流程执行错误:', error);
+function handleFlowExecutionError(request) {
+  const error = request.error || '未知错误';
+  const canResume = request.canResume || false;
+  console.error('[Chat] 流程执行错误:', error, '可恢复:', canResume);
 
-  // ✅ 只在专家模式下显示错误
   const isExpertMode = state.conversation.mode === 'expertqa' && state.conversation.expertId;
 
   if (!isExpertMode) {
@@ -2119,19 +2173,30 @@ function handleFlowExecutionError(error) {
 
   removeProgressIndicator();
 
-  // 获取专家名称
   const expertName = state.experts?.find(e => e.id === state.conversation.expertId)?.name || 'AI助手';
+
+  const completedInfo = request.completedNodeIds?.length
+    ? `<div class="error-completed-info">已完成 ${request.completedNodeIds.length} 个节点</div>`
+    : '';
+
+  const resumeBtnHtml = canResume
+    ? `<button class="resume-flow-btn" id="resumeFlowBtn" title="从失败节点重新开始执行">🔄 重新执行失败节点</button>`
+    : '';
 
   const errorHtml = `
     <div class="message ai-message">
       <div class="message-avatar-wrapper">
-        <div class="message-avatar error-avatar">❌</div>
+        <div class="message-avatar error-avatar">⚠️</div>
       </div>
       <div class="message-body">
         <div class="message-header-row">
           <span class="message-sender-name">${escapeHtml(expertName)}</span>
         </div>
-        <div class="message-text error-message-text">流程执行失败: ${escapeHtml(error)}</div>
+        <div class="message-text error-message-text">
+          ${request.failedNodeName ? `节点「${escapeHtml(request.failedNodeName)}」执行失败: ` : '流程执行失败: '}${escapeHtml(error)}
+        </div>
+        ${completedInfo}
+        ${resumeBtnHtml}
       </div>
     </div>
   `;
@@ -2139,6 +2204,51 @@ function handleFlowExecutionError(error) {
   const messagesContainer = document.getElementById('messagesContainer');
   if (messagesContainer) {
     messagesContainer.insertAdjacentHTML('beforeend', errorHtml);
+
+    if (canResume) {
+      const btn = document.getElementById('resumeFlowBtn');
+      if (btn) {
+        btn.addEventListener('click', () => resumeFlowExecution(btn));
+      }
+    }
+  }
+}
+
+async function resumeFlowExecution(btn) {
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '正在恢复...';
+  }
+
+  try {
+    showInitialExpertProgress();
+    console.log('[Chat] 开始恢复流程执行...');
+
+    const response = await chrome.runtime.sendMessage({
+      action: 'resumeFlow',
+      conversationId
+    });
+
+    console.log('[Chat] 恢复流程响应:', response);
+    removeProgressIndicator();
+    hideThinkingIndicator();
+
+    if (response && response.success && response.conversation) {
+      console.log('[Chat] 恢复成功，更新会话');
+      state.conversation = response.conversation;
+      appendNewMessages();
+    } else if (response && response.canResume) {
+      console.log('[Chat] 恢复后再次失败，可继续恢复');
+      handleFlowExecutionError(response);
+    } else {
+      console.log('[Chat] 恢复失败:', response?.error);
+      handleFlowExecutionError({ error: response?.error || '恢复执行失败' });
+    }
+  } catch (err) {
+    console.error('[Chat] 恢复执行异常:', err);
+    removeProgressIndicator();
+    hideThinkingIndicator();
+    handleFlowExecutionError({ error: err.message });
   }
 }
 
@@ -2359,7 +2469,11 @@ async function sendMemberJoinTipMessages(conversationId, members) {
       console.log('[Chat] 成员没有设置提示词');
     }
 
-    const tipContent = `${member.name} 加入会话，模型是 ${member.modelCode}(${member.platformName})${promptInfo}，<a href="#" class="tip-link" data-member-id="${member.id}">修改成员信息</a>`;
+    let loginLink = '';
+    if (member.accessMethod === 'web' && member.webUrl) {
+      loginLink = `，<a href="${member.webUrl}" class="tip-link tip-login-link" target="_blank">去登陆</a>`;
+    }
+    const tipContent = `${member.name} 加入会话，模型是 ${member.modelCode}(${member.platformName})${promptInfo}${loginLink}，<a href="#" class="tip-link" data-member-id="${member.id}">修改成员信息</a>`;
     console.log('[Chat] Tip 内容:', tipContent);
 
     try {
@@ -2723,6 +2837,46 @@ function showSuccess(message) {
   setTimeout(() => successDiv.remove(), 3000);
 }
 
+function showToast(message, type = 'info', action = null) {
+  let container = document.getElementById('toastContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:10000;display:flex;flex-direction:column;gap:8px;pointer-events:none;';
+    document.body.appendChild(container);
+  }
+  const colors = {
+    info: { bg: '#f0f4ff', border: '#667eea', text: '#3b5998', icon: 'ℹ️' },
+    warning: { bg: '#fff8e1', border: '#f5a623', text: '#8a6d00', icon: '⚠️' },
+    error: { bg: '#fdecea', border: '#e74c3c', text: '#c0392b', icon: '❌' },
+    success: { bg: '#e8f5e9', border: '#43e97b', text: '#2e7d32', icon: '✅' }
+  };
+  const c = colors[type] || colors.info;
+  const toast = document.createElement('div');
+  toast.style.cssText = `pointer-events:auto;display:flex;align-items:center;gap:8px;padding:10px 16px;background:${c.bg};border:1px solid ${c.border};border-radius:10px;color:${c.text};font-size:13px;box-shadow:0 4px 16px rgba(0,0,0,.12);animation:toast-in .3s ease;max-width:420px;`;
+  let html = `<span>${c.icon}</span><span style="flex:1;">${escapeHtml(message)}</span>`;
+  if (action) {
+    html += `<a href="#" class="toast-action-link" style="color:${c.border};font-weight:600;text-decoration:none;white-space:nowrap;padding:2px 8px;border-radius:4px;transition:background .2s;">${escapeHtml(action.text)}</a>`;
+  }
+  toast.innerHTML = html;
+  if (action) {
+    const link = toast.querySelector('.toast-action-link');
+    if (link) {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        action.onClick();
+        removeToast();
+      });
+    }
+  }
+  container.appendChild(toast);
+  const removeToast = () => {
+    toast.style.animation = 'toast-out .3s ease forwards';
+    setTimeout(() => toast.remove(), 300);
+  };
+  setTimeout(removeToast, 4000);
+}
+
 const availableCommands = [
   { name: '/new', description: '清除所有会话内容和重置成员会话URL' },
   { name: '/loop', description: '启动多轮讨论：/loop 问题描述 --max=5（问题可选，默认基于当前会话；max可选，默认3轮）', hasArgs: true }
@@ -2942,10 +3096,8 @@ function enableTitleEditing() {
 
 function showAddMemberModal() {
   console.log('[DEBUG] showAddMemberModal() called');
-  console.log('[DEBUG] state.models:', state.models?.length, state.models);
-  console.log('[DEBUG] state.prompts:', state.prompts?.length, state.prompts);
 
-  const existingModal = document.getElementById('addMemberModel');
+  const existingModal = document.getElementById('addMemberModal');
   if (existingModal) {
     const modalOverlay = existingModal.closest('.modal-overlay');
     if (modalOverlay) {
@@ -2953,108 +3105,83 @@ function showAddMemberModal() {
     }
   }
 
+  if (!state.models || state.models.length === 0) {
+    showToast('暂无可用模型，请先配置平台', 'warning', {
+      text: '去配置',
+      onClick: () => { window.open(chrome.runtime.getURL('dashboard/dashboard.html#models')); }
+    });
+    return;
+  }
+
   const modal = document.createElement('div');
   modal.className = 'modal-overlay active';
   modal.innerHTML = `
-    <div class="modal-content" style="max-width: 500px;">
-      <h2>创建新成员</h2>
-
-      <p style="margin-bottom: 16px; color: var(--text-secondary); font-size: 13px;">
-        创建新成员并添加到当前会话
-      </p>
-
-      <div class="form-group">
-        <label for="newMemberName">成员名称</label>
-        <input type="text" id="newMemberName" class="form-input" placeholder="输入成员名称" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;">
+    <div class="modal-content" style="max-width: 400px;">
+      <div class="modal-header">
+        <h2>添加新成员</h2>
+        <button class="modal-close" id="closeAddMemberModal">&times;</button>
       </div>
-
-      <div class="form-group">
-        <label for="newMemberModel">选择模型</label>
-        <select id="newMemberModel" class="form-select" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;">
-          <option value="">请选择模型...</option>
-          ${(state.models || []).map(model => {
-            const platformName = model.platformName || '未知平台';
-            const displayName = `${model.code || model.id}(${platformName})`;
-            return `<option value="${model.id}" ${model.enabled === false ? 'disabled' : ''}>
-              ${displayName} ${model.enabled === false ? '(已禁用)' : ''}
-            </option>`;
-          }).join('')}
-        </select>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="newMemberName">成员名称 <span class="required">*</span></label>
+          <input type="text" id="newMemberName" class="form-input" placeholder="输入成员名称" autocomplete="off">
+        </div>
       </div>
-
-      <div class="form-group">
-        <label for="newMemberPrompt">选择提示词（可选）</label>
-        <select id="newMemberPrompt" class="form-select" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;">
-          <option value="">无提示词</option>
-          ${(state.prompts || []).map(prompt => {
-            return `<option value="${prompt.id}">${escapeHtml(prompt.name)}</option>`;
-          }).join('')}
-        </select>
-      </div>
-
-      <div class="modal-actions">
+      <div class="modal-footer">
         <button class="btn btn-secondary" id="cancelCreateMemberBtn">取消</button>
-        <button class="btn btn-primary" id="confirmCreateMemberBtn">创建并添加</button>
+        <button class="btn btn-primary" id="confirmCreateMemberBtn">
+          <span>+</span> 添加
+        </button>
       </div>
     </div>
   `;
 
   document.body.appendChild(modal);
 
-  const cancelBtn = document.getElementById('cancelCreateMemberBtn');
-  const confirmBtn = document.getElementById('confirmCreateMemberBtn');
+  const nameInput = document.getElementById('newMemberName');
+  if (nameInput) {
+    setTimeout(() => nameInput.focus(), 100);
+  }
 
-  cancelBtn.addEventListener('click', () => {
-    document.body.removeChild(modal);
+  const closeModal = () => {
+    const m = document.querySelector('.modal-overlay.active');
+    if (m) document.body.removeChild(m);
+  };
+
+  document.getElementById('closeAddMemberModal').addEventListener('click', closeModal);
+  document.getElementById('cancelCreateMemberBtn').addEventListener('click', closeModal);
+
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeModal();
   });
 
-  confirmBtn.addEventListener('click', async () => {
+  document.getElementById('confirmCreateMemberBtn').addEventListener('click', async () => {
     const memberName = document.getElementById('newMemberName').value.trim();
-    const modelId = document.getElementById('newMemberModel').value;
-    const promptId = document.getElementById('newMemberPrompt').value;
 
     if (!memberName) {
-      alert('请输入成员名称');
-      return;
-    }
-
-    if (!modelId) {
-      alert('请选择模型');
+      showToast('请输入成员名称', 'warning');
       return;
     }
 
     try {
-      const model = state.models.find(m => m.id === modelId);
-      if (!model) {
-        alert('模型不存在');
-        return;
-      }
+      const defaultModel = state.models[0];
 
-      let systemPrompt = '';
-      if (promptId) {
-        const prompt = state.prompts.find(p => p.id === promptId);
-        if (prompt) {
-          systemPrompt = prompt.content || '';
-        }
-      }
-
-      // 直接创建 Member 对象，使用新架构的数据结构
       const newMember = {
         id: `member_${Date.now().toString(36)}_${Math.random().toString(36).substr(2)}`,
         name: memberName,
-        platformId: model.platformId,
-        modelId: model.id,
-        modelCode: model.code,
-        platformName: model.platformName,
-        accessMethod: model.accessMethod,
-        color: model.color || '#667eea',  // 保存颜色快照
-        systemPrompt: systemPrompt
+        platformId: defaultModel.platformId,
+        modelId: defaultModel.id,
+        modelCode: defaultModel.code,
+        platformName: defaultModel.platformName,
+        accessMethod: defaultModel.accessMethod,
+        color: defaultModel.color || '#667eea',
+        systemPrompt: '',
+        webUrl: defaultModel.webUrl || ''
       };
 
-      // 对于 API 模型，保存配置快照（用于向后兼容）
-      if (model.accessMethod === 'api') {
-        newMember.baseUrl = model.baseUrl || '';
-        newMember.apiKey = model.apiKey || '';
+      if (defaultModel.accessMethod === 'api') {
+        newMember.baseUrl = defaultModel.baseUrl || '';
+        newMember.apiKey = defaultModel.apiKey || '';
       }
 
       const currentMembers = state.conversation.members || [];
@@ -3074,15 +3201,14 @@ function showAddMemberModal() {
 
       if (updatedConversation) {
         state.conversation = updatedConversation;
+        closeModal();
         render();
         initSmartPanel();
-        console.log('[Chat] 新成员已创建并添加到会话');
-        document.body.removeChild(modal);
+        await sendMemberJoinTipMessages(conversationId, [newMember]);
       }
     } catch (error) {
-      console.error('创建成员失败:', error);
-      alert('创建成员失败：' + error.message);
-      document.body.removeChild(modal);
+      console.error('[Chat] 创建成员失败:', error);
+      showToast('创建成员失败：' + error.message, 'error');
     }
   });
 }
@@ -3116,7 +3242,7 @@ async function removeMemberFromConversation(memberId) {
     }
   } catch (error) {
     console.error('[Chat] 移除成员失败:', error);
-    alert('移除成员失败: ' + error.message);
+    showToast('移除成员失败: ' + error.message, 'error');
   }
 }
 
@@ -3203,7 +3329,7 @@ function renderMathFormulas(container) {
   });
 }
 
-function showToast(message, duration = 2000) {
+function showCopyToast(message, duration = 2000) {
   const toast = document.createElement('div');
   toast.className = 'copy-toast';
   toast.textContent = message;
@@ -3223,7 +3349,7 @@ async function copyToClipboard(text, button) {
   try {
     await navigator.clipboard.writeText(text);
     showCopySuccess(button);
-    showToast('已复制到剪贴板');
+    showCopyToast('已复制到剪贴板');
     console.log('[复制] 成功复制到剪贴板');
   } catch (err) {
     console.error('[复制] 复制失败:', err);
@@ -3535,33 +3661,32 @@ function renderSidebarList() {
 
   let conversations = sidebarState.conversations;
 
-  // 按模式分组显示会话（即使没有会话也显示所有分组）
-  const groups = groupConversationsByMode(conversations);
+  const groups = groupConversationsByDate(conversations);
 
   const threeDotSvg = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4.55146 8.00001C4.55146 8.63513 4.03659 9.15001 3.40146 9.15001C2.76634 9.15001 2.25146 8.63513 2.25146 8.00001C2.25146 7.36488 2.76634 6.85001 3.40146 6.85001C4.03659 6.85001 4.55146 7.36488 4.55146 8.00001Z" fill="currentColor"></path><path d="M9.1476 8.00001C9.1476 8.63513 8.63273 9.15001 7.9976 9.15001C7.36248 9.15001 6.8476 8.63513 6.8476 8.00001C6.8476 7.36488 7.36248 6.85001 7.9976 6.85001C8.63273 6.85001 9.1476 7.36488 9.1476 8.00001Z" fill="currentColor"></path><path d="M13.7486 8.00001C13.7486 8.63513 13.2338 9.15001 12.5986 9.15001C11.9635 9.15001 11.4486 8.63513 11.4486 8.00001C11.4486 7.36488 11.9635 6.85001 12.5986 6.85001C13.2338 6.85001 13.7486 7.36488 13.7486 8.00001Z" fill="currentColor"></path></svg>';
 
   const collapseSvg = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
-  // 加载折叠状态，默认只有 recent 分组展开，其他分组折叠
-  const collapsedGroups = JSON.parse(localStorage.getItem('sidebarCollapsedGroups') || '{}');
+  const modeBadges = {
+    brainstorming: { text: '风暴', cls: 'sb-badge-brainstorm' },
+    discussion: { text: '讨论', cls: 'sb-badge-discuss' },
+    expertqa: { text: '专家', cls: 'sb-badge-expert' }
+  };
 
   container.innerHTML = groups.map(group => {
-    // 只有 recent 分组默认展开，其他分组默认折叠
-    const isCollapsed = collapsedGroups[group.key] !== undefined ? collapsedGroups[group.key] : (group.key !== 'recent');
     return `
       <div class="sidebar-date-group" data-group-key="${group.key}">
-        <div class="sidebar-date-label" data-group-key="${group.key}">
-          <span class="sidebar-date-collapse-icon ${isCollapsed ? 'collapsed' : ''}">${collapseSvg}</span>
-          ${group.label}
-          <span class="sidebar-date-count">${group.items.length}</span>
-        </div>
-        <div class="sidebar-group-items ${isCollapsed ? 'collapsed' : ''}">
+        <div class="sidebar-date-label">${group.label}</div>
+        <div class="sidebar-group-items">
           ${group.items.map(conv => {
             const isActive = conv.id === conversationId;
+            const mode = conv.mode || 'brainstorming';
+            const badge = modeBadges[mode] || modeBadges.brainstorming;
             return `
               <div class="sidebar-conv-item ${isActive ? 'active' : ''}"
                    data-conv-id="${conv.id}"
                    title="${escapeHtml(conv.name)}">
+                <span class="sb-mode-badge ${badge.cls}">${badge.text}</span>
                 <div class="sidebar-conv-name">${escapeHtml(conv.name)}</div>
                 <button class="sidebar-conv-more" data-conv-id="${conv.id}" title="更多操作">${threeDotSvg}</button>
               </div>
@@ -3571,38 +3696,6 @@ function renderSidebarList() {
       </div>
     `;
   }).join('');
-
-  // 绑定折叠/展开事件
-  container.querySelectorAll('.sidebar-date-label').forEach(label => {
-    label.addEventListener('click', (e) => {
-      const groupKey = label.dataset.groupKey;
-      const group = label.closest('.sidebar-date-group');
-      const items = group.querySelector('.sidebar-group-items');
-      const icon = label.querySelector('.sidebar-date-collapse-icon');
-
-      const wasCollapsed = items.classList.contains('collapsed');
-
-      container.querySelectorAll('.sidebar-date-group').forEach(otherGroup => {
-        const otherItems = otherGroup.querySelector('.sidebar-group-items');
-        const otherLabel = otherGroup.querySelector('.sidebar-date-label');
-        const otherIcon = otherLabel.querySelector('.sidebar-date-collapse-icon');
-        otherItems.classList.add('collapsed');
-        otherIcon.classList.add('collapsed');
-      });
-
-      if (wasCollapsed) {
-        items.classList.remove('collapsed');
-        icon.classList.remove('collapsed');
-      }
-
-      const collapsedGroups = {};
-      container.querySelectorAll('.sidebar-date-group').forEach(g => {
-        const gItems = g.querySelector('.sidebar-group-items');
-        collapsedGroups[g.dataset.groupKey] = gItems.classList.contains('collapsed');
-      });
-      localStorage.setItem('sidebarCollapsedGroups', JSON.stringify(collapsedGroups));
-    });
-  });
 
   container.querySelectorAll('.sidebar-conv-item').forEach(item => {
     item.addEventListener('click', (e) => {
@@ -3628,6 +3721,15 @@ function renderSidebarList() {
       showContextMenu(rect.left, rect.bottom);
     });
   });
+
+  if (conversationId) {
+    const activeItem = container.querySelector('.sidebar-conv-item.active');
+    if (activeItem) {
+      requestAnimationFrame(() => {
+        activeItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      });
+    }
+  }
 }
 
 function groupConversationsByDate(conversations) {
@@ -3637,10 +3739,10 @@ function groupConversationsByDate(conversations) {
   const weekAgo = today - 7 * 86400000;
 
   const groups = {
-    today: { label: '今天', items: [] },
-    yesterday: { label: '昨天', items: [] },
-    week: { label: '最近7天', items: [] },
-    older: { label: '更早', items: [] }
+    today: { key: 'today', label: '今天', items: [] },
+    yesterday: { key: 'yesterday', label: '昨天', items: [] },
+    week: { key: 'week', label: '最近7天', items: [] },
+    older: { key: 'older', label: '更早', items: [] }
   };
 
   conversations.forEach(conv => {
@@ -3657,40 +3759,6 @@ function groupConversationsByDate(conversations) {
   });
 
   return Object.values(groups).filter(g => g.items.length > 0);
-}
-
-function groupConversationsByMode(conversations) {
-  // 先按时间排序所有会话
-  const sorted = [...conversations].sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt));
-
-  // 最近会话分组（取前10个）
-  const recentItems = sorted.slice(0, 10);
-
-  const groups = {
-    recent: { key: 'recent', label: '最近会话', items: recentItems },
-    brainstorming: { key: 'brainstorming', label: '头脑风暴', items: [] },
-    discussion: { key: 'discussion', label: '圆桌讨论', items: [] },
-    expertqa: { key: 'expertqa', label: '专家问答', items: [] }
-  };
-
-  conversations.forEach(conv => {
-    const mode = conv.mode || 'brainstorming';
-    if (groups[mode]) {
-      groups[mode].items.push(conv);
-    } else {
-      groups.brainstorming.items.push(conv);
-    }
-  });
-
-  // 每个模式组内按时间排序
-  Object.values(groups).forEach(g => {
-    if (g.key !== 'recent') {
-      g.items.sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt));
-    }
-  });
-
-  // 始终返回所有分组（即使为空）
-  return Object.values(groups);
 }
 
 // 格式化时间
@@ -3874,7 +3942,7 @@ async function deleteConversationFromSidebar(convId) {
     }
   } catch (error) {
     console.error('[Sidebar] 删除会话失败:', error);
-    alert('删除失败: ' + error.message);
+    showToast('删除失败: ' + error.message, 'error');
   }
 }
 
@@ -4033,7 +4101,23 @@ async function loadNewConvModalData() {
       }
     } else {
       const expertSelector = document.getElementById('expertSelector');
-      if (expertSelector) expertSelector.innerHTML = '<div class="empty-state">暂无专家</div>';
+      if (expertSelector) expertSelector.innerHTML = '<div class="empty-state" style="padding:20px;text-align:center;"><div style="font-size:28px;margin-bottom:8px;">🎓</div><p style="margin:0 0 12px;font-size:13px;color:#86868b;">暂无可用专家</p><a href="#" id="gotoAddExpertLinkEmpty" style="display:inline-flex;align-items:center;gap:4px;color:#667eea;text-decoration:none;font-size:13px;font-weight:500;padding:6px 14px;border:1px solid #667eea;border-radius:8px;transition:all .2s;">去添加 →</a></div>';
+      const gotoLink = document.getElementById('gotoAddExpertLinkEmpty');
+      if (gotoLink) {
+        gotoLink.addEventListener('click', (e) => {
+          e.preventDefault();
+          window.open(chrome.runtime.getURL('dashboard/dashboard.html#experts'));
+        });
+      }
+    }
+
+    // 处理标签旁边的"去添加"链接
+    const gotoAddExpertLink = document.getElementById('gotoAddExpertLink');
+    if (gotoAddExpertLink) {
+      gotoAddExpertLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.open(chrome.runtime.getURL('dashboard/dashboard.html#experts'));
+      });
     }
 
     if (!newConvState.eventsBound) {
@@ -4339,7 +4423,7 @@ async function createNewConversation() {
 
   if (mode === 'expertqa') {
     if (!newConvState.selectedExpertId) {
-      alert('请选择一个专家');
+      showToast('请先选择一个专家', 'warning');
       return;
     }
     data.expertId = newConvState.selectedExpertId;
@@ -4352,12 +4436,15 @@ async function createNewConversation() {
     const members = generateAutoMembers(memberCount, newConvState.inlineFormModels);
 
     if (mode === 'discussion' && members.length < 2) {
-      alert('圆桌讨论至少需要 2 个成员');
+      showToast('圆桌讨论至少需要 2 个成员', 'warning');
       return;
     }
     
     if (members.length === 0) {
-      alert('没有可用的网页平台模型，请先在Dashboard中配置平台');
+      showToast('没有可用的模型，请先配置平台', 'warning', {
+        text: '去配置',
+        onClick: () => { window.open(chrome.runtime.getURL('dashboard/dashboard.html#models')); }
+      });
       return;
     }
     
@@ -4383,7 +4470,7 @@ async function createNewConversation() {
     }
   } catch (error) {
     console.error('[NewConvModal] 创建会话失败:', error);
-    alert('创建失败: ' + (error.message || error));
+    showToast('创建失败: ' + (error.message || error), 'error');
   }
 }
 
@@ -5197,7 +5284,7 @@ async function executeBatchDelete() {
     }
   } catch (error) {
     console.error('[BatchDelete] 批量删除失败:', error);
-    alert('批量删除失败: ' + error.message);
+    showToast('批量删除失败: ' + error.message, 'error');
   }
 }
 

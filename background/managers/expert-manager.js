@@ -27,6 +27,7 @@ class ExpertManager {
       icon: data.icon || '🤖',
       nodes: data.nodes || [],
       connections: data.connections || [],
+      isBuiltin: data.isBuiltin || false,
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
@@ -78,8 +79,8 @@ class ExpertManager {
     const clonedConnections = (original.connections || []).map(c => ({
       ...c,
       id: this.generateId(),
-      from: oldToNew[c.from] || c.from,
-      to: oldToNew[c.to] || c.to
+      from: oldToNew[c.from || c.source] || c.from || c.source,
+      to: oldToNew[c.to || c.target] || c.to || c.target
     }));
 
     return this.createExpert({

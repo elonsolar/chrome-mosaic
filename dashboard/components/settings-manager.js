@@ -2,7 +2,7 @@ class SettingsManager {
   constructor() {
     this.state = {
       settings: {
-        wsUrl: 'ws://localhost:8080',
+        wsUrl: 'ws://localhost:12606',
         wsEnabled: false,
         floatWindow: true,
         helperModel: ''
@@ -58,7 +58,7 @@ class SettingsManager {
     const { settings } = this.state;
 
     if (this.elements.wsUrlInput) {
-      this.elements.wsUrlInput.value = settings.wsUrl || 'ws://localhost:8080';
+      this.elements.wsUrlInput.value = settings.wsUrl || 'ws://localhost:12606';
     }
 
     if (this.elements.wsEnabledCheckbox) {
@@ -108,11 +108,24 @@ class SettingsManager {
 
       if (currentValue) {
         this.elements.helperModelSelect.value = currentValue;
+      } else {
+        // 默认选中第一个网页平台的 deepseek 模型
+        const defaultModel = enabledModels.find(m => 
+          m.platformName === '网页' && m.code && m.code.toLowerCase().includes('deepseek')
+        );
+        if (defaultModel) {
+          this.elements.helperModelSelect.value = defaultModel.id;
+          this.updateSetting('helperModel', defaultModel.id);
+          console.log('[SettingsManager] 默认选中辅助模型:', defaultModel.code, defaultModel.platformName);
+        }
       }
 
       this.elements.helperModelSelect.disabled = false;
 
-      console.log('[SettingsManager] 辅助模型列表加载完成', { count: enabledModels.length });
+      console.log('[SettingsManager] 辅助模型列表加载完成', { 
+        count: enabledModels.length,
+        models: enabledModels.map(m => ({ id: m.id, code: m.code, platformId: m.platformId, platformName: m.platformName }))
+      });
     }, 100);
   }
 
@@ -174,7 +187,7 @@ class SettingsManager {
 
   validateWsUrl(value) {
     const input = this.elements.wsUrlInput;
-    const wsRegex = /^wss?:\/\/([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(:\d+)?(\/.*)?$/;
+    const wsRegex = /^wss?:\/\/([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(:\d+)?(\/.*)?$|^wss?:\/\/localhost(:\d+)?(\/.*)?$/;
 
     // Remove previous validation state
     input.classList.remove('input-error', 'input-valid');
@@ -188,7 +201,7 @@ class SettingsManager {
     if (!wsRegex.test(value)) {
       input.classList.add('input-error');
       input.setCustomValidity('请输入有效的WebSocket地址');
-      this.showValidationError(input, '地址格式不正确，例如：ws://localhost:8080');
+      this.showValidationError(input, '地址格式不正确，例如：ws://localhost:12606');
     } else {
       input.classList.add('input-valid');
       input.setCustomValidity('');

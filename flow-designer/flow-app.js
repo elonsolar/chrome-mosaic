@@ -52,6 +52,10 @@ class FlowDesignerApp {
   }
 
   createDefaultWorkflow() {
+    // 获取第一个可用模型
+    const defaultModel = this.models.length > 0 ? this.models[0] : null;
+    const modelConfig = defaultModel ? { modelId: defaultModel.id, modelType: defaultModel.code } : { modelType: 'default' };
+
     const startNode = {
       id: 'start', type: StandardNodeType.Start,
       position: { x: 80, y: 280 },
@@ -67,7 +71,7 @@ class FlowDesignerApp {
       position: { x: 1240, y: 280 },
       data: {
         title: '结束', description: '流程的终止点',
-        inputs: { terminatePlan: 'return_variables', content: '', inputParameters: [], streamingOutput: false },
+        inputs: { terminatePlan: 'return_variables', content: createValueExpression(''), inputParameters: [], streamingOutput: false },
         nodeMeta: { title: '结束', description: '流程的终止点', icon: '/nodes/end.svg', mainColor: '#FF4D4F' },
       },
     };
@@ -76,9 +80,9 @@ class FlowDesignerApp {
       position: { x: 360, y: 230 },
       data: {
         title: '分析师', description: '调用大语言模型', batchMode: BatchMode.Single,
-        model: { modelType: '豆包·1.8·深度思考' },
-        $$input_decorator$$: { inputParameters: [{ name: 'input', input: createValueExpression('') }], chatHistorySetting: { enableChatHistory: false, chatHistoryRound: 5 } },
-        $$prompt_decorator$$: { systemPrompt: '', prompt: '' },
+        model: modelConfig,
+        $$input_decorator$$: { inputParameters: [{ name: 'input', input: createValueExpression('{{input}}') }], chatHistorySetting: { enableChatHistory: false, chatHistoryRound: 5 } },
+        $$prompt_decorator$$: { systemPrompt: '你是一个专业的分析师，擅长分析问题的根本原因。', prompt: '请分析以下内容：\n\n{{input}}' },
         batch: { batchSize: 10 }, fcParam: [],
         outputs: [{ key: 'output', name: 'output', type: 'string' }, { key: 'reasoning_content', name: 'reasoning_content', type: 'string' }],
         nodeMeta: { title: '分析师', description: '调用大语言模型', icon: '/nodes/llm.svg', mainColor: '#1890FF' },
@@ -89,9 +93,9 @@ class FlowDesignerApp {
       position: { x: 640, y: 120 },
       data: {
         title: '编程助手1', description: '调用大语言模型', batchMode: BatchMode.Single,
-        model: { modelType: '豆包·1.8·深度思考' },
-        $$input_decorator$$: { inputParameters: [{ name: 'input', input: createValueExpression('') }], chatHistorySetting: { enableChatHistory: false, chatHistoryRound: 5 } },
-        $$prompt_decorator$$: { systemPrompt: '', prompt: '' },
+        model: modelConfig,
+        $$input_decorator$$: { inputParameters: [{ name: 'analysis', input: { type: 'ref', content: { source: 'block-output', blockID: 'analyst', name: 'output' } } }], chatHistorySetting: { enableChatHistory: false, chatHistoryRound: 5 } },
+        $$prompt_decorator$$: { systemPrompt: '你是一个编程助手，擅长根据分析结果生成代码。', prompt: '基于以下分析，生成代码：\n\n{{analysis}}' },
         batch: { batchSize: 10 }, fcParam: [],
         outputs: [{ key: 'output', name: 'output', type: 'string' }, { key: 'reasoning_content', name: 'reasoning_content', type: 'string' }],
         nodeMeta: { title: '编程助手1', description: '调用大语言模型', icon: '/nodes/llm.svg', mainColor: '#1890FF' },
@@ -102,9 +106,9 @@ class FlowDesignerApp {
       position: { x: 640, y: 380 },
       data: {
         title: '编程助手1_1', description: '调用大语言模型', batchMode: BatchMode.Single,
-        model: { modelType: '豆包·1.8·深度思考' },
-        $$input_decorator$$: { inputParameters: [{ name: 'input', input: createValueExpression('') }], chatHistorySetting: { enableChatHistory: false, chatHistoryRound: 5 } },
-        $$prompt_decorator$$: { systemPrompt: '', prompt: '' },
+        model: modelConfig,
+        $$input_decorator$$: { inputParameters: [{ name: 'analysis', input: { type: 'ref', content: { source: 'block-output', blockID: 'analyst', name: 'output' } } }], chatHistorySetting: { enableChatHistory: false, chatHistoryRound: 5 } },
+        $$prompt_decorator$$: { systemPrompt: '你是一个编程助手，擅长根据分析结果优化代码。', prompt: '基于以下分析，优化代码：\n\n{{analysis}}' },
         batch: { batchSize: 10 }, fcParam: [],
         outputs: [{ key: 'output', name: 'output', type: 'string' }, { key: 'reasoning_content', name: 'reasoning_content', type: 'string' }],
         nodeMeta: { title: '编程助手1_1', description: '调用大语言模型', icon: '/nodes/llm.svg', mainColor: '#1890FF' },
@@ -115,14 +119,14 @@ class FlowDesignerApp {
       position: { x: 940, y: 230 },
       data: {
         title: '汇总师', description: '调用大语言模型', batchMode: BatchMode.Single,
-        model: { modelType: '豆包·1.8·深度思考' },
+        model: modelConfig,
         $$input_decorator$$: { inputParameters: [
-          { name: 'origin1', input: createValueExpression('') },
-          { name: 'analysis', input: createValueExpression('') },
-          { name: 'answer1', input: createValueExpression('') },
-          { name: 'answer2', input: createValueExpression('') },
+          { name: 'origin1', input: { type: 'ref', content: { source: 'block-output', blockID: 'start', name: 'user_input' } } },
+          { name: 'analysis', input: { type: 'ref', content: { source: 'block-output', blockID: 'analyst', name: 'output' } } },
+          { name: 'answer1', input: { type: 'ref', content: { source: 'block-output', blockID: 'coder1', name: 'output' } } },
+          { name: 'answer2', input: { type: 'ref', content: { source: 'block-output', blockID: 'coder1_1', name: 'output' } } },
         ], chatHistorySetting: { enableChatHistory: false, chatHistoryRound: 5 } },
-        $$prompt_decorator$$: { systemPrompt: '', prompt: '' },
+        $$prompt_decorator$$: { systemPrompt: '你是一个汇总师，擅长整合多方信息生成总结。', prompt: '请整合以下信息，生成最终总结：\n\n原始输入：{{origin1}}\n\n分析结果：{{analysis}}\n\n方案1：{{answer1}}\n\n方案2：{{answer2}}' },
         batch: { batchSize: 10 }, fcParam: [],
         outputs: [{ key: 'output', name: 'output', type: 'string' }, { key: 'reasoning_content', name: 'reasoning_content', type: 'string' }],
         nodeMeta: { title: '汇总师', description: '调用大语言模型', icon: '/nodes/llm.svg', mainColor: '#1890FF' },

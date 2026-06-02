@@ -146,9 +146,13 @@ class MemberEntity extends BaseEntity {
       apiMessages.push({ role: 'system', content: systemContent });
     }
 
-    const ALLOWED_TIP_SUBTYPES = ['join', 'leave', 'rename'];
+    const ALLOWED_TIP_SUBTYPES = ['join', 'leave', 'rename', 'prompt_change'];
     for (const msg of messages) {
       if (msg.isIntro) continue;
+
+      // 检查 target 和 exclude
+      if (msg.target && msg.target.length > 0 && !msg.target.includes(this.id)) continue;
+      if (msg.exclude && msg.exclude.includes(this.id)) continue;
 
       if (msg.isUser) {
         apiMessages.push({ role: 'user', content: msg.content });
@@ -210,9 +214,13 @@ class MemberEntity extends BaseEntity {
       }
     }
 
-    const ALLOWED_TIP_SUBTYPES = ['join', 'leave', 'rename'];
+    const ALLOWED_TIP_SUBTYPES = ['join', 'leave', 'rename', 'prompt_change'];
     for (const msg of incrementalMessages) {
       if (msg.isIntro) continue;
+
+      // 检查 target 和 exclude
+      if (msg.target && msg.target.length > 0 && !msg.target.includes(this.id)) continue;
+      if (msg.exclude && msg.exclude.includes(this.id)) continue;
 
       if (msg.isUser) {
         apiMessages.push({ role: 'user', content: msg.content });
@@ -286,11 +294,15 @@ class MemberEntity extends BaseEntity {
     }
 
     // 构建历史上下文
-    const ALLOWED_TIP_SUBTYPES = ['join', 'leave', 'rename'];
+    const ALLOWED_TIP_SUBTYPES = ['join', 'leave', 'rename', 'prompt_change'];
     const historyParts = [];
 
     for (const msg of incrementalMessages) {
       if (msg.isIntro) continue;
+
+      // 检查 target 和 exclude
+      if (msg.target && msg.target.length > 0 && !msg.target.includes(this.id)) continue;
+      if (msg.exclude && msg.exclude.includes(this.id)) continue;
 
       if (msg.isUser) {
         historyParts.push(`用户：${msg.content}`);
@@ -323,29 +335,25 @@ class MemberEntity extends BaseEntity {
       return '';
     }
 
-    return `你是 ${this.name}，这是你在本群中的称呼，它只是一个标签，不代表任何性格或身份暗示。你的性格、专长、说话方式，全部由下方的角色设定决定。
+    const memberNames = context.conversation.members
+      .filter(m => m.id !== this.id)
+      .map(m => m.name)
+      .join('、');
 
-【群背景】
-我们是一个协作讨论群，群里有多个成员，每个人都有自己的视角和专长。当用户提出任务或问题时，大家会各抒己见，目标是：通过多角度的讨论、互相补充和纠正，得出比任何单人思考都更完善的结论。
+    return `群成员：${this.name}（你）、${memberNames || '其他成员'}。
 
-【你的角色设定】
-${this.systemPrompt}
+${this.systemPrompt || '你是一个有独立见解的讨论参与者。'}
 
-【讨论规则】
-1. 用户的需求是唯一的工作方向。接到任务后，全力以赴从你的角色视角出发，给出有实质内容的分析或方案。
-2. 严禁根据自己或他人的名字去做任何假设，也不可以主动提及自己的名字,名字只是代号且只有别人使用的时候才有意义。
-3. 严格按照你的角色设定来思考和发言。你的观点应该是这个角色真正会有的看法，而不是为了迎合谁而说。
-4. 讨论中不要人云亦云。如果你同意前面的观点，要给出新的论据或补充细节；如果你不同意，直接指出问题，提出不同看法。讨论的价值就在于碰撞出更全面的结果。
-5. 遇到不确定的信息，主动去查证，或者在发言中明确指出这是你的推测、不确定之处在哪里，方便其他人补充纠正。
-6. 和其他成员协作时，注意分工：有人提出框架，有人补充细节，有人挑刺找漏洞。你的目标是让整个讨论的结果更扎实，而不是证明自己更对。`;
+轮到你发言时：先看前面成员说了什么，找他们没覆盖的点或可以深入的方向，给出具体的补充, 若遇到不同意的观点，提出质疑。如果前面已经说全了，简短确认即可。禁止主动提到自己的名称，只有引用别人内容时才可以提别人名称。`;
   }
 
   _cleanTipContent(content, fallbackName = '系统') {
-    let cleaned = content.replace(/，模型是[^，]+，/g, '，');
-    cleaned = cleaned.replace(/，提示词是[^，]+，/g, '，');
-    cleaned = cleaned.replace(/<a[^>]*>修改成员信息<\/a>/g, '').trim();
-    cleaned = cleaned.replace(/，$/, '');
-    return cleaned || content;
+    let cleaned = content.replace(/<[^>]+>/g, '');
+    cleaned = cleaned.replace(/，模型是[^，]+/g, '');
+    cleaned = cleaned.replace(/，提示词是[^，]+/g, '');
+    cleaned = cleaned.replace(/[，,\s]+$/g, '').replace(/^[，,\s]+/g, '');
+    cleaned = cleaned.replace(/，{2,}/g, '，');
+    return `<tip>${cleaned.trim() || content}</tip>`;
   }
 
   _cleanTipContentSimple(content) {

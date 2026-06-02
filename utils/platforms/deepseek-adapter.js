@@ -265,19 +265,30 @@ class DeepSeekAdapter extends BasePlatformAdapter {
       deleteButton.click();
       await this.sleep(800);
 
-      const modalWrapper = document.querySelector('.ds-modal-wrapper.ds-theme');
+      const modalWrapper = document.querySelector('.ds-modal-wrapper.ds-theme') 
+        || document.querySelector('dialog');
       if (!modalWrapper) {
         throw new Error('找不到确认删除对话框');
       }
       console.log(`[${this.platform}] ✓ 找到确认删除对话框`);
 
-      const dialogButtons = modalWrapper.querySelectorAll('button');
+      const dialogButtons = modalWrapper.querySelectorAll('button, [role="button"]');
       let confirmButton = null;
 
       for (const btn of dialogButtons) {
         if (btn.textContent.includes('删除该对话')) {
           confirmButton = btn;
           break;
+        }
+      }
+
+      if (!confirmButton) {
+        for (const btn of dialogButtons) {
+          const btnText = btn.textContent.trim();
+          if ((btnText.includes('删除') || btnText.toLowerCase().includes('delete')) && !btnText.includes('取消')) {
+            confirmButton = btn;
+            break;
+          }
         }
       }
 

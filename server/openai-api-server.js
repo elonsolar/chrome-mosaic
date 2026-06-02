@@ -4,12 +4,14 @@ const { v4: uuidv4 } = require('uuid');
 const config = require('./config');
 const ToolConverter = require('./tool-converter');
 const MessageRouter = require('./message-router');
+const MCPHandler = require('./mcp-handler');
 
 class OpenAIAPIServer {
   constructor(messageRouter) {
     this.app = express();
     this.messageRouter = messageRouter;
     this.toolConverter = new ToolConverter();
+    this.mcpHandler = new MCPHandler(messageRouter);
     this.conversationState = new Map();
     this.setupMiddleware();
     this.setupRoutes();
@@ -32,6 +34,10 @@ class OpenAIAPIServer {
   setupRoutes() {
     this.app.post('/v1/chat/completions', this.handleChatCompletion.bind(this));
     
+    this.app.post('/mcp', this.mcpHandler.handleRequest.bind(this.mcpHandler));
+    this.app.get('/mcp', this.mcpHandler.handleGet.bind(this.mcpHandler));
+    this.app.delete('/mcp', this.mcpHandler.handleDelete.bind(this.mcpHandler));
+
     this.app.get('/health', (req, res) => {
       res.json({
         status: 'healthy',

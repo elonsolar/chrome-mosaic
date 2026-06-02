@@ -15,6 +15,23 @@ class DoubaoAdapter extends BasePlatformAdapter {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
+  gaussianRandom(mean, stdev) {
+    const u = 1 - Math.random();
+    const v = Math.random();
+    const z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+    return z * stdev + mean;
+  }
+
+  clamp(val, min, max) {
+    return Math.min(max, Math.max(min, val));
+  }
+
+  humanDelay(min, max) {
+    const mean = (min + max) / 2;
+    const stdev = (max - min) / 6;
+    return this.clamp(this.gaussianRandom(mean, stdev), min, max);
+  }
+
   async waitForElement(selector, timeout = 10000) {
     const startTime = Date.now();
     while (Date.now() - startTime < timeout) {
@@ -35,36 +52,103 @@ class DoubaoAdapter extends BasePlatformAdapter {
     throw new Error('发送按钮未找到或已禁用');
   }
 
+  dispatchMouseEventsOnElement(el, type, extra) {
+    const rect = el.getBoundingClientRect();
+    const x = rect.left + rect.width / 2 + this.gaussianRandom(0, 3);
+    const y = rect.top + rect.height / 2 + this.gaussianRandom(0, 2);
+    el.dispatchEvent(new MouseEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      clientX: x,
+      clientY: y,
+      screenX: x + window.screenX,
+      screenY: y + window.screenY,
+      ...(extra || {})
+    }));
+  }
+
+  async humanClickElement(el) {
+    const rect = el.getBoundingClientRect();
+    const x = rect.left + rect.width / 2 + this.gaussianRandom(0, rect.width * 0.08);
+    const y = rect.top + rect.height / 2 + this.gaussianRandom(0, rect.height * 0.08);
+
+    this.dispatchMouseEventsOnElement(el, 'pointerover', { pointerId: 1, pointerType: 'mouse' });
+    this.dispatchMouseEventsOnElement(el, 'pointerenter', { pointerId: 1, pointerType: 'mouse' });
+    this.dispatchMouseEventsOnElement(el, 'mouseover', { relatedTarget: el.parentNode });
+    this.dispatchMouseEventsOnElement(el, 'mouseenter', { relatedTarget: el.parentNode });
+    await this.sleep(this.humanDelay(50, 150));
+
+    for (let i = 0; i < 3; i++) {
+      this.dispatchMouseEventsOnElement(el, 'pointermove', { pointerId: 1, pointerType: 'mouse', movementX: this.gaussianRandom(0, 2), movementY: this.gaussianRandom(0, 2) });
+      await this.sleep(this.humanDelay(10, 30));
+    }
+
+    this.dispatchMouseEventsOnElement(el, 'pointerdown', { button: 0, pointerId: 1, pointerType: 'mouse', pressure: 0.5 });
+    this.dispatchMouseEventsOnElement(el, 'mousedown', { button: 0, detail: 1 });
+    await this.sleep(this.clamp(this.gaussianRandom(80, 30), 40, 200));
+
+    this.dispatchMouseEventsOnElement(el, 'pointerup', { button: 0, pointerId: 1, pointerType: 'mouse', pressure: 0 });
+    this.dispatchMouseEventsOnElement(el, 'mouseup', { button: 0, detail: 1 });
+    el.click();
+    await this.sleep(this.humanDelay(100, 300));
+  }
+
+  async humanTypeText(inputBox, text) {
+    inputBox.focus();
+    await this.sleep(this.humanDelay(150, 350));
+
+    const nativeSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLTextAreaElement.prototype, 'value'
+    ).set;
+
+    let currentText = '';
+    for (let i = 0; i < text.length; i++) {
+      currentText += text[i];
+      nativeSetter.call(inputBox, currentText);
+
+      if (i % 2 === 0 || i === text.length - 1) {
+        inputBox.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+
+      let charDelay;
+      if (Math.random() < 0.03) {
+        charDelay = this.humanDelay(100, 250);  // 偶尔停顿
+      } else if (text[i] === ' ' || text[i] === ',' || text[i] === '。' || text[i] === '，' || text[i] === '\n') {
+        charDelay = this.humanDelay(20, 60);  // 标点符号
+      } else {
+        charDelay = this.humanDelay(10, 30);  // 普通字符
+      }
+      await this.sleep(charDelay);
+    }
+
+    nativeSetter.call(inputBox, text);
+    inputBox.dispatchEvent(new Event('input', { bubbles: true }));
+    inputBox.dispatchEvent(new Event('change', { bubbles: true }));
+    await this.sleep(this.humanDelay(300, 600));
+  }
+
   async sendMessage(content) {
     const timestamp = () => new Date().toISOString().split('T')[1].replace('Z', '');
     console.log(`[${timestamp()}] [${this.platform}] ========== 开始发送消息 ==========`);
-    console.log(`[${timestamp()}] [${this.platform}] 消息内容:`, content);
 
     const inputBox = await this.waitForElement('textarea.semi-input-textarea', 10000);
     console.log(`[${timestamp()}] [${this.platform}] ✓ 找到输入框`);
 
     inputBox.focus();
-    await this.sleep(200);
+    await this.sleep(this.humanDelay(200, 400));
+    console.log(`[${timestamp()}] [${this.platform}] ✓ 已聚焦输入框`);
 
-    // 绕过 React 受控组件，直接调用原生 setter
-    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-      window.HTMLTextAreaElement.prototype, 'value'
-    ).set;
-    nativeInputValueSetter.call(inputBox, content);
-    inputBox.dispatchEvent(new Event('input', { bubbles: true }));
-    inputBox.dispatchEvent(new Event('change', { bubbles: true }));
-    await this.sleep(500);
+    await this.humanTypeText(inputBox, content);
+    console.log(`[${timestamp()}] [${this.platform}] ✓ 已输入文本`);
 
-    // 等待发送按钮可用
     const sendButton = await this.waitForButton();
     console.log(`[${timestamp()}] [${this.platform}] ✓ 找到发送按钮`);
 
-    // 点击发送按钮前，通过 DOM 属性通知 MAIN world 的 fetch 拦截器
     document.body.setAttribute('data-anti-lazy-waiting', 'true');
-    console.log(`[${timestamp()}] [${this.platform}] ✓ 已设置 data-anti-lazy-waiting = true（点击前）`);
+    console.log(`[${timestamp()}] [${this.platform}] ✓ 已设置 data-anti-lazy-waiting = true`);
 
-    // 点击发送按钮
-    sendButton.click();
+    await this.humanClickElement(sendButton);
     console.log(`[${timestamp()}] [${this.platform}] ✓ 已点击发送按钮`);
 
     await this.sleep(1000);
@@ -365,7 +449,6 @@ class DoubaoAdapter extends BasePlatformAdapter {
       );
       let targetLink = null;
 
-      // 方案1：通过活动状态查找（仅在历史对话链接中）
       targetLink = conversationLinks.find(link => {
         const style = window.getComputedStyle(link);
         return style.fontWeight === '700' || 
@@ -374,7 +457,6 @@ class DoubaoAdapter extends BasePlatformAdapter {
                link.getAttribute('aria-current') === 'page';
       });
 
-      // 方案2：通过URL匹配兜底
       if (!targetLink) {
         const conversationId = conversationUrl.split('/chat/')[1]?.split('/')[0];
         if (conversationId) {
@@ -384,7 +466,6 @@ class DoubaoAdapter extends BasePlatformAdapter {
         }
       }
 
-      // 方案3：使用第一个会话作为兜底
       if (!targetLink && conversationLinks.length > 0) {
         console.warn(`[${this.platform}] ⚠️ 未找到精确匹配会话，使用第一个会话`);
         targetLink = conversationLinks[0];
@@ -396,25 +477,10 @@ class DoubaoAdapter extends BasePlatformAdapter {
       console.log(`[${this.platform}] ✓ 找到会话链接:`, targetLink.textContent.trim());
 
       targetLink.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      await this.sleep(500);
+      await this.sleep(this.humanDelay(400, 800));
 
-      const rect = targetLink.getBoundingClientRect();
-      const x = rect.left + rect.width / 2;
-      const y = rect.top + rect.height / 2;
-      const eventTypes = ['pointerenter', 'pointerover', 'pointermove', 'mouseenter', 'mouseover', 'mousemove'];
-      for (const eventType of eventTypes) {
-        const event = new MouseEvent(eventType, {
-          bubbles: true,
-          cancelable: true,
-          view: window,
-          clientX: x,
-          clientY: y,
-          screenX: x,
-          screenY: y
-        });
-        targetLink.dispatchEvent(event);
-      }
-      await this.sleep(500);
+      await this.humanClickElement(targetLink);
+      await this.sleep(this.humanDelay(300, 700));
 
       const menuButton = targetLink.querySelector('button');
       if (!menuButton) {
@@ -422,25 +488,9 @@ class DoubaoAdapter extends BasePlatformAdapter {
       }
       console.log(`[${this.platform}] ✓ 找到菜单按钮`);
 
-      const btnRect = menuButton.getBoundingClientRect();
-      const bx = btnRect.left + btnRect.width / 2;
-      const by = btnRect.top + btnRect.height / 2;
+      await this.humanClickElement(menuButton);
+      await this.sleep(this.humanDelay(500, 1200));
 
-      menuButton.dispatchEvent(new PointerEvent('pointerdown', {
-        bubbles: true, cancelable: true, view: window,
-        clientX: bx, clientY: by, pointerId: 1, pointerType: 'mouse'
-      }));
-      menuButton.dispatchEvent(new PointerEvent('pointerup', {
-        bubbles: true, cancelable: true, view: window,
-        clientX: bx, clientY: by, pointerId: 1, pointerType: 'mouse'
-      }));
-      menuButton.dispatchEvent(new MouseEvent('click', {
-        bubbles: true, cancelable: true, view: window,
-        clientX: bx, clientY: by
-      }));
-      await this.sleep(1000);
-
-      const deleteMenuItem = await this.waitForElement('[role="menuitem"]', 3000);
       const menuItems = document.querySelectorAll('[role="menuitem"]');
       let deleteButton = null;
 
@@ -456,8 +506,8 @@ class DoubaoAdapter extends BasePlatformAdapter {
       }
       console.log(`[${this.platform}] ✓ 找到删除按钮`);
 
-      deleteButton.click();
-      await this.sleep(500);
+      await this.humanClickElement(deleteButton);
+      await this.sleep(this.humanDelay(300, 600));
 
       const dialog = await this.waitForElement('[role="dialog"]', 3000);
       const dialogButtons = dialog.querySelectorAll('button');
@@ -475,7 +525,7 @@ class DoubaoAdapter extends BasePlatformAdapter {
       }
       console.log(`[${this.platform}] ✓ 找到确认删除按钮`);
 
-      confirmButton.click();
+      await this.humanClickElement(confirmButton);
       await this.sleep(2000);
 
       console.log(`[${this.platform}] ✓ 会话删除成功`);
