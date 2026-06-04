@@ -48,11 +48,28 @@ class MessageQueue {
     return this.queue.findIndex(msg => msg.type === 'message' && !msg.consumed.has(memberId));
   }
 
+  getAllUnconsumedForMember(memberId) {
+    const indices = [];
+    for (let i = 0; i < this.queue.length; i++) {
+      if (this.queue[i].type === 'message' && !this.queue[i].consumed.has(memberId)) {
+        indices.push(i);
+      }
+    }
+    return indices;
+  }
+
   markConsumed(memberId, msgIndex) {
     if (msgIndex >= 0 && msgIndex < this.queue.length) {
       this.queue[msgIndex].consumed.add(memberId);
       console.log(`[MessageQueue] 成员 ${memberId} 消费了消息 ${msgIndex}`);
     }
+  }
+
+  markConsumedBatch(memberId, msgIndices) {
+    for (const idx of msgIndices) {
+      this.queue[idx].consumed.add(memberId);
+    }
+    console.log(`[MessageQueue] 成员 ${memberId} 批量消费了 ${msgIndices.length} 条消息`);
   }
 
   canRemove(msgIndex, onlineMemberIds) {

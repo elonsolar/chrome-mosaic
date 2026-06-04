@@ -1004,7 +1004,21 @@ class TabManager {
     }
 
     if (!forceNew) {
-      const existingTab = await this.findTabByUrl(url);
+      let existingTab = await this.findTabByUrl(url);
+      if (!existingTab) {
+        const baseUrl = this._extractBaseUrl(url);
+        if (baseUrl) {
+          existingTab = await this.findTabByUrlPrefix(baseUrl);
+          if (existingTab) {
+            console.log(`[TabManager] 通过前缀匹配找到标签页，导航到目标URL: ${url}`);
+            await chrome.tabs.update(existingTab.id, { url: url, active: false });
+            await this.sleep(2000);
+            await this.waitForTabReady(existingTab.id);
+            await chrome.tabs.update(existingTab.id, { active: false });
+            return existingTab;
+          }
+        }
+      }
       if (existingTab) {
         console.log(`[TabManager] 复用已存在的标签页: ${url}`);
         await chrome.tabs.update(existingTab.id, { active: false });
@@ -1025,6 +1039,15 @@ class TabManager {
     await chrome.tabs.update(tab.id, { active: false });
 
     return tab;
+  }
+
+  _extractBaseUrl(url) {
+    try {
+      const parsed = new URL(url);
+      return `${parsed.protocol}//${parsed.hostname}${parsed.port ? ':' + parsed.port : ''}/`;
+    } catch {
+      return null;
+    }
   }
 
   async findTabByUrlPrefix(webUrl) {

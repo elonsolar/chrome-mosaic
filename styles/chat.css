@@ -1718,6 +1718,44 @@ body.dark-mode .chat-header {
   color: #6B7280;
 }
 
+/* ========== 成员回复中指示器 ========== */
+
+.member-replying-container {
+  display: contents;
+}
+
+.member-replying-item {
+  animation: messageIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.member-replying-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #F8F9FA;
+  border: 1px solid #E9ECEF;
+  border-radius: 12px;
+  border-bottom-left-radius: 4px;
+}
+
+.member-replying-complete {
+  animation: none;
+}
+
+.member-replying-item .message-avatar img {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+body.dark-mode .member-replying-status {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+body.dark-mode .member-replying-status .thinking-text {
+  color: #9CA3AF;
+}
+
 /* 进度条容器 */
 .expert-progress-bar-wrapper {
   margin-top: 8px;

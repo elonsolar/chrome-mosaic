@@ -12,6 +12,7 @@ class ConversationWorker {
     
     this.isRunning = false;
     this._resolveSchedule = null;
+    this.onMemberProcessing = null;
     
     this.queue.onEnqueue = () => this._wakeUp();
   }
@@ -124,18 +125,22 @@ class ConversationWorker {
       for (const [memberId, member] of this.members) {
         if (member.status !== 'online' || member.isBusy) continue;
         
-        const msgIndex = this.queue.getNextForMember(memberId);
-        if (msgIndex < 0) continue;
+        const msgIndices = this.queue.getAllUnconsumedForMember(memberId);
+        if (msgIndices.length === 0) continue;
         
-        const msg = this.queue.queue[msgIndex];
-        if (msg.type !== 'message') continue;
-        
-        this.queue.markConsumed(memberId, msgIndex);
+        const contents = msgIndices.map(i => this.queue.queue[i].content);
+        const mergedContent = contents.join('\n\n');
+
+        this.queue.markConsumedBatch(memberId, msgIndices);
         
         member.isBusy = true;
         hasWork = true;
+
+        if (this.onMemberProcessing) {
+          this.onMemberProcessing(memberId);
+        }
         
-        this._executeMember(memberId, member, msg.content)
+        this._executeMember(memberId, member, mergedContent)
           .then(() => {
             member.isBusy = false;
             this._wakeUp();
@@ -207,6 +212,10 @@ class ConversationWorker {
       }
 
       member.isBusy = true;
+
+      if (this.onMemberProcessing) {
+        this.onMemberProcessing(memberId);
+      }
       
       try {
         await this._executeMember(memberId, member, msg.content);

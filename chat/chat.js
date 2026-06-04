@@ -208,6 +208,8 @@ const state = {
   flowExecutionLogs: [] // 流程执行日志
 };
 
+let isMemberReplyingMode = false;
+
 // Dashboard 动画状态
 const dashboardState = {
   modeTimers: {},
@@ -227,10 +229,10 @@ const elements = {
 
 // 初始化
 async function init() {
-  // 初始化DOM元素
   initElements();
 
-  // 初始化侧边栏
+  messageStore = new MessageStore(elements.messagesContainer);
+
   await initSidebar();
 
   if (!conversationId) {
@@ -495,7 +497,8 @@ function bindEvents() {
   elements.scrollBottomBtn.addEventListener('click', () => {
     if (hasPendingRender) {
       hasPendingRender = false;
-      appendNewMessages();
+      messageStore.syncBackend(state.conversation.messages || []);
+      checkPlaceholdersResolved();
     }
     scrollToBottom();
     elements.scrollBottomBtn.classList.remove('visible');
@@ -765,8 +768,10 @@ async function handleStorageChange(change) {
   const updatedConversation = newConversations.find(c => c.id === conversationId);
 
   if (updatedConversation) {
-    const oldMessageCount = (state.conversation?.messages || []).filter(msg => !msg.isIntro).length;
-    const newMessageCount = (updatedConversation?.messages || []).filter(msg => !msg.isIntro).length;
+    const oldMsgs = state.conversation?.messages || [];
+    const newMsgs = updatedConversation?.messages || [];
+    const oldMessageCount = oldMsgs.filter(msg => !msg.isIntro).length;
+    const newMessageCount = newMsgs.filter(msg => !msg.isIntro).length;
     const hasNewMessages = newMessageCount > oldMessageCount;
 
     state.conversation = updatedConversation;
@@ -784,8 +789,10 @@ async function handleStorageChange(change) {
 
     if (hasNewMessages) {
       hideThinkingIndicator();
-      removeTempMessages();
-      appendNewMessages();
+
+      messageStore.syncBackend(newMsgs);
+      checkPlaceholdersResolved();
+
       const diff = newMessageCount - oldMessageCount;
       requestAnimationFrame(() => {
         const { scrollTop, scrollHeight, clientHeight } = elements.messagesContainer;
@@ -794,6 +801,8 @@ async function handleStorageChange(change) {
           updateNewMessagesBadge();
         }
       });
+
+      scrollToBottom();
     }
 
     updateConversationName();
@@ -1344,13 +1353,13 @@ function renderModeBadge() {
 
 function buildMessageHtml(msg, index) {
   const msgId = msg.id || `msg_${index}_${msg.timestamp || Date.now()}`;
+  const vid = msg._viewId ? ` data-view-id="${msg._viewId}"` : '';
   if (msg.type === 'tip') {
-    // 如果 ui === false，不在UI上显示
     if (msg.ui === false) {
       return '';
     }
     return `
-      <div class="message tip-message" data-msg-id="${msgId}">
+      <div class="message tip-message" data-msg-id="${msgId}"${vid}>
         <div class="tip-content">${msg.content}</div>
       </div>
     `;
@@ -1364,7 +1373,7 @@ function buildMessageHtml(msg, index) {
 
   if (msg.isUser) {
     return `
-      <div class="message user-message" data-msg-id="${msgId}">
+      <div class="message user-message" data-msg-id="${msgId}"${vid}>
         <div class="message-avatar user-avatar">
           <img src="${generateAvatarUrl('Me')}" alt="我" loading="lazy">
         </div>
@@ -1406,7 +1415,7 @@ function buildMessageHtml(msg, index) {
   ` : '';
 
   return `
-    <div class="message ai-message" data-msg-id="${msgId}">
+    <div class="message ai-message" data-msg-id="${msgId}"${vid}>
       <div class="message-avatar ai-avatar ${clickableClass}" ${providerAttr} title="点击配置成员" style="cursor: pointer;">
         <img src="${generateAvatarUrl(displayName)}" alt="${escapeHtml(displayName)}" loading="lazy">
       </div>
@@ -1430,113 +1439,88 @@ function buildMessageHtml(msg, index) {
   `;
 }
 
-function removeTempMessages() {
-  elements.messagesContainer.querySelectorAll('.temp-message').forEach(el => el.remove());
+function buildPlaceholderHtml(msg) {
+  const member = state.conversation.members.find(m => m.id === msg.memberId);
+  const name = msg.memberName || member?.name || '未知成员';
+  const modelCode = member ? (member.modelCode || member.provider) : '';
+  const providerAttr = `data-provider="${modelCode}" data-member-id="${msg.memberId}"`;
+  return `
+    <div class="message ai-message member-replying-item" data-view-id="${msg._viewId}" data-member-id="${msg.memberId}">
+      <div class="message-avatar ai-avatar clickable" ${providerAttr} title="点击配置成员" style="cursor: pointer;">
+        <img src="${generateAvatarUrl(name)}" alt="${escapeHtml(name)}" loading="lazy">
+      </div>
+      <div class="message-body">
+        <div class="message-header-row">
+          <span class="message-sender-name clickable" ${providerAttr}>${escapeHtml(name)}</span>
+        </div>
+        <div class="member-replying-status">
+          <div class="thinking-dots-inline">
+            <span class="thinking-dot"></span>
+            <span class="thinking-dot"></span>
+            <span class="thinking-dot"></span>
+          </div>
+          <span class="thinking-text">回复中...</span>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
-function appendNewMessages() {
-  const messages = state.conversation.messages || [];
-  if (messages.length <= lastRenderedMsgCount) return;
-
-  // 第一条消息到来时，移除"开始对话"提示
-  if (lastRenderedMsgCount === 0) {
-    const emptyMessages = elements.messagesContainer.querySelector('.empty-messages');
-    if (emptyMessages) {
-      emptyMessages.remove();
-    }
-  }
-
-  const newMsgs = messages.slice(lastRenderedMsgCount);
-
-  const temp = document.createElement('div');
-  temp.innerHTML = newMsgs.map((msg, i) =>
-    buildMessageHtml(msg, lastRenderedMsgCount + i)
-  ).join('');
-
-  while (temp.firstChild) {
-    elements.messagesContainer.appendChild(temp.firstChild);
-  }
-
-  const newElements = elements.messagesContainer.querySelectorAll('.message:not([data-bound])');
-  const typewriterMessages = []; // 收集需要打字机效果的消息
-
-  newElements.forEach((el, idx) => {
-    el.setAttribute('data-bound', '1');
-    el.querySelectorAll('.clickable').forEach(c => {
-      c.addEventListener('click', (e) => {
-        const memberId = c.dataset.memberId;
-        if (memberId && state.conversation?.members) {
-          const member = state.conversation.members.find(m => m.id === memberId);
-          if (member) {
-            e.preventDefault();
-            e.stopPropagation();
-            openMemberConfigModal(memberId);
-            return;
-          }
-        }
-        const provider = c.dataset.provider;
-        if (provider) {
-          let targetUrl = null;
-          if (memberId && state.conversation?.memberUrls) {
-            targetUrl = state.conversation.memberUrls[memberId] || null;
-          }
-          chrome.runtime.sendMessage({
-            action: 'activatePlatformTab',
-            targetUrl
-          }).catch(() => {});
-        }
-      });
-    });
-    el.querySelectorAll('.copy-msg-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const idx = parseInt(btn.dataset.msgIndex);
-        const msgs = state.conversation.messages || [];
-        if (msgs[idx]) {
-          navigator.clipboard.writeText(msgs[idx].content).then(() => {
-            btn.textContent = '✓';
-            setTimeout(() => { btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>'; }, 1000);
-          });
-        }
-      });
-    });
-    el.querySelectorAll('.tip-link').forEach(link => {
-      link.addEventListener('click', (e) => {
-        const memberId = link.dataset.memberId;
-        if (memberId) {
+function bindMessageElement(el, msg) {
+  if (!el) return;
+  el.querySelectorAll('.clickable').forEach(c => {
+    c.addEventListener('click', (e) => {
+      const memberId = c.dataset.memberId;
+      if (memberId && state.conversation?.members) {
+        const member = state.conversation.members.find(m => m.id === memberId);
+        if (member) {
           e.preventDefault();
+          e.stopPropagation();
           openMemberConfigModal(memberId);
+          return;
         }
-      });
-    });
-
-    // 收集 AI 消息用于打字机效果
-    const msg = newMsgs[idx];
-    if (msg && !msg.isUser && msg.type !== 'tip') {
-      const messageText = el.querySelector('.message-text');
-      if (messageText) {
-        typewriterMessages.push({
-          element: messageText,
-          content: messageText.innerHTML
-        });
       }
-    }
-  });
-
-  addCodeCopyButtons(elements.messagesContainer);
-  renderMathFormulas(elements.messagesContainer);
-
-  lastRenderedMsgCount = messages.length;
-
-  // 应用打字机效果（延迟一点确保 DOM 已更新）
-  setTimeout(() => {
-    typewriterMessages.forEach(({ element, content }, index) => {
-      // 错开每条消息的开始时间
-      setTimeout(() => {
-        typewriterEffect(element, content, 15);
-      }, index * 200);
+      const provider = c.dataset.provider;
+      if (provider) {
+        let targetUrl = null;
+        if (memberId && state.conversation?.memberUrls) {
+          targetUrl = state.conversation.memberUrls[memberId] || null;
+        }
+        chrome.runtime.sendMessage({
+          action: 'activatePlatformTab',
+          targetUrl
+        }).catch(() => {});
+      }
     });
-  }, 50);
+  });
+  el.querySelectorAll('.copy-msg-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const text = msg.content || '';
+      navigator.clipboard.writeText(text).then(() => {
+          btn.textContent = '✓';
+          setTimeout(() => {
+            btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+          }, 1000);
+        });
+    });
+  });
+  el.querySelectorAll('.tip-link').forEach(link => {
+    link.addEventListener('click', (e) => {
+      const memberId = link.dataset.memberId;
+      if (memberId) {
+        e.preventDefault();
+        openMemberConfigModal(memberId);
+      }
+    });
+  });
+  if (msg.type === 'member' || (msg._status !== 'placeholder' && !msg.isUser && msg.type !== 'tip')) {
+    renderMathFormulas(el);
+    addCodeCopyButtons(el);
+  }
 }
+
+
+let messageStore;
 
 function renderMessages() {
   const hasParticipants = (state.conversation.members && state.conversation.members.length > 0) ||
@@ -1551,43 +1535,20 @@ function renderMessages() {
       </div>
     `;
     updateSendButtonState();
-    lastRenderedMsgCount = 0;
     return;
   }
 
   const messages = state.conversation.messages || [];
 
   if (messages.length === 0) {
-    // 不显示空会话提示
     elements.messagesContainer.innerHTML = '';
     updateSendButtonState();
-    lastRenderedMsgCount = 0;
     return;
   }
 
-  elements.messagesContainer.innerHTML = messages.map((msg, index) =>
-    buildMessageHtml(msg, index)
-  ).join('');
+  messageStore.reset(messages);
 
-  bindMemberClickEvents();
-  bindCopyButtonEvents();
-  addCodeCopyButtons(elements.messagesContainer);
-  renderMathFormulas(elements.messagesContainer);
-
-  const tipLinks = elements.messagesContainer.querySelectorAll('.tip-link');
-  tipLinks.forEach(link => {
-    link.addEventListener('click', (e) => {
-      const memberId = e.currentTarget.dataset.memberId;
-      if (memberId) {
-        e.preventDefault();
-        openMemberConfigModal(memberId);
-      }
-    });
-  });
-
-  elements.messagesContainer.querySelectorAll('.message').forEach(el => el.setAttribute('data-bound', '1'));
-
-  lastRenderedMsgCount = messages.length;
+  updateSendButtonState();
   setTimeout(observeNewMessages, 50);
 }
 
@@ -1608,36 +1569,48 @@ async function sendMessage() {
   elements.sendBtn.classList.add('sending');
 
   try {
-    addTempMessage(content, true);
-    showThinkingIndicator();
+    messageStore.push({
+      isUser: true, content, timestamp: Date.now(), _status: 'local'
+    });
 
     const isExpertQa = state.conversation.mode === 'expertqa' && state.conversation.expertId;
-    
+    const mode = state.conversation.mode || 'brainstorming';
+
     if (isExpertQa) {
       showInitialExpertProgress();
+    } else if (mode === 'brainstorming' || mode === 'discussion') {
+      // placeholder 由后台 member_processing 通知驱动
+    } else if (!isMemberReplyingMode) {
+      showThinkingIndicator();
     }
 
     sendMessageToBackend(conversationId, content)
       .then(updatedConversation => {
         if (updatedConversation) {
           state.conversation = updatedConversation;
-          removeTempMessages();
-          appendNewMessages();
+          messageStore.syncBackend(updatedConversation.messages || []);
+          checkPlaceholdersResolved();
           updateConversationName();
         }
       })
       .catch(error => {
         console.error('发送消息失败:', error);
         showError('发送消息失败: ' + error.message);
+        if (!isMemberReplyingMode) {
+          hideMemberReplyingIndicators();
+        }
       })
       .finally(() => {
         removeProgressIndicator();
-        hideThinkingIndicator();
+        if (!isMemberReplyingMode) {
+          hideThinkingIndicator();
+        }
       });
   } catch (error) {
     console.error('发送消息失败:', error);
     showError('发送消息失败: ' + error.message);
     hideThinkingIndicator();
+    hideMemberReplyingIndicators();
   }
 }
 
@@ -1731,6 +1704,46 @@ function hideThinkingIndicator() {
   const existing = document.getElementById('thinking-indicator');
   if (existing) {
     existing.remove();
+  }
+}
+
+function showMemberReplyingIndicators() {
+  const members = state.conversation.members || [];
+  if (members.length === 0) return;
+
+  if (isMemberReplyingMode) {
+    const existing = messageStore.messages.filter(m => m._status === 'placeholder');
+    for (const ph of existing) {
+      messageStore.remove(ph._viewId);
+    }
+  }
+
+  isMemberReplyingMode = true;
+
+  members.forEach(member => {
+    const status = state.memberStatus[member.id]?.status || 'online';
+    if (status === 'offline') return;
+
+    messageStore.push({
+      _status: 'placeholder',
+      memberId: member.id,
+      memberName: member.name,
+      modelCode: member.modelCode || member.provider
+    });
+  });
+}
+
+function hideMemberReplyingIndicators() {
+  const placeholders = messageStore.messages.filter(m => m._status === 'placeholder');
+  for (const ph of placeholders) {
+    messageStore.remove(ph._viewId);
+  }
+  isMemberReplyingMode = false;
+}
+
+function checkPlaceholdersResolved() {
+  if (isMemberReplyingMode && messageStore.messages.every(m => m._status !== 'placeholder')) {
+    isMemberReplyingMode = false;
   }
 }
 
@@ -1868,6 +1881,23 @@ function removeLoopProgress() {
 
 function handleFlowExecutionProgress(progress) {
   console.log('[Chat] 流程执行进度:', progress);
+
+  if (progress.type === 'member_processing') {
+    const member = state.conversation.members?.find(m => m.id === progress.memberId);
+    if (!member) return;
+    if (messageStore.findPlaceholder(member.id)) return;
+
+    isMemberReplyingMode = true;
+    hideThinkingIndicator();
+
+    messageStore.push({
+      _status: 'placeholder',
+      memberId: member.id,
+      memberName: member.name,
+      modelCode: member.modelCode || member.provider
+    });
+    return;
+  }
 
   // ✅ 只在专家模式下显示进度
   const isExpertMode = state.conversation.mode === 'expertqa' && state.conversation.expertId;
@@ -2236,7 +2266,8 @@ async function resumeFlowExecution(btn) {
     if (response && response.success && response.conversation) {
       console.log('[Chat] 恢复成功，更新会话');
       state.conversation = response.conversation;
-      appendNewMessages();
+      messageStore.syncBackend(response.conversation.messages || []);
+      checkPlaceholdersResolved();
     } else if (response && response.canResume) {
       console.log('[Chat] 恢复后再次失败，可继续恢复');
       handleFlowExecutionError(response);
@@ -2316,19 +2347,6 @@ function updateOrderIndices(container) {
   });
 }
 
-function addTempMessage(content, isUser) {
-  const tempDiv = document.createElement('div');
-  tempDiv.className = `message ${isUser ? 'user-message' : 'ai-message'} temp-message`;
-  tempDiv.innerHTML = `
-    <div class="message-avatar-wrapper">
-      <div class="message-avatar ${isUser ? 'user-avatar' : 'ai-avatar'}">${isUser ? '我' : 'AI'}</div>
-    </div>
-    <div class="message-content">
-      <div class="message-text">${escapeHtml(content)}</div>
-    </div>
-  `;
-  elements.messagesContainer.appendChild(tempDiv);
-}
 
 // 工具函数
 async function getConversation(id) {
@@ -2754,7 +2772,6 @@ function scrollToBottom() {
 let isUserScrolling = false;
 let unreadCount = 0;
 let hasPendingRender = false;
-let lastRenderedMsgCount = 0;
 
 function updateNewMessagesBadge() {
   const badge = elements.scrollBottomBadge;
@@ -2819,7 +2836,8 @@ function initScrollDetection() {
         hasPendingRender = false;
         unreadCount = 0;
         updateNewMessagesBadge();
-        appendNewMessages();
+        messageStore.syncBackend(state.conversation.messages || []);
+        checkPlaceholdersResolved();
       }
     }, 300);
   });
@@ -4605,58 +4623,48 @@ function startModeConversationCarousel() {
 
     await sleep(300);
 
-    // 发送消息
-    addTempMessage(userText, true);
+    messageStore.push({
+      isUser: true, content: userText, timestamp: Date.now(), _status: 'local'
+    });
+
     elements.messageInput.value = '';
     updateSendButtonState();
 
     await sleep(200);
 
-    // 显示 thinking indicator
     showThinkingIndicator();
 
     await sleep(800);
 
-    // 隐藏 thinking
     hideThinkingIndicator();
 
-    // 移除临时消息
-    removeTempMessages();
-
-    // 移除"开始对话"提示
     const emptyMessages = elements.messagesContainer.querySelector('.empty-messages');
     if (emptyMessages) {
       emptyMessages.remove();
     }
 
-    // 添加用户消息（去除 [Pasted ~X lines] 标记）
     const cleanUserText = userText.replace(/\[Pasted[^\]]*\]/g, '');
-    state.conversation.messages.push({
-      isUser: true,
-      content: cleanUserText,
-      timestamp: Date.now()
-    });
+    const userViewId = messageStore.find(m => m._status === 'local' && m.isUser)?._viewId;
+    if (userViewId) {
+      messageStore.update(userViewId, { content: cleanUserText, _status: 'confirmed' });
+    }
 
-    // 渲染用户消息
-    lastRenderedMsgCount = 0;
-    appendNewMessages();
-
-    // 等待一小段时间后，逐个添加 AI 消息并应用打字机效果
     await sleep(300);
 
     for (let i = 0; i < example.preview.ai.length; i++) {
       const ai = example.preview.ai[i];
       const memberId = `demo-${mode}-${i}`;
 
-      state.conversation.messages.push({
+      messageStore.push({
         isUser: false,
         memberId: memberId,
         content: ai.text,
-        timestamp: Date.now() + i + 1
+        memberName: ai.name || `成员${i + 1}`,
+        type: 'member',
+        timestamp: Date.now() + i + 1,
+        _status: 'confirmed'
       });
 
-      // 每添加一条 AI 消息就渲染一次（会自动应用打字机效果）
-      appendNewMessages();
       await sleep(400);
     }
 

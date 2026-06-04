@@ -513,6 +513,12 @@ Message: ${userMessage}`;
         }
       }
     );
+    worker.onMemberProcessing = (memberId) => {
+      this.progressNotifier.notify(conversationId, {
+        type: 'member_processing',
+        memberId
+      });
+    };
     this.workers.set(conversationId, worker);
     console.log(`[ConversationMessageService] 创建Worker: ${conversationId}`);
     return worker;
