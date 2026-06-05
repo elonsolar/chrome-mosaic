@@ -1,6 +1,6 @@
 class ApiMessageSender extends AbstractMessageSender {
   async send(content, options = {}) {
-    const { baseUrl, apiKey, model, provider } = options;
+    const { baseUrl, apiKey, model, provider, onChunk } = options;
 
     if (!baseUrl || !apiKey) {
       throw new Error('API 模式需要配置 Base URL 和 API Key');
@@ -8,10 +8,11 @@ class ApiMessageSender extends AbstractMessageSender {
 
     const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
 
+    const stream = !!onChunk;
     const requestBody = {
       model: model || 'default',
       messages: Array.isArray(content) ? content : [{ role: 'user', content }],
-      stream: false
+      stream
     };
 
     try {
@@ -89,6 +90,48 @@ class ApiMessageSender extends AbstractMessageSender {
           }
 
           throw new Error(errorMessages[response.status] || `API 请求失败 (${response.status})`);
+        }
+
+        if (stream) {
+          console.log(`========== API 流式响应开始 ==========\n`);
+          let fullContent = '';
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed.startsWith('data:')) continue;
+              const data = trimmed.slice(5).trim();
+              if (data === '[DONE]') continue;
+              try {
+                const parsed = JSON.parse(data);
+                const delta = parsed.choices?.[0]?.delta?.content || '';
+                if (delta) {
+                  fullContent += delta;
+                  if (onChunk) onChunk(delta, fullContent);
+                }
+              } catch (e) {
+                // skip malformed JSON
+              }
+            }
+          }
+
+          console.log(`提取的内容长度: ${fullContent.length} 字符`);
+          console.log(`========== API 流式响应结束 ==========\n`);
+
+          return {
+            content: fullContent,
+            conversationUrl: null
+          };
         }
 
         const data = await response.json();

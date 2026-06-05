@@ -117,15 +117,20 @@ class QianwenAdapter extends BasePlatformAdapter {
     window.isSendingMessage = true;
     console.log(`[${timestamp()}] [${this.platform}] ✓ 已设置 isSendingMessage = true`);
 
+    let streamInterval = null;
+
     try {
       await this.sendMessage(content);
       console.log(`[${timestamp()}] [${this.platform}] ✓ 消息已发送到输入框`);
 
+      streamInterval = this._startStreamingCheck(messageId, conversationId);
+
       const response = await this.waitForAIResponse();
       console.log(`[${timestamp()}] [${this.platform}] ✓ 收到 AI 回复，长度:`, response?.length || 0);
 
+      if (streamInterval) clearInterval(streamInterval);
+      document.body.removeAttribute('data-anti-lazy-stream-content');
 
-      this.waitForUrlUpdate
       // 使用重试机制发送响应
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
@@ -172,6 +177,8 @@ class QianwenAdapter extends BasePlatformAdapter {
       });
     } finally {
       window.isSendingMessage = false;
+      if (streamInterval) clearInterval(streamInterval);
+      document.body.removeAttribute('data-anti-lazy-stream-content');
       const ts = timestamp();
       console.log(`[${ts}] [${this.platform}] ✓ 消息处理完成，已清除 isSendingMessage 标记`);
     }

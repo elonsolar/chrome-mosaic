@@ -13,6 +13,7 @@ class ConversationWorker {
     this.isRunning = false;
     this._resolveSchedule = null;
     this.onMemberProcessing = null;
+    this.onContentChunk = null;
     
     this.queue.onEnqueue = () => this._wakeUp();
   }
@@ -221,6 +222,9 @@ class ConversationWorker {
         await this._executeMember(memberId, member, msg.content);
       } catch (error) {
         console.error(`[ConversationWorker] 成员 ${memberId} 执行失败:`, error);
+        if (this.onMemberError) {
+          this.onMemberError(memberId, error.message || '执行失败');
+        }
       }
       
       member.isBusy = false;
@@ -261,7 +265,13 @@ class ConversationWorker {
     const context = new ConversationContext(conversation);
     console.log(`[ConversationWorker] 成员 ${memberId} 读取到 memberUrls:`, JSON.stringify(context.memberUrls));
     
-    const result = await member.entity.execute(content, context);
+    const onChunk = (delta, fullContent) => {
+      if (this.onContentChunk) {
+        this.onContentChunk(memberId, delta, fullContent);
+      }
+    };
+    
+    const result = await member.entity.execute(content, context, onChunk);
     
     if (result.success && result.content) {
       const entityId = result.memberId || result.expertId;

@@ -736,8 +736,12 @@
                   }
                 }
               }
-              
-              readStream();
+               
+               if (fullText.length > 0) {
+                 document.body.setAttribute('data-anti-lazy-stream-content', fullText);
+               }
+               
+               readStream();
             }).catch(e => debug('流读取错误:', e.message));
           }
           

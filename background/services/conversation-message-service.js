@@ -307,12 +307,25 @@ ${summary}
   }
 
   async _maybeGenerateTitle(conversationId, conversation, userMessage) {
-    // 只有默认标题才自动生成
     if (!conversation.nameIsDefault) {
       return;
     }
 
-    // 异步执行，不阻塞主流程
+    // titleStatus: 'default' | 'generating' | 'done'
+    if (conversation.titleStatus === 'generating') {
+      console.log('[ConversationMessageService] 标题正在生成中，跳过:', conversationId);
+      return;
+    }
+
+    if (conversation.titleStatus === 'done') {
+      return;
+    }
+
+    // 先持久化 generating 状态，防止 service worker 重启后丢失
+    await this.conversationManager.updateConversation(conversationId, {
+      titleStatus: 'generating'
+    });
+
     this._generateTitle(conversationId, userMessage).catch(err => {
       console.error('[ConversationMessageService] 标题生成异常:', err);
     });
@@ -369,12 +382,12 @@ Message: ${userMessage}`;
         }
 
         if (title) {
-          // 检查是否仍然是默认标题（防止并发修改）
           const conversation = await this.conversationManager.getConversation(conversationId);
           if (conversation && conversation.nameIsDefault) {
             await this.conversationManager.updateConversation(conversationId, {
               name: title,
-              nameIsDefault: false
+              nameIsDefault: false,
+              titleStatus: 'done'
             });
             console.log('[ConversationMessageService] 标题已生成:', title);
           }
@@ -382,6 +395,15 @@ Message: ${userMessage}`;
       }
     } catch (error) {
       console.error('[ConversationMessageService] 标题生成失败:', error.message);
+      // 生成失败时重置状态，允许下次重试
+      try {
+        const conv = await this.conversationManager.getConversation(conversationId);
+        if (conv && conv.titleStatus === 'generating') {
+          await this.conversationManager.updateConversation(conversationId, {
+            titleStatus: 'default'
+          });
+        }
+      } catch (_) {}
     } finally {
       // 删除平台会话并关闭标签页（仅 web 模型）
       if (conversationUrl && this.tabManager) {
@@ -503,12 +525,12 @@ Message: ${userMessage}`;
       conversationId,
       this.conversationManager,
       (convId, message) => {
-        // 消息保存后的回调
         if (message) {
           this.progressNotifier.notify(convId, {
             type: 'message_saved',
             messageId: message.id,
-            memberId: message.memberId
+            memberId: message.memberId,
+            content: message.content
           });
         }
       }
@@ -517,6 +539,22 @@ Message: ${userMessage}`;
       this.progressNotifier.notify(conversationId, {
         type: 'member_processing',
         memberId
+      });
+    };
+
+    worker.onContentChunk = (memberId, delta, fullContent) => {
+      this.progressNotifier.notify(conversationId, {
+        type: 'content_chunk',
+        memberId,
+        delta,
+        fullContent
+      });
+    };
+    worker.onMemberError = (memberId, error) => {
+      this.progressNotifier.notify(conversationId, {
+        type: 'member_error',
+        memberId,
+        error
       });
     };
     this.workers.set(conversationId, worker);

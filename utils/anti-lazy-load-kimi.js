@@ -28,12 +28,34 @@
       const response = await originalFetch.apply(this, args);
       
       try {
-        // Kimi 新版 Connect-RPC 端点
         if (url && isWaiting && url.includes('kimi.gateway.chat.v1.ChatService/Chat')) {
           debug('✓ 匹配到 Kimi AI API (Connect-RPC)');
           document.body.setAttribute('data-anti-lazy-waiting', 'false');
           
           const clonedResponse = response.clone();
+
+          if (!response.ok) {
+            const errorBody = await clonedResponse.text().catch(() => '');
+            const msg = errorBody || `错误: Kimi API 返回 ${response.status}`;
+            document.body.setAttribute('data-anti-lazy-message', msg);
+            document.body.setAttribute('data-anti-lazy-fetch-ready', 'true');
+            document.body.setAttribute('data-anti-lazy-error', 'true');
+            debug(`⚠️ 非正常响应: ${response.status}`);
+            return response;
+          }
+
+          const contentType = response.headers.get('content-type') || '';
+          if (!contentType.includes('connect+json') && !contentType.includes('application/json')) {
+            const text = await clonedResponse.text().catch(() => '');
+            document.body.setAttribute('data-anti-lazy-message', text || `错误: 非预期响应类型 ${contentType}`);
+            document.body.setAttribute('data-anti-lazy-fetch-ready', 'true');
+            document.body.setAttribute('data-anti-lazy-error', 'true');
+            debug(`⚠️ 非预期响应类型: ${contentType}`);
+            return response;
+          }
+
+
+
           const reader = clonedResponse.body.getReader();
           let fullText = '';
           let rawBuffer = new Uint8Array(0);
@@ -51,15 +73,20 @@
             return { messages, remaining: bytes.slice(offset) };
           }
           
-          function readStream() {
-            reader.read().then(({ done, value }) => {
-              if (done) {
-                if (fullText.length > 0) {
-                  document.body.setAttribute('data-anti-lazy-message', fullText);
-                  document.body.setAttribute('data-anti-lazy-fetch-ready', 'true');
-                  debug(`✓ 获取完整回复，长度: ${fullText.length}`);
-                }
-                return;
+           function readStream() {
+             reader.read().then(({ done, value }) => {
+               if (done) {
+                 if (fullText.length > 0) {
+                   document.body.setAttribute('data-anti-lazy-message', fullText);
+                   document.body.setAttribute('data-anti-lazy-fetch-ready', 'true');
+                   debug(`✓ 获取完整回复，长度: ${fullText.length}`);
+                 } else {
+                   document.body.setAttribute('data-anti-lazy-message', '错误: Kimi 返回了空回复');
+                   document.body.setAttribute('data-anti-lazy-fetch-ready', 'true');
+                   document.body.setAttribute('data-anti-lazy-error', 'true');
+                   debug('⚠️ 流结束但回复为空');
+                 }
+                 return;
               }
               
               const merged = new Uint8Array(rawBuffer.length + value.length);
@@ -75,7 +102,6 @@
                 try {
                   const json = JSON.parse(payload);
                   
-                  // 只处理正式回复文本（跳过思考内容）
                   if (json.op === 'append' && json.mask === 'block.text.content') {
                     const text = json.block?.text?.content;
                     if (typeof text === 'string') {
@@ -83,7 +109,6 @@
                     }
                   }
                   
-                  // 首次设置完整文本块
                   if (json.op === 'set' && json.mask === 'block.text') {
                     const text = json.block?.text?.content;
                     if (typeof text === 'string') {
@@ -94,15 +119,27 @@
                   debug(`JSON 解析错误: ${e.message}`);
                 }
               }
-              
-              readStream();
-            }).catch(e => debug('流读取错误:', e.message));
+
+              if (fullText.length > 0) {
+                document.body.setAttribute('data-anti-lazy-stream-content', fullText);
+              }
+               
+               readStream();
+            }).catch(e => {
+              debug('流读取错误:', e.message);
+              document.body.setAttribute('data-anti-lazy-message', '错误: ' + e.message);
+              document.body.setAttribute('data-anti-lazy-fetch-ready', 'true');
+              document.body.setAttribute('data-anti-lazy-error', 'true');
+            });
           }
           
           readStream();
         }
       } catch (e) {
         debug('错误:', e.message);
+        document.body.setAttribute('data-anti-lazy-message', '错误: ' + e.message);
+        document.body.setAttribute('data-anti-lazy-fetch-ready', 'true');
+        document.body.setAttribute('data-anti-lazy-error', 'true');
       }
       
       return response;

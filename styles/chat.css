@@ -316,6 +316,30 @@ body {
   overflow: visible;
 }
 
+.sidebar-conv-name[data-title-status="generating"]::after {
+  content: ' 生成中...';
+  font-size: 11px;
+  color: var(--text-muted, #999);
+  animation: titlePulse 1.5s ease-in-out infinite;
+}
+
+.sidebar-conv-name[data-title-status="done"]::after {
+  content: ' ✓';
+  font-size: 11px;
+  color: var(--success, #43e97b);
+  animation: titleFadeout 2s ease forwards;
+}
+
+@keyframes titlePulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+@keyframes titleFadeout {
+  0%, 70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 .sb-mode-badge {
   font-size: 10px;
   font-weight: 600;
@@ -1754,6 +1778,19 @@ body.dark-mode .member-replying-status {
 
 body.dark-mode .member-replying-status .thinking-text {
   color: #9CA3AF;
+}
+
+/* 流式响应光标 */
+.streaming-cursor {
+  display: inline-block;
+  animation: blink 0.8s step-end infinite;
+  color: var(--primary);
+  font-weight: 300;
+  margin-left: 1px;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
 }
 
 /* 进度条容器 */

@@ -6,7 +6,7 @@ class WebMessageSender extends AbstractMessageSender {
   }
 
   async send(content, options = {}) {
-    const { conversationUrl, conversationId, conversation, webUrl } = options;
+    const { conversationUrl, conversationId, conversation, webUrl, onChunk } = options;
 
     const isNewConversation = !conversationUrl;
     const forceNewTab = isNewConversation;
@@ -17,7 +17,8 @@ class WebMessageSender extends AbstractMessageSender {
       'sendMessage',
       { content, conversationId: conversationId },
       forceNewTab,
-      conversationUrl || webUrl
+      conversationUrl || webUrl,
+      onChunk
     );
 
     return {
@@ -51,7 +52,7 @@ class WebMessageSender extends AbstractMessageSender {
     ]);
   }
 
-  async sendToPlatform(messageType, data = {}, forceNewTab = false, url) {
+  async sendToPlatform(messageType, data = {}, forceNewTab = false, url, onChunk = null) {
     if (!url) {
       throw new Error('没有配置目标 URL');
     }
@@ -116,7 +117,7 @@ class WebMessageSender extends AbstractMessageSender {
       const conversationId = data.conversationId || null;
 
       const responsePromise = new Promise((resolve, reject) => {
-        this.pendingResponses.set(messageId, { resolve, reject, conversationId });
+        this.pendingResponses.set(messageId, { resolve, reject, conversationId, onChunk });
 
         setTimeout(() => {
           if (this.pendingResponses.has(messageId)) {

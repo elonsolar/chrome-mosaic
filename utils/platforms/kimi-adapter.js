@@ -100,13 +100,20 @@ class KimiAdapter extends BasePlatformAdapter {
     window.isSendingMessage = true;
     console.log(`[${this.platform}] ✓ 已设置 isSendingMessage = true`);
 
+    let streamInterval = null;
+
     try {
       const safeContent = content + '\n\n  直接给出结果，不要执行。';
       await this.sendMessage(safeContent);
       console.log(`[${this.platform}] ✓ 消息已发送到输入框`);
 
+      streamInterval = this._startStreamingCheck(messageId, conversationId);
+
       const response = await this.waitForAIResponse();
       console.log(`[${this.platform}] ✓ 收到 AI 回复，长度:`, response?.length || 0);
+
+      if (streamInterval) clearInterval(streamInterval);
+      document.body.removeAttribute('data-anti-lazy-stream-content');
 
       // 使用重试机制发送响应
       for (let attempt = 1; attempt <= 3; attempt++) {
@@ -150,6 +157,8 @@ class KimiAdapter extends BasePlatformAdapter {
       });
     } finally {
       window.isSendingMessage = false;
+      if (streamInterval) clearInterval(streamInterval);
+      document.body.removeAttribute('data-anti-lazy-stream-content');
       console.log(`[${this.platform}] ✓ 消息处理完成，已清除 isSendingMessage 标记`);
     }
   }
@@ -176,14 +185,25 @@ class KimiAdapter extends BasePlatformAdapter {
 
         const fetchReady = document.body.getAttribute('data-anti-lazy-fetch-ready');
         const fetchMsg = document.body.getAttribute('data-anti-lazy-message');
+        const fetchError = document.body.getAttribute('data-anti-lazy-error');
         
-        if (fetchReady === 'true' && fetchMsg && fetchMsg.length > 0) {
-          console.log(`[${ts}] [${this.platform}] ✓ 从 fetch 拦截器获取消息，长度: ${fetchMsg.length}`);
+        if (fetchReady === 'true') {
           document.body.removeAttribute('data-anti-lazy-message');
           document.body.removeAttribute('data-anti-lazy-fetch-ready');
+          document.body.removeAttribute('data-anti-lazy-error');
           clearInterval(checkInterval);
-          resolve(fetchMsg);
-          return;
+
+          if (fetchError === 'true') {
+            console.warn(`[${ts}] [${this.platform}] ⚠️ 检测到错误回复:`, fetchMsg);
+            reject(new Error(fetchMsg || 'Kimi 返回了错误'));
+            return;
+          }
+
+          if (fetchMsg && fetchMsg.length > 0) {
+            console.log(`[${ts}] [${this.platform}] ✓ 从 fetch 拦截器获取消息，长度: ${fetchMsg.length}`);
+            resolve(fetchMsg);
+            return;
+          }
         }
 
       }, POLL_INTERVAL);

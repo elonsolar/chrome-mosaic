@@ -20,4 +20,24 @@ class BasePlatformAdapter {
     newChatButton.click();
     await new Promise(resolve => setTimeout(resolve, 2000));
   }
+
+  _startStreamingCheck(messageId, conversationId) {
+    let lastContent = '';
+    return setInterval(() => {
+      const current = document.body.getAttribute('data-anti-lazy-stream-content') || '';
+      if (current && current !== lastContent) {
+        const delta = lastContent ? current.slice(lastContent.length) : current;
+        lastContent = current;
+        if (delta) {
+          chrome.runtime.sendMessage({
+            type: 'aiChunk',
+            messageId,
+            conversationId,
+            content: delta,
+            fullContent: current
+          }).catch(() => {});
+        }
+      }
+    }, 500);
+  }
 }

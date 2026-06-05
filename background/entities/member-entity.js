@@ -35,7 +35,7 @@ class MemberEntity extends BaseEntity {
     return { valid: true, error: null };
   }
 
-  async execute(input, context) {
+  async execute(input, context, onChunk) {
     console.log(`[MemberEntity] ${this.name} 开始执行 (${this.accessMethod} 模式)`);
 
     this.reportProgress({
@@ -77,7 +77,8 @@ class MemberEntity extends BaseEntity {
         memberId: this.id,
         baseUrl: this.baseUrl,
         apiKey: this.apiKey,
-        webUrl: this.webUrl
+        webUrl: this.webUrl,
+        onChunk
       });
 
       console.log(`[MemberEntity] ${this.name} 收到响应 conversationUrl:`, response.conversationUrl);
@@ -107,12 +108,21 @@ class MemberEntity extends BaseEntity {
       };
 
     } catch (error) {
-      // 累计错误，检查是否需要自动离线
-      this.consecutiveErrors++;
-      if (this.consecutiveErrors >= this.maxConsecutiveErrors) {
+      // 检测服务过载/限流错误，立即离线不重试
+      const overloadPatterns = ['有点累了', '请稍后再试', 'rate limit', 'too many', 'overload', '繁忙', '服务繁忙', '429', '503'];
+      const isOverload = overloadPatterns.some(p => error.message.toLowerCase().includes(p));
+      if (isOverload) {
         this.status = 'offline';
-        this.offlineReason = `连续${this.consecutiveErrors}次失败`;
-        console.warn(`[MemberEntity] ${this.name} 自动离线: ${this.offlineReason}`);
+        this.offlineReason = `服务过载: ${error.message}`;
+        this.consecutiveErrors = 0;
+        console.warn(`[MemberEntity] ${this.name} 服务过载，立即离线`);
+      } else {
+        this.consecutiveErrors++;
+        if (this.consecutiveErrors >= this.maxConsecutiveErrors) {
+          this.status = 'offline';
+          this.offlineReason = `连续${this.consecutiveErrors}次失败`;
+          console.warn(`[MemberEntity] ${this.name} 自动离线: ${this.offlineReason}`);
+        }
       }
 
       this.reportProgress({

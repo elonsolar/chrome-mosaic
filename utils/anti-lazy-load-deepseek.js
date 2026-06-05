@@ -106,22 +106,27 @@
                     // JSON 解析错误，忽略
                   }
                 }
-              }
-              
-              readStream();
-            }).catch(e => debug('流读取错误:', e.message));
-          }
-          
-          readStream();
-        }
-      } catch (e) {
-        debug('错误:', e.message);
-      }
-      
-      return response;
-    };
-    
-    window.fetch = new Proxy(window.fetch, {
+               }
+               
+               // 更新流式内容属性
+               if (fullText.length > 0) {
+                 document.body.setAttribute('data-anti-lazy-stream-content', fullText);
+               }
+               
+               readStream();
+             }).catch(e => debug('流读取错误:', e.message));
+           }
+           
+           readStream();
+         }
+       } catch (e) {
+         debug('错误:', e.message);
+       }
+       
+       return response;
+     };
+     
+     window.fetch = new Proxy(window.fetch, {
       apply: (target, thisArg, args) => target.apply(thisArg, args),
       get: (target, prop) => prop === 'toString' ? Function.prototype.toString.bind(originalFetch) : Reflect.get(target, prop)
     });
@@ -206,18 +211,23 @@
                       debug(`✓ 获取完整回复 (XHR)，长度: ${responseContent.length}`);
                     }
                   }
-                } catch (e) {
-                  // JSON 解析错误，忽略
-                }
-              }
-            } catch (e) {
-              debug('XHR progress 解析错误:', e.message);
-            }
-          });
-        }
-        
-        return originalSend.apply(this, arguments);
-      };
+                 } catch (e) {
+                   // JSON 解析错误，忽略
+                 }
+               }
+
+               // 更新流式内容属性
+               if (responseContent.length > 0) {
+                 document.body.setAttribute('data-anti-lazy-stream-content', responseContent);
+               }
+             } catch (e) {
+               debug('XHR progress 解析错误:', e.message);
+             }
+           });
+         }
+         
+         return originalSend.apply(this, arguments);
+       };
       
       debug('✓ XHR 拦截器已安装');
     } catch (e) {

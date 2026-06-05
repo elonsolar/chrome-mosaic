@@ -12,6 +12,17 @@ const MessageType = {
   TIP: 'tip'             // 系统提示消息
 };
 
+// Kimi 过载检测关键词
+const OVERLOAD_PATTERNS = [
+  '不好意思', '人太多了', '高峰期算力不足',
+  'Kimi有点累了', '请晚点再问我', '服务繁忙', '系统繁忙'
+];
+
+function isKimiOverloadError(error) {
+  const msg = error?.message || error || '';
+  return OVERLOAD_PATTERNS.some(p => msg.includes(p));
+}
+
 // Mode Examples 数据（内联）
 const MODE_EXAMPLES = {
   brainstorming: [
@@ -267,10 +278,16 @@ async function init() {
 
   // 监听存储变化（实时更新UI）
   chrome.storage.onChanged.addListener((changes, areaName) => {
+    console.log('[Chat:DIAG] storage.onChanged fired - areaName:', areaName, 'keys:', Object.keys(changes));
     if (areaName === 'local' && changes.conversations) {
+      const oldCount = changes.conversations.oldValue?.length || 0;
+      const newCount = changes.conversations.newValue?.length || 0;
+      console.log('[Chat:DIAG] storage.onChanged - conversations changed, old:', oldCount, 'new:', newCount);
       handleStorageChange(changes.conversations);
       // 同时更新侧边栏
       loadSidebarConversations();
+    } else {
+      console.log('[Chat:DIAG] storage.onChanged - ignored (not local or not conversations)');
     }
   });
 
@@ -346,6 +363,7 @@ function fixDOMStructure() {
 
 async function loadData() {
   try {
+    console.log('[Chat:DIAG] loadData - starting, conversationId:', conversationId);
     const [conversation, models, platforms, prompts, experts] = await Promise.all([
       getConversation(conversationId),
       chrome.runtime.sendMessage({ action: 'getModels' }).catch(() => []),
@@ -358,7 +376,10 @@ async function loadData() {
     console.log('[Chat] loadData - conversation.members:', conversation?.members);
     console.log('[Chat] loadData - conversation.mode:', conversation?.mode);
     console.log('[Chat] loadData - conversation.contextMode:', conversation?.contextMode);
+    console.log('[Chat] loadData - conversation.sendMode:', conversation?.sendMode);
+    console.log('[Chat] loadData - conversation.messages count:', conversation?.messages?.length);
     console.log('[Chat] loadData - platforms:', platforms);
+    console.log('[Chat:DIAG] loadData - models:', models?.length, 'platforms:', platforms?.length, 'prompts:', prompts?.length, 'experts:', experts?.length);
 
     state.conversation = conversation;
     state.models = models || [];
@@ -385,15 +406,20 @@ async function loadData() {
 }
 
 function bindEvents() {
-  elements.sendBtn.addEventListener('click', sendMessage);
+  elements.sendBtn.addEventListener('click', () => {
+    console.log('[Chat:DIAG] sendBtn clicked');
+    sendMessage();
+  });
 
   elements.messageInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey) {
       e.preventDefault();
       const value = e.target.value.trim();
+      console.log('[Chat:DIAG] Enter pressed, value length:', value.length, 'conversationId:', conversationId, 'sendBtn disabled:', elements.sendBtn.disabled);
 
       // 新对话：按回车显示创建会话弹窗
       if (!conversationId && value) {
+        console.log('[Chat:DIAG] No conversation, showing create modal');
         showNewConversationWithInput(value);
         return;
       }
@@ -435,6 +461,7 @@ function bindEvents() {
       if (selectCandidateCommand()) {
         return;
       }
+      console.log('[Chat:DIAG] Enter -> calling sendMessage()');
       sendMessage();
     } else if (e.key === 'Escape') {
       hideCommandSuggestions();
@@ -767,58 +794,83 @@ async function handleStorageChange(change) {
   const newConversations = change.newValue || [];
   const updatedConversation = newConversations.find(c => c.id === conversationId);
 
-  if (updatedConversation) {
-    const oldMsgs = state.conversation?.messages || [];
-    const newMsgs = updatedConversation?.messages || [];
-    const oldMessageCount = oldMsgs.filter(msg => !msg.isIntro).length;
-    const newMessageCount = newMsgs.filter(msg => !msg.isIntro).length;
-    const hasNewMessages = newMessageCount > oldMessageCount;
+  if (!updatedConversation) {
+    console.log('[Chat:DIAG] handleStorageChange - updatedConversation NOT FOUND for id:', conversationId);
+    return;
+  }
 
-    state.conversation = updatedConversation;
+  const oldMsgs = state.conversation?.messages || [];
+  const newMsgs = updatedConversation?.messages || [];
+  const oldMessageCount = oldMsgs.filter(msg => !msg.isIntro).length;
+  const newMessageCount = newMsgs.filter(msg => !msg.isIntro).length;
+  const hasNewMessages = newMessageCount > oldMessageCount;
+  const oldPlacholders = oldMsgs.filter(m => m._status === 'placeholder').length;
+  const newConfirmed = newMsgs.filter(m => !m.isUser && m.type === 'member').length;
 
-    if (isUserScrolling) {
-      updateConversationName();
-      updateSmartPanelContent();
-      if (hasNewMessages) {
-        unreadCount += newMessageCount - oldMessageCount;
-        hasPendingRender = true;
+  console.log('[Chat:DIAG] handleStorageChange - stats:', {
+    oldMessageCount,
+    newMessageCount,
+    hasNewMessages,
+    oldPlacholders,
+    newConfirmed,
+    isUserScrolling,
+    isMemberReplyingMode
+  });
+
+  state.conversation = updatedConversation;
+
+  if (isUserScrolling) {
+    console.log('[Chat:DIAG] handleStorageChange - user is scrolling, deferring render');
+    updateConversationName();
+    updateSmartPanelContent();
+    if (hasNewMessages) {
+      unreadCount += newMessageCount - oldMessageCount;
+      hasPendingRender = true;
+      updateNewMessagesBadge();
+    }
+    return;
+  }
+
+  if (hasNewMessages) {
+    console.log('[Chat:DIAG] handleStorageChange - new messages detected, syncing backend');
+    hideThinkingIndicator();
+
+    messageStore.syncBackend(newMsgs);
+    const prevMemberReplying = isMemberReplyingMode;
+    checkPlaceholdersResolved();
+    if (prevMemberReplying !== isMemberReplyingMode) {
+      console.log('[Chat:DIAG] handleStorageChange - isMemberReplyingMode changed:', prevMemberReplying, '->', isMemberReplyingMode);
+    }
+
+    const diff = newMessageCount - oldMessageCount;
+    requestAnimationFrame(() => {
+      const { scrollTop, scrollHeight, clientHeight } = elements.messagesContainer;
+      if (scrollHeight - scrollTop - clientHeight > 100) {
+        unreadCount += diff;
         updateNewMessagesBadge();
       }
-      return;
-    }
+    });
 
-    if (hasNewMessages) {
-      hideThinkingIndicator();
-
-      messageStore.syncBackend(newMsgs);
-      checkPlaceholdersResolved();
-
-      const diff = newMessageCount - oldMessageCount;
-      requestAnimationFrame(() => {
-        const { scrollTop, scrollHeight, clientHeight } = elements.messagesContainer;
-        if (scrollHeight - scrollTop - clientHeight > 100) {
-          unreadCount += diff;
-          updateNewMessagesBadge();
-        }
-      });
-
-      scrollToBottom();
-    }
-
-    updateConversationName();
-    
-    fetchMemberStatus();
-
-    const hasMembers = (state.conversation.members && state.conversation.members.length > 0) ||
-      (state.conversation.mode === 'expertqa' && state.conversation.expertId);
-    if (elements.messageInput) {
-      elements.messageInput.disabled = !hasMembers;
-      elements.messageInput.placeholder = hasMembers ? '输入消息...' : '请先添加成员后再发送消息';
-    }
-    updateSendButtonState();
-
-    updateSmartPanelContent();
+    scrollToBottom();
+  } else {
+    console.log('[Chat:DIAG] handleStorageChange - no new messages (or same count), checking if placeholders remain');
+    const phCount = messageStore.messages.filter(m => m._status === 'placeholder').length;
+    console.log('[Chat:DIAG] handleStorageChange - placeholder count:', phCount, 'isMemberReplyingMode:', isMemberReplyingMode);
   }
+
+  updateConversationName();
+   
+  fetchMemberStatus();
+
+  const hasMembers = (state.conversation.members && state.conversation.members.length > 0) ||
+    (state.conversation.mode === 'expertqa' && state.conversation.expertId);
+  if (elements.messageInput) {
+    elements.messageInput.disabled = !hasMembers;
+    elements.messageInput.placeholder = hasMembers ? '输入消息...' : '请先添加成员后再发送消息';
+  }
+  updateSendButtonState();
+
+  updateSmartPanelContent();
 }
 
 function bindMemberClickEvents() {
@@ -892,6 +944,26 @@ function updateConversationName() {
     conversationName.textContent = state.conversation.name;
     conversationName.title = state.conversation.name;
   }
+
+  updateSidebarConvTitleStatus();
+}
+
+function updateSidebarConvTitleStatus() {
+  if (!conversationId) return;
+  const container = document.getElementById('sidebarConversations');
+  if (!container) return;
+
+  const item = container.querySelector(`[data-conv-id="${conversationId}"]`);
+  if (!item) return;
+
+  const conv = state.conversation;
+  if (!conv) return;
+
+  const nameEl = item.querySelector('.sidebar-conv-name');
+  if (!nameEl) return;
+
+  const status = conv.titleStatus || (conv.nameIsDefault ? 'default' : 'done');
+  nameEl.setAttribute('data-title-status', status);
 }
 
 function renderMembersTags() {
@@ -1351,7 +1423,7 @@ function renderModeBadge() {
   }
 }
 
-function buildMessageHtml(msg, index) {
+function buildMessageHtml(msg, index, showCursor) {
   const msgId = msg.id || `msg_${index}_${msg.timestamp || Date.now()}`;
   const vid = msg._viewId ? ` data-view-id="${msg._viewId}"` : '';
   if (msg.type === 'tip') {
@@ -1370,6 +1442,23 @@ function buildMessageHtml(msg, index) {
   const displayName = roleSetting.nickname || msg.memberName || member?.name || '未知成员';
   const platformName = member ? (member.platformName || '') : '';
   const modelCode = member ? (member.modelCode || member.provider) : null;
+
+  if (msg.isError) {
+    return `
+      <div class="message ai-message error-ai-message" data-msg-id="${msgId}"${vid}>
+        <div class="message-avatar ai-avatar ${clickableClass}" ${providerAttr} title="点击配置成员" style="cursor: pointer;">
+          <img src="${generateAvatarUrl(displayName)}" alt="${escapeHtml(displayName)}" loading="lazy">
+        </div>
+        <div class="message-body">
+          <div class="message-header-row">
+            <span class="message-sender-name ${clickableClass}" ${providerAttr}>${escapeHtml(displayName)}</span>
+            <span class="message-time">${formatTime(msg.timestamp)}</span>
+          </div>
+          <div class="message-text error-message-text">${msg.content}</div>
+        </div>
+      </div>
+    `;
+  }
 
   if (msg.isUser) {
     return `
@@ -1424,7 +1513,7 @@ function buildMessageHtml(msg, index) {
           <span class="message-sender-name ${clickableClass}" ${providerAttr}>${escapeHtml(displayName)}</span>
           <span class="message-time">${formatTime(msg.timestamp)}</span>
         </div>
-        <div class="message-text">${formatMessage(msg.content)}</div>
+        <div class="message-text">${showCursor ? escapeHtml(msg.content).replace(/\n/g, '<br>') + '<span class="streaming-cursor">|</span>' : formatMessage(msg.content)}</div>
         <div class="message-actions">
           ${viewProcessBtn}
           <button class="copy-msg-btn" data-msg-index="${index}" title="复制消息">
@@ -1513,7 +1602,7 @@ function bindMessageElement(el, msg) {
       }
     });
   });
-  if (msg.type === 'member' || (msg._status !== 'placeholder' && !msg.isUser && msg.type !== 'tip')) {
+  if (msg.type === 'member' || (msg._status !== 'placeholder' && msg._status !== 'streaming' && !msg.isUser && msg.type !== 'tip')) {
     renderMathFormulas(el);
     addCodeCopyButtons(el);
   }
@@ -1554,12 +1643,15 @@ function renderMessages() {
 
 async function sendMessage() {
   const content = elements.messageInput.value.trim();
+  console.log(`[Chat:DIAG] sendMessage() called. content="${content?.substring(0, 50)}...", mode=${state.conversation?.mode}, members=${state.conversation?.members?.length}, isMemberReplyingMode=${isMemberReplyingMode}`);
 
   if (!content) {
+    console.log('[Chat:DIAG] sendMessage - empty content, returning');
     return;
   }
 
   if (content.startsWith('/')) {
+    console.log('[Chat:DIAG] sendMessage - is command, delegating to handleCommand');
     await handleCommand(content);
     elements.messageInput.value = '';
     return;
@@ -1567,47 +1659,63 @@ async function sendMessage() {
 
   elements.messageInput.value = '';
   elements.sendBtn.classList.add('sending');
+  console.log('[Chat:DIAG] sendMessage - input cleared, sendBtn set to sending');
 
   try {
     messageStore.push({
       isUser: true, content, timestamp: Date.now(), _status: 'local'
     });
+    console.log('[Chat:DIAG] sendMessage - user message pushed to store');
 
     const isExpertQa = state.conversation.mode === 'expertqa' && state.conversation.expertId;
     const mode = state.conversation.mode || 'brainstorming';
+    console.log(`[Chat:DIAG] sendMessage - mode=${mode}, isExpertQa=${isExpertQa}`);
 
     if (isExpertQa) {
       showInitialExpertProgress();
     } else if (mode === 'brainstorming' || mode === 'discussion') {
-      // placeholder 由后台 member_processing 通知驱动
+      console.log('[Chat:DIAG] sendMessage - brainstorming/discussion mode, placeholders will be driven by backend member_processing notifications');
     } else if (!isMemberReplyingMode) {
       showThinkingIndicator();
     }
 
     sendMessageToBackend(conversationId, content)
       .then(updatedConversation => {
+        console.log('[Chat:DIAG] sendMessageToBackend.then() - received response, has conversation:', !!updatedConversation, 'messages:', updatedConversation?.messages?.length);
         if (updatedConversation) {
           state.conversation = updatedConversation;
           messageStore.syncBackend(updatedConversation.messages || []);
           checkPlaceholdersResolved();
           updateConversationName();
+          console.log('[Chat:DIAG] sendMessageToBackend.then() - state updated, isMemberReplyingMode after sync:', isMemberReplyingMode);
         }
       })
       .catch(error => {
-        console.error('发送消息失败:', error);
-        showError('发送消息失败: ' + error.message);
+        console.error('[Chat:DIAG] sendMessageToBackend.catch() - error:', error);
+        if (isKimiOverloadError(error)) {
+          showToast('Kimi 过载: ' + error.message, 'warning', {
+            text: '重试',
+            onClick: () => {
+              elements.messageInput.value = content;
+              sendMessage();
+            }
+          });
+        } else {
+          showError('发送消息失败: ' + error.message);
+        }
         if (!isMemberReplyingMode) {
           hideMemberReplyingIndicators();
         }
       })
       .finally(() => {
+        console.log('[Chat:DIAG] sendMessageToBackend.finally() - isMemberReplyingMode:', isMemberReplyingMode);
         removeProgressIndicator();
         if (!isMemberReplyingMode) {
           hideThinkingIndicator();
         }
       });
   } catch (error) {
-    console.error('发送消息失败:', error);
+    console.error('[Chat:DIAG] sendMessage - OUTER catch block hit! error:', error, 'isMemberReplyingMode:', isMemberReplyingMode);
     showError('发送消息失败: ' + error.message);
     hideThinkingIndicator();
     hideMemberReplyingIndicators();
@@ -1682,7 +1790,11 @@ function updateSendButtonState() {
   const hasMembers = (state.conversation?.members?.length > 0) ||
     (state.conversation?.mode === 'expertqa' && state.conversation?.expertId);
   const hasText = elements.messageInput.value.trim().length > 0;
+  const wasDisabled = elements.sendBtn.disabled;
   elements.sendBtn.disabled = !hasMembers || !hasText;
+  if (wasDisabled !== elements.sendBtn.disabled) {
+    console.log('[Chat:DIAG] updateSendButtonState - changed:', wasDisabled, '->', elements.sendBtn.disabled, 'hasMembers:', hasMembers, 'hasText:', hasText);
+  }
 }
 
 function showThinkingIndicator() {
@@ -1710,9 +1822,11 @@ function hideThinkingIndicator() {
 function showMemberReplyingIndicators() {
   const members = state.conversation.members || [];
   if (members.length === 0) return;
+  console.log('[Chat:DIAG] showMemberReplyingIndicators - members:', members.length, 'isMemberReplyingMode:', isMemberReplyingMode, 'memberStatus:', JSON.stringify(state.memberStatus));
 
   if (isMemberReplyingMode) {
     const existing = messageStore.messages.filter(m => m._status === 'placeholder');
+    console.log('[Chat:DIAG] showMemberReplyingIndicators - removing existing placeholders:', existing.length);
     for (const ph of existing) {
       messageStore.remove(ph._viewId);
     }
@@ -1722,7 +1836,10 @@ function showMemberReplyingIndicators() {
 
   members.forEach(member => {
     const status = state.memberStatus[member.id]?.status || 'online';
-    if (status === 'offline') return;
+    if (status === 'offline') {
+      console.log('[Chat:DIAG] showMemberReplyingIndicators - skipping offline member:', member.name);
+      return;
+    }
 
     messageStore.push({
       _status: 'placeholder',
@@ -1731,19 +1848,28 @@ function showMemberReplyingIndicators() {
       modelCode: member.modelCode || member.provider
     });
   });
+  console.log('[Chat:DIAG] showMemberReplyingIndicators - done, total messages in store:', messageStore.length);
 }
 
 function hideMemberReplyingIndicators() {
   const placeholders = messageStore.messages.filter(m => m._status === 'placeholder');
+  console.log('[Chat:DIAG] hideMemberReplyingIndicators - removing', placeholders.length, 'placeholders');
   for (const ph of placeholders) {
     messageStore.remove(ph._viewId);
   }
   isMemberReplyingMode = false;
+  console.log('[Chat:DIAG] hideMemberReplyingIndicators - isMemberReplyingMode set to false');
 }
 
 function checkPlaceholdersResolved() {
-  if (isMemberReplyingMode && messageStore.messages.every(m => m._status !== 'placeholder')) {
-    isMemberReplyingMode = false;
+  const placeholderCount = messageStore.messages.filter(m => m._status === 'placeholder').length;
+  if (isMemberReplyingMode) {
+    if (placeholderCount === 0) {
+      console.log('[Chat:DIAG] checkPlaceholdersResolved - ALL placeholders resolved, setting isMemberReplyingMode=false');
+      isMemberReplyingMode = false;
+    } else {
+      console.log('[Chat:DIAG] checkPlaceholdersResolved - still', placeholderCount, 'placeholders remaining, isMemberReplyingMode stays true');
+    }
   }
 }
 
@@ -1833,6 +1959,9 @@ let messageListenerAttached = false;
 function attachMessageListener() {
   if (!messageListenerAttached) {
     chrome.runtime.onMessage.addListener((request) => {
+      if (request.type) {
+        console.log('[Chat:DIAG] runtime.onMessage received:', request.type, request);
+      }
       if (request.type === 'clearComplete') {
         showNewStatus(request.success ? 'done' : 'failed');
       } else if (request.type === 'loopDiscussionProgress') {
@@ -1841,14 +1970,20 @@ function attachMessageListener() {
         removeLoopProgress();
         showSuccess(`多轮讨论完成（共 ${request.rounds} 轮）`);
       } else if (request.type === 'flowExecutionProgress') {
+        console.log('[Chat:DIAG] flowExecutionProgress:', request.progress?.type, 'memberId:', request.progress?.memberId, 'isMemberReplyingMode:', isMemberReplyingMode);
         handleFlowExecutionProgress(request.progress);
       } else if (request.type === 'flowExecutionComplete') {
+        console.log('[Chat:DIAG] flowExecutionComplete received');
         removeProgressIndicator();
-      } else if (request.type === 'flowExecutionError') {
+    } else if (request.type === 'flowExecutionError') {
+        console.log('[Chat] 流程执行错误:', request.error);
         handleFlowExecutionError(request);
+      } else if (request.type === 'member_error') {
+        handleMemberError(request);
       }
     });
     messageListenerAttached = true;
+    console.log('[Chat:DIAG] messageListener attached');
   }
 }
 
@@ -1880,22 +2015,66 @@ function removeLoopProgress() {
 }
 
 function handleFlowExecutionProgress(progress) {
-  console.log('[Chat] 流程执行进度:', progress);
+  console.log('[Chat] 流程执行进度:', progress, 'isMemberReplyingMode:', isMemberReplyingMode);
 
   if (progress.type === 'member_processing') {
     const member = state.conversation.members?.find(m => m.id === progress.memberId);
+    console.log('[Chat:DIAG] member_processing - member:', member?.name, 'memberId:', progress.memberId, 'found:', !!member);
     if (!member) return;
-    if (messageStore.findPlaceholder(member.id)) return;
+    if (messageStore.findPlaceholder(member.id)) {
+      console.log('[Chat:DIAG] member_processing - placeholder already exists for', member.name);
+      return;
+    }
 
+    const prevMode = isMemberReplyingMode;
     isMemberReplyingMode = true;
     hideThinkingIndicator();
+    if (prevMode !== isMemberReplyingMode) {
+      console.log('[Chat:DIAG] member_processing - isMemberReplyingMode changed:', prevMode, '->', isMemberReplyingMode);
+    }
 
+    console.log('[Chat:DIAG] member_processing - pushing placeholder for', member.name);
     messageStore.push({
       _status: 'placeholder',
       memberId: member.id,
       memberName: member.name,
       modelCode: member.modelCode || member.provider
     });
+    return;
+  }
+
+  if (progress.type === 'content_chunk') {
+    const memberId = progress.memberId;
+    let msg = messageStore.findPlaceholder(memberId);
+    if (!msg) msg = messageStore.findStreaming(memberId);
+    if (!msg) {
+      console.log('[Chat:DIAG] content_chunk - no placeholder/streaming found for memberId:', memberId, 'delta:', progress.delta?.substring(0, 30));
+      return;
+    }
+    messageStore.updateContent(msg._viewId, progress.delta);
+    return;
+  }
+
+  if (progress.type === 'message_saved') {
+    const memberId = progress.memberId;
+    let msg = messageStore.findStreaming(memberId);
+    if (!msg) msg = messageStore.findPlaceholder(memberId);
+    if (msg) {
+      console.log('[Chat:DIAG] message_saved - found msg for memberId:', memberId, 'messageId:', progress.messageId, 'content length:', progress.content?.length);
+      const prevMode = isMemberReplyingMode;
+      messageStore.replace(msg._viewId, {
+        ...msg,
+        id: progress.messageId,
+        content: progress.content || msg.content,
+        _status: 'confirmed'
+      });
+      checkPlaceholdersResolved();
+      if (prevMode !== isMemberReplyingMode) {
+        console.log('[Chat:DIAG] message_saved - isMemberReplyingMode changed:', prevMode, '->', isMemberReplyingMode);
+      }
+    } else {
+      console.log('[Chat:DIAG] message_saved - NO matching placeholder/streaming found for memberId:', memberId);
+    }
     return;
   }
 
@@ -2189,6 +2368,35 @@ function showFlowExecutionLogs() {
   });
 }
 
+function handleMemberError(request) {
+  const error = request.error || '未知错误';
+  const memberId = request.memberId;
+  console.log('[Chat] 成员执行错误:', memberId, error);
+
+  const member = state.conversation.members?.find(m => m.id === memberId);
+  const memberName = member?.name || '未知成员';
+
+  const isOverload = OVERLOAD_PATTERNS.some(p => error.includes(p));
+
+  const errorText = isOverload
+    ? `${memberName} 触发 Kimi 过载：${error}<br><small style="color:#999;">高峰期算力不足，建议切其他模型或稍后再试</small>`
+    : `${memberName} 回复失败: ${error}`;
+
+  let msg = messageStore.findPlaceholder(memberId) || messageStore.findStreaming(memberId);
+  if (msg) {
+    messageStore.replace(msg._viewId, {
+      ...msg,
+      content: errorText,
+      type: 'member',
+      isError: true,
+      _status: 'confirmed',
+      _overload: isOverload
+    });
+  }
+
+  checkPlaceholdersResolved();
+}
+
 function handleFlowExecutionError(request) {
   const error = request.error || '未知错误';
   const canResume = request.canResume || false;
@@ -2366,28 +2574,31 @@ async function getConversation(id) {
 async function sendMessageToBackend(conversationId, content) {
   console.log('[Chat] ========== 发送消息到Background ==========');
   console.log('[Chat] conversationId:', conversationId);
-  console.log('[Chat] content:', content);
+  console.log('[Chat] content:', content?.substring(0, 100));
+  console.log('[Chat:DIAG] mode:', state.conversation?.mode, 'sendMode:', state.conversation?.sendMode, 'members count:', state.conversation?.members?.length);
   
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
-      console.error('[Chat] ❌ 发送消息超时（300秒）');
+      console.error('[Chat:DIAG] ❌ 发送消息超时（300秒）');
       reject(new Error('发送消息超时（300秒）'));
     }, 300000);
     
-    console.log('[Chat] 发送chrome.runtime.sendMessage...');
+    console.log('[Chat:DIAG] 发送chrome.runtime.sendMessage (action: addMessage)...');
     chrome.runtime.sendMessage({
       action: 'addMessage',
       conversationId,
       content
     }, (response) => {
-      console.log('[Chat] 收到Background响应:', response);
-      clearTimeout(timeout);
+      console.log('[Chat:DIAG] 收到Background响应:', response ? `success=${!response.error}, messages=${response?.messages?.length}` : 'null/undefined', 'lastError:', chrome.runtime.lastError?.message);
       clearTimeout(timeout);
       if (chrome.runtime.lastError) {
+        console.error('[Chat:DIAG] Background响应 lastError:', chrome.runtime.lastError.message);
         reject(new Error(chrome.runtime.lastError.message));
       } else if (response && !response.error) {
+        console.log('[Chat:DIAG] Background响应成功, messages:', response.messages?.length);
         resolve(response);
       } else {
+        console.error('[Chat:DIAG] Background响应错误:', response?.error);
         reject(new Error(response?.error || '发送失败'));
       }
     });
@@ -3700,12 +3911,13 @@ function renderSidebarList() {
             const isActive = conv.id === conversationId;
             const mode = conv.mode || 'brainstorming';
             const badge = modeBadges[mode] || modeBadges.brainstorming;
+            const titleStatus = conv.titleStatus || (conv.nameIsDefault ? 'default' : 'done');
             return `
               <div class="sidebar-conv-item ${isActive ? 'active' : ''}"
                    data-conv-id="${conv.id}"
                    title="${escapeHtml(conv.name)}">
                 <span class="sb-mode-badge ${badge.cls}">${badge.text}</span>
-                <div class="sidebar-conv-name">${escapeHtml(conv.name)}</div>
+                <div class="sidebar-conv-name" data-title-status="${titleStatus}">${escapeHtml(conv.name)}</div>
                 <button class="sidebar-conv-more" data-conv-id="${conv.id}" title="更多操作">${threeDotSvg}</button>
               </div>
             `;
@@ -4150,9 +4362,18 @@ async function loadNewConvModalData() {
       const memberCountSlider = document.getElementById('memberCountSlider');
       const memberCountValue = document.getElementById('memberCountValue');
       if (memberCountSlider && memberCountValue) {
+        const updateSliderProgress = (val) => {
+          const min = parseInt(memberCountSlider.min) || 1;
+          const max = parseInt(memberCountSlider.max) || 6;
+          const percent = ((val - min) / (max - min)) * 100;
+          memberCountSlider.style.setProperty('--value-percent', `${percent}%`);
+        };
         memberCountSlider.addEventListener('input', (e) => {
-          memberCountValue.textContent = e.target.value;
+          const val = parseInt(e.target.value);
+          memberCountValue.textContent = val;
+          updateSliderProgress(val);
         });
+        updateSliderProgress(parseInt(memberCountSlider.value));
       }
 
       const closeBtn = document.getElementById('closeConvModalBtn');
@@ -4449,7 +4670,7 @@ async function createNewConversation() {
   } else {
     // 自动生成成员
     const memberCountSlider = document.getElementById('memberCountSlider');
-    const memberCount = memberCountSlider ? parseInt(memberCountSlider.value) : 3;
+    const memberCount = memberCountSlider ? parseInt(memberCountSlider.value) : 2;
     
     const members = generateAutoMembers(memberCount, newConvState.inlineFormModels);
 

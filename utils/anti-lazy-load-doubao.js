@@ -282,6 +282,10 @@
                 }
               }
               
+              if (fullText.length > 0) {
+                document.body.setAttribute('data-anti-lazy-stream-content', fullText);
+              }
+              
               readStream();
             }).catch(e => debug('stream read error:', e.message));
           }

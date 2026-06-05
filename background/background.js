@@ -1158,6 +1158,7 @@ class ConversationManager {
         id: this.generateId(),
         name: name || `会话 ${conversations.length + 1}`,
         nameIsDefault: !hasCustomName,
+        titleStatus: hasCustomName ? 'done' : 'default',
         mode: mode || 'brainstorming',
         contextMode,
         sendMode,
@@ -1511,6 +1512,8 @@ let conversationManager;
 let aiMessageManager;
 let senderFactory;
 let conversationMessageService;
+let initResolve;
+const initReady = new Promise(r => initResolve = r);
 const pendingResponses = new Map();
 const pollingIntervals = new Map();
 let wsManager = null;
@@ -1655,6 +1658,7 @@ async function init() {
   } catch (e) {
     console.warn('[Init] 迁移 prompts category 失败:', e);
   }
+  initResolve();
 }
 
 async function conversationOneShot(modelId, content, systemPrompt) {
@@ -1693,6 +1697,17 @@ async function conversationOneShot(modelId, content, systemPrompt) {
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === 'aiChunk') {
+    const pending = pendingResponses.get(request.messageId);
+
+    if (pending && pending.onChunk) {
+      pending.onChunk(request.content, request.fullContent);
+    }
+
+    sendResponse({ status: 'received' });
+    return;
+  }
+
   if (request.type === 'aiResponse') {
     const pending = pendingResponses.get(request.messageId);
 
@@ -2112,14 +2127,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
 
     case 'addMessage':
-      aiMessageManager.processUserMessage(request.conversationId, request.content)
-        .then(result => sendResponse(result))
-        .catch(error => {
+      (async () => {
+        try {
+          await initReady;
+          const result = await aiMessageManager.processUserMessage(request.conversationId, request.content);
+          sendResponse(result);
+        } catch (error) {
           console.error('addMessage失败:', error);
-          aiMessageManager.conversationManager.getConversation(request.conversationId)
-            .then(conversation => sendResponse(conversation))
-            .catch(() => sendResponse({ error: error.message }));
-        });
+          try {
+            const conversation = await aiMessageManager.conversationManager.getConversation(request.conversationId);
+            sendResponse(conversation);
+          } catch {
+            sendResponse({ error: error.message });
+          }
+        }
+      })();
       return true;
 
     case 'addMessageDirect':
