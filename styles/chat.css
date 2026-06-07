@@ -502,10 +502,6 @@ body.dark-mode .input-wrapper:focus-within {
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
 }
 
-body.dark-mode .input-container {
-  border-top-color: var(--border-color);
-}
-
 body.dark-mode .chat-header {
   background: linear-gradient(to top, 
     rgba(31, 41, 55, 0) 0%, 
@@ -1228,6 +1224,14 @@ body.dark-mode .chat-header {
   padding: 56px 20px 16px 20px;
   background: transparent;
   position: relative;
+  width: 80%;
+  margin: 0 auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.messages-container::-webkit-scrollbar {
+  display: none;
 }
 
 /* 空状态 */
@@ -1572,7 +1576,8 @@ body.dark-mode .chat-header {
   padding: 0 16px;
   background-color: transparent;
   border-radius: 0;
-  line-height: 1.8;
+  font-size: 15px;
+  line-height: 2.0;
   word-wrap: break-word;
   word-break: break-word;
   color: var(--text-primary);
@@ -2401,10 +2406,11 @@ body.dark-mode .flow-logs-modal .modal-footer .btn-secondary:hover {
 }
 
 .input-container {
-  padding: 12px 24px 16px;
-  border-top: 1px solid var(--border-color);
+  padding: 12px 0 16px;
   background: transparent;
   position: relative;
+  display: flex;
+  justify-content: center;
 }
 
 .input-wrapper {
@@ -2413,11 +2419,12 @@ body.dark-mode .flow-logs-modal .modal-footer .btn-secondary:hover {
   gap: 0;
   background: #FFFFFF;
   border: 1px solid #D1D5DB;
-  border-radius: 12px;
+  border-radius: 16px;
   box-shadow: 0 -2px 8px rgba(0,0,0,0.04);
   transition: all 0.2s ease;
   position: relative;
-  padding-left: 4px;
+  padding-left: 8px;
+  width: calc(80% - 88px);
 }
 
 .input-wrapper:focus-within {
@@ -2426,15 +2433,15 @@ body.dark-mode .flow-logs-modal .modal-footer .btn-secondary:hover {
 }
 
 .input-container textarea {
-  flex: 1;
-  padding: 14px 56px 14px 4px;
+  flex: 1 1 auto;
+  padding: 14px 56px 14px 10px;
   border: none;
-  border-radius: 12px;
+  border-radius: 16px;
   font-size: 14px;
   font-family: inherit;
   resize: none;
-  min-height: 52px;
-  max-height: 120px;
+  min-height: 100px;
+  max-height: 200px;
   background: transparent;
   transition: all 0.15s ease;
   line-height: 1.5;
@@ -2641,6 +2648,8 @@ body.dark-mode .flow-logs-modal .modal-footer .btn-secondary:hover {
 
   .messages-container {
     padding: 56px 16px 16px 16px;
+    width: 80%;
+    margin: 0 auto;
   }
 
   .input-container {
@@ -3772,7 +3781,7 @@ body.dark-mode .btn-secondary:hover {
 
 .message-text p {
   margin: 0 0 16px 0;
-  line-height: 1.7;
+  line-height: 2.0;
 }
 
 .message-text p:last-child {
@@ -5826,6 +5835,68 @@ body.dark-mode .typewriting::after {
 .toast-action-link:hover {
   opacity: 0.8;
   background: rgba(0,0,0,0.05);
+}
+
+.mention-dropdown {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 4px;
+  background: var(--bg-primary, #fff);
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 100;
+  min-width: 180px;
+  padding: 4px;
+  display: none;
+}
+
+.mention-dropdown.visible {
+  display: block;
+}
+
+.mention-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-primary);
+  transition: background 0.15s;
+}
+
+.mention-item:hover,
+.mention-item.active {
+  background: var(--bg-tertiary, #f3f4f6);
+}
+
+.mention-item-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.mention-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mention-badge {
+  color: var(--primary);
+  font-weight: 500;
+}
+
+.user-message .mention-badge {
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 600;
 }
 
 

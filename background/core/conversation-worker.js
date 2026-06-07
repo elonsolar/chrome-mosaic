@@ -63,8 +63,8 @@ class ConversationWorker {
     return member ? { status: member.status, isBusy: member.isBusy } : null;
   }
 
-  enqueueMessage(content) {
-    return this.queue.enqueue(content);
+  enqueueMessage(content, targetMemberIds = null) {
+    return this.queue.enqueue(content, targetMemberIds);
   }
 
   enqueueLoopTask(task) {
@@ -113,7 +113,6 @@ class ConversationWorker {
         continue;
       }
 
-      // 检查队首是否是 loopTask
       const firstMsg = this.queue.peek();
       if (firstMsg && firstMsg.type === 'loop') {
         this.queue.dequeue();
@@ -128,11 +127,22 @@ class ConversationWorker {
         
         const msgIndices = this.queue.getAllUnconsumedForMember(memberId);
         if (msgIndices.length === 0) continue;
+
+        const targetFilteredIndices = msgIndices.filter(idx => {
+          const msg = this.queue.queue[idx];
+          if (!msg.targetMembers) return true;
+          return msg.targetMembers.includes(memberId);
+        });
+        if (targetFilteredIndices.length === 0) {
+          msgIndices.forEach(idx => this.queue.markConsumed(memberId, idx));
+          continue;
+        }
         
-        const contents = msgIndices.map(i => this.queue.queue[i].content);
+        const contents = targetFilteredIndices.map(i => this.queue.queue[i].content);
         const mergedContent = contents.join('\n\n');
 
-        this.queue.markConsumedBatch(memberId, msgIndices);
+        const allIndices = [...new Set([...msgIndices])];
+        this.queue.markConsumedBatch(memberId, allIndices);
         
         member.isBusy = true;
         hasWork = true;

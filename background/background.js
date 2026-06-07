@@ -602,8 +602,8 @@ class AIMessageManager {
     }).join('\n\n');
   }
 
-  async processUserMessage(conversationId, userMessage) {
-    return await conversationMessageService.processUserMessage(conversationId, userMessage);
+  async processUserMessage(conversationId, userMessage, targetMemberIds = null) {
+    return await conversationMessageService.processUserMessage(conversationId, userMessage, targetMemberIds);
   }
 
   async executeDiscussionLoop(conversationId, question, rounds, contextMode, useFloatWindow) {
@@ -1452,6 +1452,9 @@ class ConversationManager {
 
         if (msgType === MessageType.USER) {
           message.isUser = true;
+          if (options.targetMemberIds && options.targetMemberIds.length > 0) {
+            message.targetMemberIds = options.targetMemberIds;
+          }
         } else if (msgType === MessageType.INTRO) {
           message.isIntro = true;
         } else if (msgType === MessageType.TIP) {
@@ -2130,7 +2133,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       (async () => {
         try {
           await initReady;
-          const result = await aiMessageManager.processUserMessage(request.conversationId, request.content);
+          const result = await aiMessageManager.processUserMessage(request.conversationId, request.content, request.targetMemberIds);
           sendResponse(result);
         } catch (error) {
           console.error('addMessage失败:', error);
@@ -2189,10 +2192,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           const worker = conversationMessageService.getWorker(request.conversationId);
           if (worker) {
             worker.updateMemberStatus(request.memberId, request.status);
-            sendResponse({ success: true });
-          } else {
-            sendResponse({ success: false, error: 'Worker不存在' });
           }
+          sendResponse({ success: true });
         } catch (error) {
           sendResponse({ success: false, error: error.message });
         }

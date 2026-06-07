@@ -16,5 +16,9 @@
   "type": "commonjs",
   "dependencies": {
     "playwright": "^1.60.0"
+  },
+  "devDependencies": {
+    "@dicebear/collection": "^9.4.2",
+    "@dicebear/core": "^9.4.2"
   }
 }

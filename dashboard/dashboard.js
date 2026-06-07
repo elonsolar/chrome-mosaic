@@ -2193,9 +2193,7 @@ class Dashboard {
   }
 
   generateExpertIcon(name) {
-    const seed = name || 'expert';
-    const style = 'adventurer';
-    return `https://api.dicebear.com/7.x/${style}/svg?seed=${encodeURIComponent(seed)}&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf`;
+    return getLocalAvatarUrl(name || 'expert');
   }
 
   // 刷新数据

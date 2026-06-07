@@ -78,6 +78,36 @@ ws.onmessage = (e) => console.log(JSON.parse(e.data));
 - **专家系统**：自定义角色和工作流程
 - **平台集成**：DeepSeek、Kimi、豆包、千问等
 
+## 使用技巧
+
+### 通用
+
+| 操作 | 说明 |
+|------|------|
+| `Enter` | 发送消息 |
+| `Shift+Enter` / `Ctrl+Enter` | 换行 |
+| `Ctrl+K` | 搜索历史对话 |
+| `/` | 查看可用命令 |
+| 右键会话 | 重命名、导出、删除 |
+| 点击成员头像 | 查看对话详情 |
+| 点击成员状态点 | 切换上线/下线 |
+
+### 头脑风暴模式
+
+- 输入 `@成员名 消息内容` 可定向发送给指定成员，其他成员不会收到
+- 各成员独享上下文，互不影响
+
+### 圆桌讨论模式
+
+- `/loop 问题描述 --max=5` 发起多轮自动讨论
+- 拖拽成员标签可调整发言顺序
+- 成员共享上下文，按顺序依次发言
+
+### 专家问答模式
+
+- 创建会话时选择预配置的专家
+- 点击回复中的「查看执行过程」了解推理链路
+
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=elonsolar/chrome-mosaic&type=Date)](https://star-history.com/#elonsolar/chrome-mosaic&Date)

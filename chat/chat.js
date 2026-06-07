@@ -23,6 +23,67 @@ function isKimiOverloadError(error) {
   return OVERLOAD_PATTERNS.some(p => msg.includes(p));
 }
 
+const INPUT_TIPS_COMMON = [
+  'Shift+Enter 换行，Enter 发送',
+  'Ctrl+K 搜索历史对话',
+  '点击成员头像可查看对话详情',
+  '点击右上角图标切换明暗主题',
+  '支持 Markdown 格式和数学公式',
+  '右键会话可重命名、导出或删除',
+];
+
+const INPUT_TIPS_BRAINSTORMING = [
+  '输入 @ 成员名 可以定向发送给指定成员',
+  '输入 / 查看可用命令',
+  '各成员独享上下文，互不影响',
+];
+
+const INPUT_TIPS_DISCUSSION = [
+  '输入 /loop 问题 --max=5 发起多轮讨论',
+  '输入 / 查看可用命令',
+  '成员共享上下文，按顺序依次发言',
+  '拖拽成员标签可调整发言顺序',
+];
+
+const INPUT_TIPS_EXPERTQA = [
+  '输入 / 查看可用命令',
+  '点击「查看执行过程」了解专家推理链路',
+];
+
+function getContextTips() {
+  const mode = state.conversation?.mode || 'brainstorming';
+  const modeTips = mode === 'discussion' ? INPUT_TIPS_DISCUSSION
+    : mode === 'expertqa' ? INPUT_TIPS_EXPERTQA
+    : INPUT_TIPS_BRAINSTORMING;
+  return [...modeTips, ...INPUT_TIPS_COMMON];
+}
+
+let tipCarouselTimer = null;
+let tipCarouselIndex = 0;
+
+function startTipCarousel() {
+  stopTipCarousel();
+  if (!elements.messageInput || !state.conversation) return;
+  const hasMembers = (state.conversation.members && state.conversation.members.length > 0) ||
+    (state.conversation.mode === 'expertqa' && state.conversation.expertId);
+  if (!hasMembers) return;
+
+  tipCarouselTimer = setInterval(() => {
+    if (elements.messageInput.value.trim() === '' && document.activeElement === elements.messageInput) {
+      const tips = getContextTips();
+      elements.messageInput.placeholder = tips[tipCarouselIndex % tips.length];
+      tipCarouselIndex++;
+    }
+  }, 4000);
+}
+
+function stopTipCarousel() {
+  if (tipCarouselTimer) {
+    clearInterval(tipCarouselTimer);
+    tipCarouselTimer = null;
+  }
+}
+
 // Mode Examples 数据（内联）
 const MODE_EXAMPLES = {
   brainstorming: [
@@ -221,6 +282,14 @@ const state = {
 
 let isMemberReplyingMode = false;
 
+let mentionState = {
+  active: false,
+  query: '',
+  startIndex: -1,
+  selectedIndex: 0,
+  filteredMembers: []
+};
+
 // Dashboard 动画状态
 const dashboardState = {
   modeTimers: {},
@@ -310,6 +379,7 @@ function initElements() {
   elements.smartPanel = document.getElementById('smartPanel');
   elements.smartPanelToggle = document.getElementById('smartPanelToggle');
   elements.loopProgressFixed = document.getElementById('loopProgressFixed');
+  elements.mentionDropdown = document.getElementById('mentionDropdown');
 
   // 创建滚动到底部按钮（微信风格：箭头 + 未读数气泡）
   elements.scrollBottomBtn = document.createElement('button');
@@ -412,6 +482,41 @@ function bindEvents() {
   });
 
   elements.messageInput.addEventListener('keydown', (e) => {
+    if (mentionState.active) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        mentionState.selectedIndex = Math.min(mentionState.selectedIndex + 1, mentionState.filteredMembers.length - 1);
+        renderMentionDropdown();
+        return;
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        mentionState.selectedIndex = Math.max(mentionState.selectedIndex - 1, 0);
+        renderMentionDropdown();
+        return;
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        if (mentionState.filteredMembers.length > 0) {
+          e.preventDefault();
+          selectMentionItem(mentionState.filteredMembers[mentionState.selectedIndex]);
+          return;
+        }
+      } else if (e.key === 'Escape') {
+        hideMentionDropdown();
+        hideCommandSuggestions();
+        return;
+      }
+    }
+
+    if (e.key === 'Enter' && e.ctrlKey && !e.shiftKey) {
+      e.preventDefault();
+      const start = e.target.selectionStart;
+      const end = e.target.selectionEnd;
+      const value = e.target.value;
+      e.target.value = value.substring(0, start) + '\n' + value.substring(end);
+      e.target.selectionStart = e.target.selectionEnd = start + 1;
+      e.target.dispatchEvent(new Event('input'));
+      return;
+    }
+
     if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey) {
       e.preventDefault();
       const value = e.target.value.trim();
@@ -471,7 +576,7 @@ function bindEvents() {
   elements.messageInput.addEventListener('input', (e) => {
     const value = e.target.value;
     updateSendButtonState();
-    
+
     if (value === '/') {
       showCommandSuggestions();
     } else if (value.startsWith('/') && !value.includes(' ')) {
@@ -479,6 +584,25 @@ function bindEvents() {
       showCommandSuggestions(filter);
     } else {
       hideCommandSuggestions();
+    }
+
+    handleMentionInput(e.target);
+  });
+
+  elements.messageInput.addEventListener('focus', () => {
+    if (elements.messageInput.value.trim() === '') {
+      const tips = getContextTips();
+      elements.messageInput.placeholder = tips[tipCarouselIndex % tips.length];
+    }
+    startTipCarousel();
+  });
+
+  elements.messageInput.addEventListener('blur', () => {
+    stopTipCarousel();
+    const hasMembers = state.conversation && ((state.conversation.members && state.conversation.members.length > 0) ||
+      (state.conversation.mode === 'expertqa' && state.conversation.expertId));
+    if (hasMembers) {
+      elements.messageInput.placeholder = '输入消息...';
     }
   });
 
@@ -527,6 +651,7 @@ function bindEvents() {
       messageStore.syncBackend(state.conversation.messages || []);
       checkPlaceholdersResolved();
     }
+    userScrolled = false;
     scrollToBottom();
     elements.scrollBottomBtn.classList.remove('visible');
     unreadCount = 0;
@@ -615,6 +740,115 @@ function bindEvents() {
 
   initScrollDetection();
   initNewMessagesObserver();
+}
+
+function handleMentionInput(textarea) {
+  if (!state.conversation || state.conversation.mode !== 'brainstorming') {
+    hideMentionDropdown();
+    return;
+  }
+
+  const cursorPos = textarea.selectionStart;
+  const textBefore = textarea.value.substring(0, cursorPos);
+  const atMatch = textBefore.match(/@([^@\s]*)$/);
+
+  if (atMatch) {
+    const query = atMatch[1].toLowerCase();
+    const atStart = cursorPos - query.length - 1;
+
+    const members = state.conversation.members || [];
+    mentionState.filteredMembers = members.filter(m => m.name.toLowerCase().includes(query));
+    mentionState.query = query;
+    mentionState.startIndex = atStart;
+    mentionState.selectedIndex = 0;
+    mentionState.active = true;
+
+    renderMentionDropdown();
+  } else {
+    hideMentionDropdown();
+  }
+}
+
+function renderMentionDropdown() {
+  if (!elements.mentionDropdown) return;
+
+  if (!mentionState.active || mentionState.filteredMembers.length === 0) {
+    hideMentionDropdown();
+    return;
+  }
+
+  elements.mentionDropdown.innerHTML = mentionState.filteredMembers.map((member, i) => {
+    const avatarUrl = generateAvatarUrl(member.name);
+    const activeClass = i === mentionState.selectedIndex ? ' active' : '';
+    return `<div class="mention-item${activeClass}" data-member-id="${member.id}" data-index="${i}">
+      <img class="mention-item-avatar" src="${avatarUrl}" alt="">
+      <span class="mention-item-name">${escapeHtml(member.name)}</span>
+    </div>`;
+  }).join('');
+
+  elements.mentionDropdown.classList.add('visible');
+
+  elements.mentionDropdown.querySelectorAll('.mention-item').forEach(item => {
+    item.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      const idx = parseInt(item.dataset.index);
+      selectMentionItem(mentionState.filteredMembers[idx]);
+    });
+  });
+}
+
+function selectMentionItem(member) {
+  if (!member) return;
+  const textarea = elements.messageInput;
+  const before = textarea.value.substring(0, mentionState.startIndex);
+  const after = textarea.value.substring(textarea.selectionStart);
+  textarea.value = before + '@' + member.name + ' ' + after;
+  const newPos = before.length + member.name.length + 2;
+  textarea.selectionStart = textarea.selectionEnd = newPos;
+  textarea.focus();
+  updateSendButtonState();
+  hideMentionDropdown();
+}
+
+function hideMentionDropdown() {
+  mentionState.active = false;
+  if (elements.mentionDropdown) {
+    elements.mentionDropdown.classList.remove('visible');
+  }
+}
+
+function getMsgMentionNames(msg) {
+  if (msg._mentionNames) return msg._mentionNames;
+  if (msg.targetMemberIds && Array.isArray(msg.targetMemberIds) && state.conversation?.members) {
+    return msg.targetMemberIds.map(id => {
+      const m = state.conversation.members.find(m => m.id === id);
+      return m ? m.name : '';
+    }).filter(Boolean);
+  }
+  return null;
+}
+
+function extractMentionedMemberIds(content) {
+  if (!state.conversation || state.conversation.mode !== 'brainstorming') return null;
+  const members = state.conversation.members || [];
+  const mentioned = [];
+  for (const member of members) {
+    // @name 必须紧跟空格才算有效提及
+    if (content.includes('@' + member.name + ' ')) {
+      mentioned.push(member.id);
+    }
+  }
+  return mentioned.length > 0 ? mentioned : null;
+}
+
+function stripMentionPrefix(content) {
+  const members = state.conversation?.members || [];
+  let cleaned = content;
+  for (const member of members) {
+    // 只移除 @name 加空格的形式
+    cleaned = cleaned.replace('@' + member.name + ' ', '');
+  }
+  return cleaned.trim();
 }
 
 function openConversationInfo() {
@@ -843,15 +1077,16 @@ async function handleStorageChange(change) {
     }
 
     const diff = newMessageCount - oldMessageCount;
-    requestAnimationFrame(() => {
-      const { scrollTop, scrollHeight, clientHeight } = elements.messagesContainer;
-      if (scrollHeight - scrollTop - clientHeight > 100) {
-        unreadCount += diff;
-        updateNewMessagesBadge();
-      }
-    });
-
-    scrollToBottom();
+    if (userScrolled) {
+      unreadCount += diff;
+      updateNewMessagesBadge();
+    } else {
+      requestAnimationFrame(() => {
+        if (!userScrolled) {
+          scrollToBottom();
+        }
+      });
+    }
   } else {
     console.log('[Chat:DIAG] handleStorageChange - no new messages (or same count), checking if placeholders remain');
     const phCount = messageStore.messages.filter(m => m._status === 'placeholder').length;
@@ -1461,6 +1696,8 @@ function buildMessageHtml(msg, index, showCursor) {
   }
 
   if (msg.isUser) {
+    const mentionNames = getMsgMentionNames(msg);
+    const mentionHtml = mentionNames ? mentionNames.map(n => `<span class="mention-badge">@${escapeHtml(n)}</span>`).join(' ') + ' ' : '';
     return `
       <div class="message user-message" data-msg-id="${msgId}"${vid}>
         <div class="message-avatar user-avatar">
@@ -1471,7 +1708,7 @@ function buildMessageHtml(msg, index, showCursor) {
             <span class="message-sender-name">我</span>
             <span class="message-time">${formatTime(msg.timestamp)}</span>
           </div>
-          <div class="message-text">${escapeHtml(msg.content).replace(/\n/g, '<br>')}</div>
+          <div class="message-text">${mentionHtml}${escapeHtml(msg.content).replace(/\n/g, '<br>')}</div>
           <div class="message-actions">
             <button class="copy-msg-btn" data-msg-index="${index}" title="复制消息">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1657,13 +1894,43 @@ async function sendMessage() {
     return;
   }
 
+  // 如果内容只是 @name（可能带空格），不发送
+  const members = state.conversation.members || [];
+  const isJustMention = members.some(m => {
+    const nameWithAt = '@' + m.name;
+    return content === nameWithAt || content.trim() === nameWithAt;
+  });
+  if (isJustMention) {
+    return;
+  }
+
+  // 先解析 @提及，检查有效性（在清空输入框之前）
+  const targetMemberIds = extractMentionedMemberIds(content);
+  const displayContent = targetMemberIds ? stripMentionPrefix(content) : content;
+  const mentionNames = targetMemberIds ? targetMemberIds.map(id => {
+    const m = state.conversation.members.find(m => m.id === id);
+    return m ? m.name : '';
+  }).filter(Boolean) : null;
+
+  if (targetMemberIds && state.conversation.mode === 'brainstorming') {
+    addTipMessage(conversationId, `📩 消息已定向发送给 ${mentionNames.join('、')}`);
+  }
+
+  if (!displayContent) {
+    if (targetMemberIds) {
+      showToast('请输入消息内容', 'warning');
+    }
+    return;
+  }
+
   elements.messageInput.value = '';
   elements.sendBtn.classList.add('sending');
+  hideMentionDropdown();
   console.log('[Chat:DIAG] sendMessage - input cleared, sendBtn set to sending');
 
   try {
     messageStore.push({
-      isUser: true, content, timestamp: Date.now(), _status: 'local'
+      isUser: true, content: displayContent, _mentionNames: mentionNames, timestamp: Date.now(), _status: 'local'
     });
     console.log('[Chat:DIAG] sendMessage - user message pushed to store');
 
@@ -1679,7 +1946,7 @@ async function sendMessage() {
       showThinkingIndicator();
     }
 
-    sendMessageToBackend(conversationId, content)
+    sendMessageToBackend(conversationId, displayContent, targetMemberIds)
       .then(updatedConversation => {
         console.log('[Chat:DIAG] sendMessageToBackend.then() - received response, has conversation:', !!updatedConversation, 'messages:', updatedConversation?.messages?.length);
         if (updatedConversation) {
@@ -2571,10 +2838,11 @@ async function getConversation(id) {
   });
 }
 
-async function sendMessageToBackend(conversationId, content) {
+async function sendMessageToBackend(conversationId, content, targetMemberIds = null) {
   console.log('[Chat] ========== 发送消息到Background ==========');
   console.log('[Chat] conversationId:', conversationId);
   console.log('[Chat] content:', content?.substring(0, 100));
+  console.log('[Chat] targetMemberIds:', targetMemberIds);
   console.log('[Chat:DIAG] mode:', state.conversation?.mode, 'sendMode:', state.conversation?.sendMode, 'members count:', state.conversation?.members?.length);
   
   return new Promise((resolve, reject) => {
@@ -2583,12 +2851,17 @@ async function sendMessageToBackend(conversationId, content) {
       reject(new Error('发送消息超时（300秒）'));
     }, 300000);
     
-    console.log('[Chat:DIAG] 发送chrome.runtime.sendMessage (action: addMessage)...');
-    chrome.runtime.sendMessage({
+    const messageData = {
       action: 'addMessage',
       conversationId,
       content
-    }, (response) => {
+    };
+    if (targetMemberIds) {
+      messageData.targetMemberIds = targetMemberIds;
+    }
+
+    console.log('[Chat:DIAG] 发送chrome.runtime.sendMessage (action: addMessage)...');
+    chrome.runtime.sendMessage(messageData, (response) => {
       console.log('[Chat:DIAG] 收到Background响应:', response ? `success=${!response.error}, messages=${response?.messages?.length}` : 'null/undefined', 'lastError:', chrome.runtime.lastError?.message);
       clearTimeout(timeout);
       if (chrome.runtime.lastError) {
@@ -2971,15 +3244,14 @@ function formatTime(timestamp) {
 }
 
 function generateAvatarUrl(name) {
-  const seed = name || 'default';
-  const style = 'adventurer';
-  return `https://api.dicebear.com/7.x/${style}/svg?seed=${encodeURIComponent(seed)}&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf`;
+  return getLocalAvatarUrl(name);
 }
 
 function scrollToBottom() {
   elements.messagesContainer.scrollTop = elements.messagesContainer.scrollHeight;
 }
 
+let userScrolled = false;
 let isUserScrolling = false;
 let unreadCount = 0;
 let hasPendingRender = false;
@@ -3032,6 +3304,14 @@ function observeNewMessages() {
 
 function initScrollDetection() {
   let scrollTimeout = null;
+
+  elements.messagesContainer.addEventListener('wheel', () => {
+    userScrolled = true;
+  }, { passive: true });
+
+  elements.messagesContainer.addEventListener('touchmove', () => {
+    userScrolled = true;
+  }, { passive: true });
   
   elements.messagesContainer.addEventListener('scroll', () => {
     const { scrollTop, scrollHeight, clientHeight } = elements.messagesContainer;
@@ -3416,11 +3696,7 @@ function showAddMemberModal() {
       const currentMembers = state.conversation.members || [];
       const updatedMembers = [...currentMembers, newMember];
       const memberIds = updatedMembers.map(m => m.id);
-      const updates = { members: updatedMembers };
-
-      if (state.conversation.mode === 'discussion' || state.conversation.sendMode === 'sequential') {
-        updates.memberOrder = memberIds;
-      }
+      const updates = { members: updatedMembers, memberOrder: memberIds };
 
       const updatedConversation = await chrome.runtime.sendMessage({
         action: 'updateConversation',
@@ -3451,11 +3727,7 @@ async function removeMemberFromConversation(memberId) {
     const currentMembers = state.conversation.members || [];
     const updatedMembers = currentMembers.filter(m => m.id !== memberId);
     const memberIds = updatedMembers.map(m => m.id);
-    const updates = { members: updatedMembers };
-
-    if (state.conversation.mode === 'discussion' || state.conversation.sendMode === 'sequential') {
-      updates.memberOrder = memberIds;
-    }
+    const updates = { members: updatedMembers, memberOrder: memberIds };
 
     const updatedConversation = await chrome.runtime.sendMessage({
       action: 'updateConversation',
@@ -5567,11 +5839,8 @@ function typewriterEffect(element, htmlContent, speed = 20, onComplete = null) {
 
         // 保持滚动到底部
         const container = elements.messagesContainer;
-        if (container) {
-          const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
-          if (isNearBottom) {
-            container.scrollTop = container.scrollHeight;
-          }
+        if (container && !userScrolled) {
+          container.scrollTop = container.scrollHeight;
         }
 
         setTimeout(type, speed);

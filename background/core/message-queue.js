@@ -4,10 +4,11 @@ class MessageQueue {
     this.onEnqueue = null;
   }
 
-  enqueue(content) {
+  enqueue(content, targetMembers = null) {
     const entry = {
       type: 'message',
       content,
+      targetMembers,
       consumed: new Set(),
       saved: false,
       createdAt: Date.now()
@@ -75,7 +76,8 @@ class MessageQueue {
   canRemove(msgIndex, onlineMemberIds) {
     if (msgIndex < 0 || msgIndex >= this.queue.length) return false;
     const msg = this.queue[msgIndex];
-    return onlineMemberIds.every(id => msg.consumed.has(id));
+    const relevantIds = msg.targetMembers || onlineMemberIds;
+    return relevantIds.every(id => msg.consumed.has(id));
   }
 
   removeCompleted(onlineMemberIds) {

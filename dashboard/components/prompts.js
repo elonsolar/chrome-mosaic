@@ -645,8 +645,7 @@ class PromptsTab {
 
   generateAvatarUrl(prompt) {
     const seed = this.createSeedFromPrompt(prompt);
-    const style = 'adventurer';
-    return `https://api.dicebear.com/7.x/${style}/svg?seed=${encodeURIComponent(seed)}&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf`;
+    return getLocalAvatarUrl(seed);
   }
 
   createSeedFromPrompt(prompt) {

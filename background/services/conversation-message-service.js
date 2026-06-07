@@ -20,10 +20,11 @@ class ConversationMessageService {
     this.workers = new Map(); // conversationId -> ConversationWorker
   }
 
-  async processUserMessage(conversationId, userMessage) {
+  async processUserMessage(conversationId, userMessage, targetMemberIds = null) {
     console.log('[ConversationMessageService] ========== 处理用户消息 ==========');
     console.log('[ConversationMessageService] conversationId:', conversationId);
     console.log('[ConversationMessageService] userMessage:', userMessage);
+    console.log('[ConversationMessageService] targetMemberIds:', targetMemberIds);
 
     const conversation = await this.conversationManager.getConversation(conversationId);
     if (!conversation) {
@@ -34,13 +35,11 @@ class ConversationMessageService {
     console.log('[ConversationMessageService] expertId:', conversation.expertId);
     console.log('[ConversationMessageService] members:', conversation.members?.length);
 
-    // 专家问答模式：不使用队列，直接执行
     if (conversation.expertId) {
       return await this._processExpertQA(conversationId, userMessage, conversation);
     }
 
-    // 头脑风暴/圆桌模式：使用队列
-    return await this._processWithQueue(conversationId, userMessage, conversation);
+    return await this._processWithQueue(conversationId, userMessage, conversation, targetMemberIds);
   }
 
   async _processExpertQA(conversationId, userMessage, conversation) {
@@ -464,7 +463,7 @@ Message: ${userMessage}`;
     }
   }
 
-  async _processWithQueue(conversationId, userMessage, conversation) {
+  async _processWithQueue(conversationId, userMessage, conversation, targetMemberIds = null) {
     const settings = { floatWindow: false };
     try {
       const result = await chrome.storage.local.get('settings');
@@ -492,7 +491,7 @@ Message: ${userMessage}`;
     // 头脑风暴：立即保存用户消息
     // 圆桌讨论：延迟保存（在 Worker 中处理，避免排队消息污染上下文）
     if (sendMode === 'brainstorm') {
-      await this.conversationManager.addMessage(conversationId, null, userMessage, MessageType.USER);
+      await this.conversationManager.addMessage(conversationId, null, userMessage, MessageType.USER, null, { targetMemberIds });
     }
     if (conversation.memberOrder) {
       worker.setMemberOrder(conversation.memberOrder);
@@ -509,7 +508,7 @@ Message: ${userMessage}`;
     });
 
     // 入队（只存消息内容，执行时从 storage 读最新数据）
-    worker.enqueueMessage(userMessage);
+    worker.enqueueMessage(userMessage, targetMemberIds);
 
     // 启动Worker（如果未运行）
     if (!worker.isRunning) {
