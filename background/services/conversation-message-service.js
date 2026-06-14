@@ -204,6 +204,10 @@ class ConversationMessageService {
           summaryConversationUrl: result.conversationUrl
         });
         console.log('[ConversationMessageService] 摘要已更新');
+        // 关闭摘要平台标签页
+        if (result.conversationUrl && this.tabManager) {
+          this.tabManager.closeTabByUrl(result.conversationUrl).catch(() => {});
+        }
       } else {
         // 失败：标记失败，发送提示
         await this.conversationManager.updateConversation(conversationId, {
@@ -303,6 +307,164 @@ AI回答：${assistantReply}
 
 ${summary}
 </summary>`;
+  }
+
+  async _updateConversationSummaryAsync(conversationId) {
+    try {
+      const conversation = await this.conversationManager.getConversation(conversationId);
+      if (!conversation) return;
+
+      if (conversation.conversationSummaryFailed) {
+        console.log('[ConversationMessageService] 讨论摘要已标记为失败，跳过');
+        return;
+      }
+
+      const settings = await StorageManager.getSettings();
+      const helperModelId = settings.helperModel;
+
+      if (!helperModelId) {
+        console.warn('[ConversationMessageService] 未配置辅助模型，跳过讨论摘要生成');
+        return;
+      }
+
+      const helperModel = await platformManager.getModelById(helperModelId);
+      if (!helperModel) {
+        console.warn('[ConversationMessageService] 辅助模型不存在，跳过讨论摘要生成');
+        return;
+      }
+
+      const oldSummary = conversation.conversationSummary || '';
+      const summaryConversationUrl = conversation.summaryConversationUrl || null;
+      const lastSummaryCount = conversation.lastSummaryMsgCount || 0;
+
+      const messages = conversation.messages || [];
+      const newMessages = messages.slice(lastSummaryCount);
+
+      if (newMessages.length < 2) {
+        console.log('[ConversationMessageService] 自上次摘要后消息不足，跳过');
+        return;
+      }
+
+      const memberMap = new Map((conversation.members || []).map(m => [m.id, m]));
+      const allParts = newMessages.map(m => {
+        if (m.isUser) return `用户：${m.content}`;
+        if (m.type === 'member') {
+          const name = memberMap.get(m.memberId)?.name || '成员';
+          return `${name}：${m.content}`;
+        }
+        return null;
+      }).filter(Boolean);
+
+      const newContentText = allParts.join('\n');
+
+      console.log('[ConversationMessageService] 开始生成讨论摘要...');
+      const result = await this._generateConversationSummary(
+        newContentText, oldSummary, helperModel, summaryConversationUrl
+      );
+
+      if (result.summary) {
+        const cleaned = result.summary.replace(/^(备份摘要：?|对话摘要：?|摘要：?|总结：?)/, '').trim();
+        await this.conversationManager.updateConversation(conversationId, {
+          conversationSummary: cleaned,
+          conversationSummaryUpdatedAt: Date.now(),
+          conversationSummaryFailed: false,
+          lastSummaryMsgCount: messages.length,
+          summaryConversationUrl: result.conversationUrl
+        });
+        console.log('[ConversationMessageService] 讨论摘要已更新');
+        // 关闭摘要平台标签页
+        if (result.conversationUrl && this.tabManager) {
+          this.tabManager.closeTabByUrl(result.conversationUrl).catch(() => {});
+        }
+
+        chrome.runtime.sendMessage({
+          type: 'summaryUpdated',
+          conversationId,
+          summary: cleaned,
+          updatedAt: Date.now()
+        }).catch(() => {});
+      } else {
+        await this.conversationManager.updateConversation(conversationId, {
+          conversationSummaryFailed: true
+        });
+        console.warn('[ConversationMessageService] 讨论摘要生成失败');
+      }
+    } catch (error) {
+      console.error('[ConversationMessageService] 讨论摘要更新异常:', error);
+    }
+  }
+
+  async _generateConversationSummary(newContentText, oldSummary, model, summaryConversationUrl) {
+    let prompt;
+
+    if (!summaryConversationUrl) {
+      prompt = `你是讨论摘要助手。请根据以下对话内容，生成一份给用户阅读的讨论摘要。
+
+格式要求（Markdown）：
+
+**核心话题**：[一句话概括讨论主题]
+
+**主要观点**：
+- [成员名]：[观点摘要，一句话]
+- [成员名]：[观点摘要，一句话]
+
+**共识**：[大家一致认同的内容，或"暂无明确共识"]
+
+**分歧**：[存在争议或不同看法的点，或"暂无明显分歧"]
+
+要求：
+1. 简洁客观，每个观点不超过一句话
+2. 按成员归类，标注成员名
+3. 突出关键信息和决策点
+4. 便于用户快速回顾本轮讨论
+5. 直接输出 Markdown 内容，不要添加额外前缀或解释
+
+---
+
+对话内容：
+${newContentText}`;
+    } else {
+      prompt = `历史摘要：
+${oldSummary}
+
+本轮新内容：
+${newContentText}
+
+请结合历史摘要和本轮新内容，生成更新后的讨论摘要（格式：**核心话题** + **主要观点** + **共识** + **分歧**）：`;
+    }
+
+    const sender = this.senderFactory?.getSender(model.accessMethod || 'web');
+
+    if (!sender) {
+      console.error('[ConversationMessageService] 无法获取发送器');
+      return { summary: null, conversationUrl: null };
+    }
+
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('摘要生成超时')), 60000);
+    });
+
+    try {
+      const result = await Promise.race([
+        sender.send(prompt, {
+          ...model,
+          conversationUrl: summaryConversationUrl || undefined
+        }),
+        timeoutPromise
+      ]);
+
+      if (result && result.content) {
+        const summary = result.content.substring(0, 500);
+        return {
+          summary,
+          conversationUrl: result.conversationUrl || summaryConversationUrl
+        };
+      }
+      return { summary: null, conversationUrl: null };
+    } catch (error) {
+      console.error('[ConversationMessageService] 讨论摘要生成错误:', error.message);
+      return { summary: null, conversationUrl: null };
+    }
   }
 
   async _maybeGenerateTitle(conversationId, conversation, userMessage) {
@@ -555,6 +717,10 @@ Message: ${userMessage}`;
         memberId,
         error
       });
+    };
+    worker.onRoundComplete = () => {
+      this._updateConversationSummaryAsync(conversationId)
+        .catch(err => console.error('[ConversationMessageService] 讨论摘要更新异常:', err));
     };
     this.workers.set(conversationId, worker);
     console.log(`[ConversationMessageService] 创建Worker: ${conversationId}`);

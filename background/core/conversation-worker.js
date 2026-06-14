@@ -14,6 +14,9 @@ class ConversationWorker {
     this._resolveSchedule = null;
     this.onMemberProcessing = null;
     this.onContentChunk = null;
+    this.onMemberError = null;
+    this.onRoundComplete = null;
+    this._roundWorkDone = false;
     
     this.queue.onEnqueue = () => this._wakeUp();
   }
@@ -107,8 +110,15 @@ class ConversationWorker {
     while (this.isRunning) {
       const onlineIds = this.getOnlineMemberIds();
       this.queue.removeCompleted(onlineIds);
-      
+
       if (this.queue.length === 0) {
+        const allIdle = [...this.members.values()].every(m => !m.isBusy);
+        if (this._roundWorkDone && allIdle) {
+          this._roundWorkDone = false;
+          if (this.onRoundComplete) {
+            this.onRoundComplete();
+          }
+        }
         await this._waitForSignal();
         continue;
       }
@@ -121,10 +131,10 @@ class ConversationWorker {
       }
 
       let hasWork = false;
-      
+
       for (const [memberId, member] of this.members) {
         if (member.status !== 'online' || member.isBusy) continue;
-        
+
         const msgIndices = this.queue.getAllUnconsumedForMember(memberId);
         if (msgIndices.length === 0) continue;
 
@@ -137,20 +147,21 @@ class ConversationWorker {
           msgIndices.forEach(idx => this.queue.markConsumed(memberId, idx));
           continue;
         }
-        
+
         const contents = targetFilteredIndices.map(i => this.queue.queue[i].content);
         const mergedContent = contents.join('\n\n');
 
         const allIndices = [...new Set([...msgIndices])];
         this.queue.markConsumedBatch(memberId, allIndices);
-        
+
         member.isBusy = true;
         hasWork = true;
+        this._roundWorkDone = true;
 
         if (this.onMemberProcessing) {
           this.onMemberProcessing(memberId);
         }
-        
+
         this._executeMember(memberId, member, mergedContent)
           .then(() => {
             member.isBusy = false;
@@ -161,7 +172,7 @@ class ConversationWorker {
             this._wakeUp();
           });
       }
-      
+
       if (!hasWork) {
         await this._waitForSignal();
       } else {
@@ -244,8 +255,11 @@ class ConversationWorker {
       if (this.currentMemberIndex >= this.memberOrder.length) {
         this.queue.removeCompleted(onlineIds);
         this.currentMemberIndex = 0;
+        if (this.onRoundComplete) {
+          this.onRoundComplete();
+        }
       }
-      
+
       this._wakeUp();
     }
   }

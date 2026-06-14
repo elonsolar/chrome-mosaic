@@ -2560,8 +2560,8 @@ body.dark-mode .flow-logs-modal .modal-footer .btn-secondary:hover {
   background-color: rgba(0,0,0,0.15);
 }
 
-/* 滚动到顶部/底部按钮 */
-.scroll-bottom-btn {
+/* 摘要浮动图标（原滚动到底部按钮位置） */
+.summary-float-btn {
   position: absolute;
   bottom: 102px;
   right: 20px;
@@ -2580,30 +2580,32 @@ body.dark-mode .flow-logs-modal .modal-footer .btn-secondary:hover {
   opacity: 0;
   transform: translateY(10px);
   pointer-events: none;
-  z-index: 10;
+  z-index: 15;
+  font-size: 18px;
+  line-height: 1;
 }
 
-.scroll-bottom-btn.visible {
+.summary-float-btn.visible {
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;
 }
 
-.scroll-bottom-btn:hover {
+.summary-float-btn:hover {
   background: var(--bg-secondary);
   box-shadow: var(--shadow-lg);
   transform: translateY(-2px);
 }
 
-.scroll-bottom-btn.visible:hover {
+.summary-float-btn.visible:hover {
   transform: translateY(-2px);
 }
 
-.scroll-bottom-btn:active {
+.summary-float-btn:active {
   transform: scale(0.92);
 }
 
-.scroll-bottom-badge {
+.summary-float-badge {
   position: absolute;
   top: -6px;
   right: -6px;
@@ -2621,9 +2623,10 @@ body.dark-mode .flow-logs-modal .modal-footer .btn-secondary:hover {
   display: none;
   pointer-events: none;
   border: 2px solid var(--bg-primary, #fff);
+  z-index: 16;
 }
 
-.scroll-bottom-badge.visible {
+.summary-float-badge.visible {
   display: block;
   animation: badge-pop 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -5897,6 +5900,167 @@ body.dark-mode .typewriting::after {
 .user-message .mention-badge {
   color: rgba(255, 255, 255, 0.85);
   font-weight: 600;
+}
+
+/* ========== 回到底部按钮（输入框上方居中） ========== */
+.scroll-btn-container {
+  display: flex;
+  justify-content: center;
+  min-height: 0;
+  padding: 0 20px;
+}
+
+.scroll-btn-container:empty {
+  min-height: 0;
+}
+
+.scroll-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--bg-primary, #ffffff);
+  border: 1px solid var(--border-color, #e5e7eb);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-secondary, #6b7280);
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.scroll-btn:hover {
+  background: var(--bg-secondary, #f9fafb);
+  border-color: var(--primary, #667eea);
+  color: var(--primary, #667eea);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  transform: translateY(-2px);
+}
+
+.scroll-btn:active {
+  transform: scale(0.92);
+}
+
+.scroll-btn svg {
+  color: currentColor;
+}
+
+.scroll-btn-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: #fa5151;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border: 2px solid var(--bg-primary, #fff);
+}
+
+/* ========== 摘要弹出浮层 ========== */
+.summary-popover-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 19;
+  background: transparent;
+}
+
+.summary-popover {
+  position: absolute;
+  bottom: 150px;
+  right: 20px;
+  width: 380px;
+  max-height: 420px;
+  background: var(--bg-primary, #ffffff);
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  animation: popoverIn 0.2s ease;
+  overflow: hidden;
+}
+
+@keyframes popoverIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.summary-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #111827);
+  flex-shrink: 0;
+}
+
+.summary-popover-close {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-tertiary, #9ca3af);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  font-size: 16px;
+  transition: all 0.15s ease;
+}
+
+.summary-popover-close:hover {
+  background: var(--bg-tertiary, #f3f4f6);
+  color: var(--text-primary, #111827);
+}
+
+.summary-popover-body {
+  padding: 0 16px 16px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-primary, #111827);
+  flex: 1;
+}
+
+.summary-popover-body p {
+  margin: 4px 0;
+}
+
+.summary-popover-body ul, .summary-popover-body ol {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+
+.summary-popover-body li {
+  margin: 2px 0;
+}
+
+.summary-popover-body strong {
+  font-weight: 600;
+  color: var(--text-primary, #111827);
+}
+
+.summary-popover-meta {
+  padding: 8px 16px 12px;
+  font-size: 11px;
+  color: var(--text-tertiary, #9ca3af);
+  border-top: 1px solid var(--border-color, #e5e7eb);
+  flex-shrink: 0;
 }
 
 

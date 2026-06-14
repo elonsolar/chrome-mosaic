@@ -345,6 +345,10 @@ async function init() {
   // 绑定事件
   bindEvents();
 
+  // 初始渲染
+  renderScrollBar();
+  renderSummaryFloatBtn();
+
   // 监听存储变化（实时更新UI）
   chrome.storage.onChanged.addListener((changes, areaName) => {
     console.log('[Chat:DIAG] storage.onChanged fired - areaName:', areaName, 'keys:', Object.keys(changes));
@@ -379,19 +383,20 @@ function initElements() {
   elements.smartPanel = document.getElementById('smartPanel');
   elements.smartPanelToggle = document.getElementById('smartPanelToggle');
   elements.loopProgressFixed = document.getElementById('loopProgressFixed');
+  elements.scrollBtnContainer = document.getElementById('scrollBtnContainer');
   elements.mentionDropdown = document.getElementById('mentionDropdown');
 
-  // 创建滚动到底部按钮（微信风格：箭头 + 未读数气泡）
-  elements.scrollBottomBtn = document.createElement('button');
-  elements.scrollBottomBtn.className = 'scroll-bottom-btn';
-  elements.scrollBottomBtn.title = '回到底部';
-  elements.scrollBottomBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
-  elements.scrollBottomBadge = document.createElement('span');
-  elements.scrollBottomBadge.className = 'scroll-bottom-badge';
-  elements.scrollBottomBtn.appendChild(elements.scrollBottomBadge);
+  // 创建摘要浮动图标（位于消息区右下角）
+  elements.summaryFloatBtn = document.createElement('button');
+  elements.summaryFloatBtn.className = 'summary-float-btn';
+  elements.summaryFloatBtn.title = '查看讨论摘要';
+  elements.summaryFloatBtn.innerHTML = '📋';
+  elements.summaryFloatBadge = document.createElement('span');
+  elements.summaryFloatBadge.className = 'summary-float-badge';
+  elements.summaryFloatBtn.appendChild(elements.summaryFloatBadge);
   const chatContainer = document.querySelector('.chat-container');
   if (chatContainer) {
-    chatContainer.appendChild(elements.scrollBottomBtn);
+    chatContainer.appendChild(elements.summaryFloatBtn);
   }
 }
 
@@ -644,29 +649,17 @@ function bindEvents() {
     console.error('[DEBUG] memberAddBtn NOT FOUND in DOM!');
   }
 
-  // 滚动到底部按钮
-  elements.scrollBottomBtn.addEventListener('click', () => {
-    if (hasPendingRender) {
-      hasPendingRender = false;
-      messageStore.syncBackend(state.conversation.messages || []);
-      checkPlaceholdersResolved();
-    }
-    userScrolled = false;
-    scrollToBottom();
-    elements.scrollBottomBtn.classList.remove('visible');
-    unreadCount = 0;
-    updateNewMessagesBadge();
-  });
+  // 摘要浮动图标点击
+  if (elements.summaryFloatBtn) {
+    elements.summaryFloatBtn.addEventListener('click', () => {
+      toggleSummaryPopover();
+    });
+  }
 
-  // 监听消息容器滚动
+  // 监听消息容器滚动（更新回到底部条和摘要按钮）
   elements.messagesContainer.addEventListener('scroll', () => {
-    const { scrollTop, scrollHeight, clientHeight } = elements.messagesContainer;
-    const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
-    elements.scrollBottomBtn.classList.toggle('visible', !isNearBottom);
-    if (isNearBottom && !hasPendingRender) {
-      unreadCount = 0;
-      updateNewMessagesBadge();
-    }
+    renderScrollBar();
+    renderSummaryFloatBtn();
   });
 
   // 智能面板切换
@@ -1106,6 +1099,8 @@ async function handleStorageChange(change) {
   updateSendButtonState();
 
   updateSmartPanelContent();
+  renderScrollBar();
+  renderSummaryFloatBtn();
 }
 
 function bindMemberClickEvents() {
@@ -1852,6 +1847,9 @@ function renderMessages() {
   const hasParticipants = (state.conversation.members && state.conversation.members.length > 0) ||
     (state.conversation.mode === 'expertqa' && state.conversation.expertId);
 
+  renderScrollBar();
+  renderSummaryFloatBtn();
+
   if (!hasParticipants) {
     elements.messagesContainer.innerHTML = `
       <div class="empty-messages">
@@ -2247,6 +2245,15 @@ function attachMessageListener() {
         handleFlowExecutionError(request);
       } else if (request.type === 'member_error') {
         handleMemberError(request);
+      } else if (request.type === 'summaryUpdated') {
+        if (state.conversation && state.conversation.id === request.conversationId) {
+          state.conversation.conversationSummary = request.summary;
+          state.conversation.conversationSummaryUpdatedAt = request.updatedAt;
+          if (elements.summaryFloatBtn) {
+            elements.summaryFloatBtn.dataset.hasNew = 'true';
+          }
+          renderSummaryFloatBtn();
+        }
       }
     });
     messageListenerAttached = true;
@@ -3257,16 +3264,7 @@ let unreadCount = 0;
 let hasPendingRender = false;
 
 function updateNewMessagesBadge() {
-  const badge = elements.scrollBottomBadge;
-  const btn = elements.scrollBottomBtn;
-  if (!badge || !btn) return;
-  if (unreadCount > 0) {
-    badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
-    badge.classList.add('visible');
-    btn.classList.add('visible');
-  } else {
-    badge.classList.remove('visible');
-  }
+  renderScrollBar();
 }
 
 let newMsgObserver = null;
@@ -3515,6 +3513,122 @@ function updateSmartPanelContent() {
   }
 }
 
+function renderScrollBar() {
+  const container = elements.scrollBtnContainer;
+  if (!container) return;
+
+  const { scrollTop, scrollHeight, clientHeight } = elements.messagesContainer;
+  const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+
+  if (isNearBottom && unreadCount === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const badgeHtml = unreadCount > 0
+    ? `<span class="scroll-btn-badge">${unreadCount > 99 ? '99+' : unreadCount}</span>`
+    : '';
+
+  container.innerHTML = `
+    <div class="scroll-btn" id="scrollBtnTrigger" title="回到底部">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      ${badgeHtml}
+    </div>
+  `;
+
+  const trigger = document.getElementById('scrollBtnTrigger');
+  if (trigger) {
+    trigger.addEventListener('click', () => {
+      if (hasPendingRender) {
+        hasPendingRender = false;
+        messageStore.syncBackend(state.conversation.messages || []);
+        checkPlaceholdersResolved();
+      }
+      userScrolled = false;
+      scrollToBottom();
+      unreadCount = 0;
+      updateNewMessagesBadge();
+    });
+  }
+}
+
+function renderSummaryFloatBtn() {
+  const btn = elements.summaryFloatBtn;
+  if (!btn) return;
+
+  const summary = state.conversation?.conversationSummary;
+  const badge = elements.summaryFloatBadge;
+
+  if (!summary) {
+    btn.classList.remove('visible');
+    return;
+  }
+
+  btn.classList.add('visible');
+
+  const hasNew = btn.dataset.hasNew === 'true';
+  if (badge) {
+    if (hasNew) {
+      badge.textContent = 'NEW';
+      badge.classList.add('visible');
+    } else {
+      badge.classList.remove('visible');
+    }
+  }
+}
+
+function toggleSummaryPopover() {
+  const existingOverlay = document.querySelector('.summary-popover-overlay');
+  if (existingOverlay) {
+    existingOverlay.remove();
+    elements.summaryFloatBtn.dataset.hasNew = 'false';
+    renderSummaryFloatBtn();
+    return;
+  }
+
+  elements.summaryFloatBtn.dataset.hasNew = 'false';
+  renderSummaryFloatBtn();
+
+  const summary = state.conversation?.conversationSummary;
+  if (!summary) return;
+
+  const updatedAt = state.conversation?.conversationSummaryUpdatedAt;
+  const timeStr = updatedAt ? new Date(updatedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'summary-popover-overlay';
+  overlay.id = 'summaryPopoverOverlay';
+
+  const popover = document.createElement('div');
+  popover.className = 'summary-popover';
+  popover.id = 'summaryPopover';
+  popover.innerHTML = `
+    <div class="summary-popover-header">
+      <span>📋 讨论摘要</span>
+      <button class="summary-popover-close" id="summaryPopoverClose">&times;</button>
+    </div>
+    <div class="summary-popover-body">${formatMessage(summary)}</div>
+    <div class="summary-popover-meta">更新于 ${timeStr} · 由辅助模型生成</div>
+  `;
+
+  overlay.appendChild(popover);
+  document.body.appendChild(overlay);
+
+  const closeBtn = document.getElementById('summaryPopoverClose');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      overlay.remove();
+    });
+  }
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) {
+      overlay.remove();
+    }
+  });
+}
+
 function initSmartPanel() {
   if (elements.smartPanel && !elements.smartPanel.classList.contains('collapsed')) {
     elements.smartPanel.classList.add('collapsed');
@@ -3673,7 +3787,7 @@ function showAddMemberModal() {
     }
 
     try {
-      const defaultModel = state.models[0];
+const defaultModel = pickModelWithWeight(state.models);
 
       const newMember = {
         id: `member_${Date.now().toString(36)}_${Math.random().toString(36).substr(2)}`,
@@ -4487,9 +4601,27 @@ function generateRandomNicknames(count) {
 }
 
 /**
+ * 加权随机选择一个模型（降低豆包/Kimi 被选中的概率）
+ */
+function pickModelWithWeight(models) {
+  const weights = models.map(m => {
+    const name = (m.platformName || m.code || m.modelCode || '').toLowerCase();
+    if (name.includes('豆包') || name.includes('kimi') || name.includes('doubao')) return 0.15;
+    return 1.0;
+  });
+  const totalWeight = weights.reduce((a, b) => a + b, 0);
+  let r = Math.random() * totalWeight;
+  for (let i = 0; i < models.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return models[i];
+  }
+  return models[models.length - 1];
+}
+
+/**
  * 自动生成成员（使用系统启用的模型）
  */
-function generateAutoMembers(count, allModels) {
+async function generateAutoMembers(count, allModels) {
   const enabledModels = allModels.filter(m => m.enabled !== false);
   const nicknames = generateRandomNicknames(count);
   
@@ -4498,9 +4630,49 @@ function generateAutoMembers(count, allModels) {
     return [];
   }
 
+  // 根据对话模式自动选择场景对应提示词
+  const sceneMap = {
+    brainstorming: '头脑风暴',
+    discussion: '圆桌讨论'
+  };
+  const scene = sceneMap[newConvState.mode];
+  let scenePrompts = [];
+  if (scene) {
+    const result = await chrome.runtime.sendMessage({
+      action: 'getPromptsByScene',
+      scene
+    }).catch(() => []);
+    scenePrompts = Array.isArray(result) ? result : [];
+  }
+
   const members = [];
+  const usedPromptIds = new Set();
+
   for (let i = 0; i < count; i++) {
-    const model = enabledModels[Math.floor(Math.random() * enabledModels.length)];
+    const model = pickModelWithWeight(enabledModels);
+    let systemPrompt = '';
+
+    // 从场景提示词中选一个最少使用且不重复的
+    if (scenePrompts.length > 0) {
+      const available = scenePrompts
+        .filter(p => !usedPromptIds.has(p.id))
+        .sort((a, b) => (a.usageCount || 0) - (b.usageCount || 0));
+
+      if (available.length === 0) {
+        usedPromptIds.clear();
+        scenePrompts.sort((a, b) => (a.usageCount || 0) - (b.usageCount || 0));
+        if (scenePrompts.length > 0) {
+          usedPromptIds.add(scenePrompts[0].id);
+          systemPrompt = scenePrompts[0].content || '';
+          chrome.runtime.sendMessage({ action: 'recordPromptUsage', promptId: scenePrompts[0].id });
+        }
+      } else {
+        usedPromptIds.add(available[0].id);
+        systemPrompt = available[0].content || '';
+        chrome.runtime.sendMessage({ action: 'recordPromptUsage', promptId: available[0].id });
+      }
+    }
+
     const member = {
       id: `member_${Date.now().toString(36)}_${Math.random().toString(36).substr(2)}`,
       name: nicknames[i],
@@ -4510,7 +4682,7 @@ function generateAutoMembers(count, allModels) {
       platformName: model.platformName,
       accessMethod: model.accessMethod,
       color: model.color || '#667eea',
-      systemPrompt: ''
+      systemPrompt: systemPrompt
     };
     if (model.accessMethod === 'api') {
       member.baseUrl = model.baseUrl || '';
@@ -4944,7 +5116,7 @@ async function createNewConversation() {
     const memberCountSlider = document.getElementById('memberCountSlider');
     const memberCount = memberCountSlider ? parseInt(memberCountSlider.value) : 2;
     
-    const members = generateAutoMembers(memberCount, newConvState.inlineFormModels);
+    const members = await generateAutoMembers(memberCount, newConvState.inlineFormModels);
 
     if (mode === 'discussion' && members.length < 2) {
       showToast('圆桌讨论至少需要 2 个成员', 'warning');

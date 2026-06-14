@@ -11,7 +11,7 @@ class PromptManager {
    * 创建新提示词
    */
   async createPrompt(data) {
-    const { name, content, tags, isBuiltin } = data;
+    const { name, content, tags, scene, isBuiltin } = data;
 
     if (!name || !content) {
       throw new Error('提示词名称和内容不能为空');
@@ -23,6 +23,8 @@ class PromptManager {
       name,
       content,
       tags: tags || [],
+      scene: scene || '其他',
+      usageCount: 0,
       isBuiltin: isBuiltin || false,
       createdAt: Date.now(),
       updatedAt: Date.now()
@@ -79,6 +81,36 @@ class PromptManager {
     let prompts = await this.getPrompts();
     prompts = prompts.filter(p => p.id !== id);
     await this.savePrompts(prompts);
+  }
+
+  /**
+   * 按场景获取提示词
+   */
+  async getPromptsByScene(scene) {
+    const prompts = await this.getPrompts();
+    if (!scene) return prompts;
+    return prompts.filter(p => p.scene === scene);
+  }
+
+  /**
+   * 记录提示词使用次数
+   */
+  async recordUsage(id) {
+    const prompts = await this.getPrompts();
+    const index = prompts.findIndex(p => p.id === id);
+    if (index === -1) return;
+    prompts[index].usageCount = (prompts[index].usageCount || 0) + 1;
+    await this.savePrompts(prompts);
+  }
+
+  /**
+   * 按场景获取最少使用的提示词（用于自动选择）
+   */
+  async getLeastUsedByScene(scene) {
+    const prompts = await this.getPromptsByScene(scene);
+    if (prompts.length === 0) return null;
+    prompts.sort((a, b) => (a.usageCount || 0) - (b.usageCount || 0));
+    return prompts[0];
   }
 
   /**
