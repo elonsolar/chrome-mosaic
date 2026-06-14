@@ -2710,7 +2710,6 @@ body.dark-mode .flow-logs-modal .modal-footer .btn-secondary:hover {
               0 0 0 1px rgba(0, 0, 0, 0.05);
   animation: modalSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   padding: 0;
-  overflow: hidden;
 }
 
 @keyframes modalSlideUp {
@@ -2899,6 +2898,286 @@ body.dark-mode .modal-footer {
   gap: 16px;
 }
 
+/* 新建会话 - 成员可编辑面板 */
+.conv-member-panel {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  padding: 2px;
+}
+
+.conv-member-card {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  padding: 14px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  animation: cardSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.conv-member-card:hover {
+  border-color: var(--border-color-hover);
+  box-shadow: var(--shadow-sm);
+}
+
+@keyframes cardSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.conv-member-card-avatar-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  margin-bottom: 10px;
+  position: relative;
+}
+
+.conv-member-card-index {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  background: var(--bg-tertiary);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: absolute;
+  left: 0;
+}
+
+.conv-member-card-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.conv-member-card-name-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s ease;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conv-member-card-name-text:hover {
+  background: var(--bg-tertiary);
+}
+
+.conv-member-card-name.editing {
+  border: 1.5px solid var(--primary);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  font-size: 14px;
+  font-weight: 600;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: inherit;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  max-width: 120px;
+}
+
+.conv-member-card-remove {
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  position: absolute;
+  right: 0;
+}
+
+.conv-member-card-remove:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger);
+}
+
+.conv-member-card-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.conv-member-card-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.conv-member-card-field label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 42px;
+}
+
+.conv-member-card-field select {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%2386868b' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 24px;
+  font-family: inherit;
+}
+
+.conv-member-card-field select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* 提示词自定义下拉 */
+.prompt-picker {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.prompt-picker-trigger {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  padding-right: 24px;
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  background: var(--bg-secondary);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%2386868b' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+  font-family: inherit;
+  min-height: 30px;
+}
+
+.prompt-picker-trigger-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prompt-picker-trigger:hover,
+.prompt-picker.open .prompt-picker-trigger {
+  border-color: var(--primary);
+}
+
+.prompt-picker-list {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--bg-primary);
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 4px;
+}
+
+.prompt-picker.open .prompt-picker-list {
+  display: block;
+}
+
+.prompt-picker-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.15s ease;
+}
+
+.prompt-picker-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.prompt-picker-item.active {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.prompt-picker-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prompt-picker-item-tag {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+.prompt-picker-item-tag[data-scene="头脑风暴"] { background: rgba(139, 92, 246, 0.15); color: #8B5CF6; }
+.prompt-picker-item-tag[data-scene="圆桌讨论"] { background: rgba(239, 68, 68, 0.15); color: #EF4444; }
+.prompt-picker-item-tag[data-scene="专家分析"] { background: rgba(59, 130, 246, 0.15); color: #3B82F6; }
+.prompt-picker-item-tag[data-scene="其他"] { background: rgba(16, 185, 129, 0.15); color: #10B981; }
+
+.conv-member-card-index {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  background: var(--bg-tertiary);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
 /* 成员数量显示 */
 .member-count-display {
   background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
@@ -2964,7 +3243,7 @@ body.dark-mode .form-input:focus {
 .mode-selector {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  gap: 8px;
 }
 
 .mode-option {
@@ -2976,7 +3255,7 @@ body.dark-mode .form-input:focus {
 }
 
 .mode-card {
-  padding: 20px 12px 16px;
+  padding: 14px 10px 12px;
   border: 2px solid transparent;
   border-radius: 16px;
   text-align: center;
@@ -3020,21 +3299,21 @@ body.dark-mode .form-input:focus {
 }
 
 .mode-icon {
-  font-size: 32px;
-  margin-bottom: 8px;
+  font-size: 24px;
+  margin-bottom: 6px;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
 }
 
 .mode-title,
 .mode-name {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 700;
   color: #1e293b;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .mode-desc {
-  font-size: 11px;
+  font-size: 10px;
   color: #64748b;
   font-weight: 500;
 }

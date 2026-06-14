@@ -4621,6 +4621,22 @@ function pickModelWithWeight(models) {
 /**
  * 自动生成成员（使用系统启用的模型）
  */
+// 从场景提示词中选一个最少使用且不重复的（返回 content，副作用：记录 usedPromptIds + usage）
+function pickScenePrompt(scenePrompts, usedPromptIds) {
+  if (!scenePrompts || scenePrompts.length === 0) return '';
+  const available = scenePrompts
+    .filter(p => !usedPromptIds.has(p.id))
+    .sort((a, b) => (a.usageCount || 0) - (b.usageCount || 0));
+  if (available.length === 0) {
+    usedPromptIds.clear();
+    scenePrompts.sort((a, b) => (a.usageCount || 0) - (b.usageCount || 0));
+  }
+  const chosen = available.length > 0 ? available[0] : scenePrompts[0];
+  usedPromptIds.add(chosen.id);
+  chrome.runtime.sendMessage({ action: 'recordPromptUsage', promptId: chosen.id });
+  return chosen.content || '';
+}
+
 async function generateAutoMembers(count, allModels) {
   const enabledModels = allModels.filter(m => m.enabled !== false);
   const nicknames = generateRandomNicknames(count);
@@ -4650,28 +4666,7 @@ async function generateAutoMembers(count, allModels) {
 
   for (let i = 0; i < count; i++) {
     const model = pickModelWithWeight(enabledModels);
-    let systemPrompt = '';
-
-    // 从场景提示词中选一个最少使用且不重复的
-    if (scenePrompts.length > 0) {
-      const available = scenePrompts
-        .filter(p => !usedPromptIds.has(p.id))
-        .sort((a, b) => (a.usageCount || 0) - (b.usageCount || 0));
-
-      if (available.length === 0) {
-        usedPromptIds.clear();
-        scenePrompts.sort((a, b) => (a.usageCount || 0) - (b.usageCount || 0));
-        if (scenePrompts.length > 0) {
-          usedPromptIds.add(scenePrompts[0].id);
-          systemPrompt = scenePrompts[0].content || '';
-          chrome.runtime.sendMessage({ action: 'recordPromptUsage', promptId: scenePrompts[0].id });
-        }
-      } else {
-        usedPromptIds.add(available[0].id);
-        systemPrompt = available[0].content || '';
-        chrome.runtime.sendMessage({ action: 'recordPromptUsage', promptId: available[0].id });
-      }
-    }
+    const systemPrompt = pickScenePrompt(scenePrompts, usedPromptIds);
 
     const member = {
       id: `member_${Date.now().toString(36)}_${Math.random().toString(36).substr(2)}`,
@@ -4682,7 +4677,8 @@ async function generateAutoMembers(count, allModels) {
       platformName: model.platformName,
       accessMethod: model.accessMethod,
       color: model.color || '#667eea',
-      systemPrompt: systemPrompt
+      systemPrompt: systemPrompt,
+      promptManuallySet: false
     };
     if (model.accessMethod === 'api') {
       member.baseUrl = model.baseUrl || '';
@@ -4694,6 +4690,28 @@ async function generateAutoMembers(count, allModels) {
   }
   
   return members;
+}
+
+// 切换模式后，为已有成员重新分配对应分类的提示词（仅改 systemPrompt，保留其余字段）
+async function reassignMemberPromptsByMode(members, mode) {
+  const sceneMap = {
+    brainstorming: '头脑风暴',
+    discussion: '圆桌讨论'
+  };
+  const scene = sceneMap[mode];
+  if (!scene) return;
+
+  const result = await chrome.runtime.sendMessage({
+    action: 'getPromptsByScene',
+    scene
+  }).catch(() => []);
+  const scenePrompts = Array.isArray(result) ? result : [];
+
+  const usedPromptIds = new Set();
+  for (const member of members) {
+    if (member.promptManuallySet) continue;
+    member.systemPrompt = pickScenePrompt(scenePrompts, usedPromptIds);
+  }
 }
 
 // 新建会话状态
@@ -4733,9 +4751,18 @@ async function showNewConversationModal() {
   // 加载数据
   await loadNewConvModalData();
 
+  // 生成初始成员（基于滑块默认值）
+  const slider = document.getElementById('memberCountSlider');
+  const initialCount = slider ? parseInt(slider.value) : 2;
+  if (newConvState.members.length === 0 && newConvState.inlineFormModels.length > 0) {
+    const initialMembers = await generateAutoMembers(initialCount, newConvState.inlineFormModels);
+    newConvState.members.push(...initialMembers);
+  }
+
   // 更新UI
   updateNewConvModeVisibility('brainstorming');
   renderNewConvMemberList();
+  renderNewConvMemberPanel();
 
   modal.classList.add('active');
 }
@@ -4796,13 +4823,18 @@ async function loadNewConvModalData() {
 
     if (!newConvState.eventsBound) {
       document.querySelectorAll('input[name="convMode"]').forEach(radio => {
-        radio.addEventListener('change', (e) => {
-          newConvState.mode = e.target.value;
-          updateNewConvModeVisibility(e.target.value);
+        radio.addEventListener('change', async (e) => {
+          const newMode = e.target.value;
+          newConvState.mode = newMode;
+          updateNewConvModeVisibility(newMode);
+          if ((newMode === 'brainstorming' || newMode === 'discussion') && newConvState.members.length > 0) {
+            await reassignMemberPromptsByMode(newConvState.members, newMode);
+            renderNewConvMemberPanel();
+          }
         });
       });
 
-      // 成员数量滑块事件
+      // 成员数量滑块事件 - 双向绑定
       const memberCountSlider = document.getElementById('memberCountSlider');
       const memberCountValue = document.getElementById('memberCountValue');
       if (memberCountSlider && memberCountValue) {
@@ -4812,11 +4844,35 @@ async function loadNewConvModalData() {
           const percent = ((val - min) / (max - min)) * 100;
           memberCountSlider.style.setProperty('--value-percent', `${percent}%`);
         };
+
+        const syncMemberCount = async (targetCount) => {
+          const currentCount = newConvState.members.length;
+          if (targetCount === currentCount) return;
+
+          if (targetCount > currentCount) {
+            const newMembers = await generateAutoMembers(targetCount - currentCount, newConvState.inlineFormModels);
+            newConvState.members.push(...newMembers);
+          } else {
+            newConvState.members.splice(targetCount);
+          }
+
+          memberCountValue.textContent = targetCount;
+          renderNewConvMemberPanel();
+        };
+
+        // input: 即时更新显示数值和进度条
         memberCountSlider.addEventListener('input', (e) => {
           const val = parseInt(e.target.value);
           memberCountValue.textContent = val;
           updateSliderProgress(val);
         });
+
+        // change: 拖拽结束时同步成员列表
+        memberCountSlider.addEventListener('change', async (e) => {
+          const val = parseInt(e.target.value);
+          await syncMemberCount(val);
+        });
+
         updateSliderProgress(parseInt(memberCountSlider.value));
       }
 
@@ -4854,6 +4910,220 @@ function updateNewConvModeVisibility(mode) {
   if (memberGroup) {
     memberGroup.style.display = mode !== 'expertqa' ? 'block' : 'none';
   }
+}
+
+// 渲染新建会话成员可编辑面板
+function renderNewConvMemberPanel() {
+  const container = document.getElementById('convMemberPanel');
+  if (!container) return;
+
+  const members = newConvState.members;
+  const models = newConvState.inlineFormModels || [];
+  const prompts = newConvState.inlineFormPrompts || [];
+
+  if (members.length === 0) {
+    container.innerHTML = '<div class="empty-state" style="padding: 16px; text-align: center; color: var(--text-tertiary); font-size: 13px;">暂无成员，请调整上方滑块添加成员</div>';
+    return;
+  }
+
+  container.innerHTML = members.map((member, index) => {
+    const avatarUrl = generateAvatarUrl(member.name);
+
+    const modelOptions = models.map(m => {
+      const selected = m.id === member.modelId ? 'selected' : '';
+      return `<option value="${m.id}" ${selected}>${escapeHtml(m.platformName)} - ${escapeHtml(m.code)}</option>`;
+    }).join('');
+
+    const selectedPrompt = prompts.find(p => p.content === member.systemPrompt);
+    const triggerName = selectedPrompt ? selectedPrompt.name : '无';
+    const promptItems = prompts.map(p => {
+      const isActive = p.content === member.systemPrompt ? ' active' : '';
+      const scene = p.scene || '其他';
+      return `<div class="prompt-picker-item${isActive}" data-value="${escapeHtml(p.id)}"><span class="prompt-picker-item-name">${escapeHtml(p.name)}</span><span class="prompt-picker-item-tag" data-scene="${escapeHtml(scene)}">${escapeHtml(scene)}</span></div>`;
+    }).join('');
+
+    return `
+      <div class="conv-member-card" data-member-index="${index}">
+        <div class="conv-member-card-avatar-row">
+          <span class="conv-member-card-index">${index + 1}</span>
+          <img class="conv-member-card-avatar" src="${avatarUrl}" alt="${escapeHtml(member.name)}">
+          <span class="conv-member-card-name-text" data-edit="name" title="点击编辑昵称">${escapeHtml(member.name)}</span>
+          <button class="conv-member-card-remove" data-action="remove" title="移除该成员">✕</button>
+        </div>
+        <div class="conv-member-card-fields">
+          <div class="conv-member-card-field">
+            <label>模型</label>
+            <select data-edit="model">
+              <option value="">请选择...</option>
+              ${modelOptions}
+            </select>
+          </div>
+          <div class="conv-member-card-field">
+            <label>提示词</label>
+            <div class="prompt-picker" data-edit="prompt">
+              <div class="prompt-picker-trigger"><span class="prompt-picker-trigger-text">${escapeHtml(triggerName)}</span></div>
+              <div class="prompt-picker-list">
+                <div class="prompt-picker-item" data-value=""><span class="prompt-picker-item-name">无</span></div>
+                ${promptItems}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  bindNewConvMemberPanelEvents();
+}
+
+// 绑定成员面板编辑事件
+function bindNewConvMemberPanelEvents() {
+  const container = document.getElementById('convMemberPanel');
+  if (!container) return;
+
+  const slider = document.getElementById('memberCountSlider');
+  const countDisplay = document.getElementById('memberCountValue');
+
+  // 昵称点击编辑
+  const enterNameEdit = (span) => {
+    const card = span.closest('.conv-member-card');
+    const index = parseInt(card?.dataset?.memberIndex);
+    if (isNaN(index) || !newConvState.members[index]) return;
+
+    const oldName = newConvState.members[index].name;
+    const input = document.createElement('input');
+    input.className = 'conv-member-card-name editing';
+    input.type = 'text';
+    input.value = oldName;
+    input.placeholder = '成员昵称';
+    input.autocomplete = 'off';
+
+    span.replaceWith(input);
+    input.focus();
+    input.select();
+
+    const saveName = () => {
+      const val = input.value.trim() || '成员';
+      newConvState.members[index].name = val;
+
+      const newSpan = document.createElement('span');
+      newSpan.className = 'conv-member-card-name-text';
+      newSpan.dataset.edit = 'name';
+      newSpan.title = '点击编辑昵称';
+      newSpan.textContent = val;
+      newSpan.addEventListener('click', () => enterNameEdit(newSpan));
+      input.replaceWith(newSpan);
+
+      const avatar = card.querySelector('.conv-member-card-avatar');
+      if (avatar) avatar.src = generateAvatarUrl(val);
+    };
+
+    input.addEventListener('blur', saveName);
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
+      if (ev.key === 'Escape') { input.value = oldName; input.blur(); }
+    });
+  };
+
+  container.querySelectorAll('.conv-member-card-name-text').forEach(span => {
+    span.addEventListener('click', () => enterNameEdit(span));
+  });
+
+  // 模型选择
+  container.querySelectorAll('[data-edit="model"]').forEach(select => {
+    select.addEventListener('change', (e) => {
+      const card = e.target.closest('.conv-member-card');
+      const index = parseInt(card.dataset.memberIndex);
+      if (isNaN(index) || !newConvState.members[index]) return;
+
+      const modelId = e.target.value;
+      const member = newConvState.members[index];
+      const model = newConvState.inlineFormModels.find(m => m.id === modelId);
+
+      if (model) {
+        member.modelId = model.id;
+        member.modelCode = model.code;
+        member.platformId = model.platformId;
+        member.platformName = model.platformName;
+        member.accessMethod = model.accessMethod;
+        member.color = model.color || '#667eea';
+        if (model.accessMethod === 'api') {
+          member.baseUrl = model.baseUrl || '';
+          member.apiKey = model.apiKey || '';
+        } else {
+          member.webUrl = model.webUrl || '';
+        }
+      }
+    });
+  });
+
+  // 提示词自定义下拉
+  if (!window.__promptPickerDocBound) {
+    document.addEventListener('click', () => {
+      document.querySelectorAll('.prompt-picker.open').forEach(p => p.classList.remove('open'));
+    });
+    window.__promptPickerDocBound = true;
+  }
+
+  container.querySelectorAll('.prompt-picker').forEach(picker => {
+    const trigger = picker.querySelector('.prompt-picker-trigger');
+    const list = picker.querySelector('.prompt-picker-list');
+
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      container.querySelectorAll('.prompt-picker.open').forEach(p => {
+        if (p !== picker) p.classList.remove('open');
+      });
+      picker.classList.toggle('open');
+    });
+
+    list.querySelectorAll('.prompt-picker-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const card = picker.closest('.conv-member-card');
+        const index = parseInt(card?.dataset?.memberIndex);
+        if (isNaN(index) || !newConvState.members[index]) { picker.classList.remove('open'); return; }
+
+        const promptId = item.dataset.value;
+        const member = newConvState.members[index];
+        if (promptId) {
+          const prompt = newConvState.inlineFormPrompts.find(p => p.id === promptId);
+          member.systemPrompt = prompt ? prompt.content : '';
+        } else {
+          member.systemPrompt = '';
+        }
+        member.promptManuallySet = true;
+
+        const nameEl = item.querySelector('.prompt-picker-item-name');
+        picker.querySelector('.prompt-picker-trigger-text').textContent = nameEl ? nameEl.textContent : '无';
+        list.querySelectorAll('.prompt-picker-item').forEach(i => i.classList.remove('active'));
+        item.classList.add('active');
+        picker.classList.remove('open');
+      });
+    });
+  });
+
+  // 删除成员
+  container.querySelectorAll('[data-action="remove"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const card = e.target.closest('.conv-member-card');
+      const index = parseInt(card.dataset.memberIndex);
+      if (isNaN(index)) return;
+
+      newConvState.members.splice(index, 1);
+      const newCount = newConvState.members.length;
+
+      if (slider) {
+        slider.value = Math.max(parseInt(slider.min) || 1, newCount);
+        const min = parseInt(slider.min) || 1;
+        const max = parseInt(slider.max) || 6;
+        const percent = ((parseInt(slider.value) - min) / (max - min)) * 100;
+        slider.style.setProperty('--value-percent', `${percent}%`);
+      }
+      if (countDisplay) countDisplay.textContent = newCount;
+
+      renderNewConvMemberPanel();
+    });
+  });
 }
 
 // 渲染成员列表
@@ -5112,17 +5382,13 @@ async function createNewConversation() {
     data.expertId = newConvState.selectedExpertId;
     data.members = [];
   } else {
-    // 自动生成成员
-    const memberCountSlider = document.getElementById('memberCountSlider');
-    const memberCount = memberCountSlider ? parseInt(memberCountSlider.value) : 2;
-    
-    const members = await generateAutoMembers(memberCount, newConvState.inlineFormModels);
+    const members = newConvState.members;
 
     if (mode === 'discussion' && members.length < 2) {
       showToast('圆桌讨论至少需要 2 个成员', 'warning');
       return;
     }
-    
+
     if (members.length === 0) {
       showToast('没有可用的模型，请先配置平台', 'warning', {
         text: '去配置',
@@ -5130,7 +5396,7 @@ async function createNewConversation() {
       });
       return;
     }
-    
+
     data.members = members;
 
     if (mode === 'discussion') {
