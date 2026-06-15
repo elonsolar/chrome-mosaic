@@ -327,6 +327,9 @@ class ConversationWorker {
       }
       
       await this._closePlatformTab(entityId, context);
+    } else {
+      // 失败时也关闭 tab，确保下次重试从新页面开始
+      await this._closePlatformTab(memberId, context);
     }
     
     return result;

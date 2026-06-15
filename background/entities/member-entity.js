@@ -269,7 +269,9 @@ class MemberEntity extends BaseEntity {
     if (isFirstMessage && this.systemPrompt) {
       const additionalPrompt = context.getMemberSetting(this.id, 'additionalPrompt', '');
       const memberPrompt = `【你的角色设定】\n${this.systemPrompt}${additionalPrompt ? '\n\n' + additionalPrompt : ''}`;
-      message = message ? `${memberPrompt}\n\n${message}` : memberPrompt;
+      message = message
+        ? `${memberPrompt}\n\n【用户问题】\n${message}\n\n请运用以上设定中的方法，针对上述【用户问题】给出回答。`
+        : memberPrompt;
     }
 
     return message;

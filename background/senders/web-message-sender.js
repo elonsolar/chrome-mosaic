@@ -3,6 +3,19 @@ class WebMessageSender extends AbstractMessageSender {
     super();
     this.tabManager = tabManager;
     this.pendingResponses = pendingResponses;
+    this._platformQueues = new Map();
+  }
+
+  async _acquirePlatformLock(url) {
+    const hostname = new URL(url).hostname;
+    const prev = this._platformQueues.get(hostname) || Promise.resolve();
+
+    let release;
+    const pending = new Promise(resolve => { release = resolve; });
+    this._platformQueues.set(hostname, prev.then(() => pending));
+
+    await prev;
+    return release;
   }
 
   async send(content, options = {}) {
@@ -57,9 +70,12 @@ class WebMessageSender extends AbstractMessageSender {
       throw new Error('没有配置目标 URL');
     }
 
-    console.log(`[WebMessageSender] sendToPlatform url:`, url, '| forceNewTab:', forceNewTab);
-
+    const release = await this._acquirePlatformLock(url);
     const tab = await this.tabManager.openPlatformTab(url, forceNewTab);
+    let success = false;
+    try {
+
+    console.log(`[WebMessageSender] sendToPlatform url:`, url, '| forceNewTab:', forceNewTab);
 
     try {
       await chrome.tabs.update(tab.id, { active: false });
@@ -138,9 +154,17 @@ class WebMessageSender extends AbstractMessageSender {
         throw sendError;
       }
 
+      success = true;
       return await responsePromise;
     } else {
+      success = true;
       return await this.sendToTab(tab.id, message);
+    }
+    } finally {
+      if (!success) {
+        chrome.tabs.remove(tab.id).catch(() => {});
+      }
+      release();
     }
   }
 

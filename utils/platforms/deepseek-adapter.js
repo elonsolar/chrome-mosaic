@@ -173,10 +173,9 @@ class DeepSeekAdapter extends BasePlatformAdapter {
           return;
         }
 
-        // 检查 fetch 拦截器是否已完成
         const fetchReady = document.body.getAttribute('data-anti-lazy-fetch-ready');
         const fetchMsg = document.body.getAttribute('data-anti-lazy-message');
-        
+
         if (fetchReady === 'true' && fetchMsg && fetchMsg.length > 0) {
           console.log(`[${ts}] [${this.platform}] ✓ 从 fetch 拦截器获取消息，长度: ${fetchMsg.length}`);
           document.body.removeAttribute('data-anti-lazy-message');
@@ -184,6 +183,18 @@ class DeepSeekAdapter extends BasePlatformAdapter {
           clearInterval(checkInterval);
           resolve(fetchMsg);
           return;
+        }
+
+        // fetch 未就绪且未超时 → 检查页面是否有实时错误提示
+        //（放 fetch 检查之后，避免干扰正常响应）
+        if (elapsed < 30000) {
+          const bodyText = document.body.textContent;
+          if (/有消息正在生成|已有会话|请稍后再?试|服务繁忙|try later|rate limit|overload/i.test(bodyText)) {
+            clearInterval(checkInterval);
+            console.warn(`[${ts}] [${this.platform}] ⚠️ 检测到平台错误提示`);
+            reject(new Error('有消息正在生成，请稍后再试'));
+            return;
+          }
         }
 
       }, POLL_INTERVAL);

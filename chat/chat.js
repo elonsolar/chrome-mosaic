@@ -3088,7 +3088,7 @@ function formatMessage(content) {
   contentWithoutCode = contentWithoutCode.replace(/\n---\n\n?/g, '<hr class="message-divider">');
 
   // 处理表格
-  const tableRegex = /\n(\|.+\|)\n(\|[\s\-:|]+\|)\n((?:\|.+\|\n?)*)/g;
+  const tableRegex = /(?:^|\n)(\|.+\|)\n(\|[\s\-:|]+\|)\n((?:\|.+\|\n?)*)/g;
   contentWithoutCode = contentWithoutCode.replace(tableRegex, (match, headerRow, separatorRow, bodyRows) => {
     const headers = headerRow.split('|').filter(cell => cell.trim()).map(cell => cell.trim());
     const rows = bodyRows.trim().split('\n').map(row =>
@@ -3097,14 +3097,14 @@ function formatMessage(content) {
 
     let table = '<table><thead><tr>';
     headers.forEach(header => {
-      table += `<th>${escapeHtml(header)}</th>`;
+      table += `<th>${escapeHtml(header).replace(/&lt;br&gt;/gi, '<br>')}</th>`;
     });
     table += '</tr></thead><tbody>';
 
     rows.forEach(row => {
       table += '<tr>';
       row.forEach(cell => {
-        table += `<td>${escapeHtml(cell)}</td>`;
+        table += `<td>${escapeHtml(cell).replace(/&lt;br&gt;/gi, '<br>')}</td>`;
       });
       table += '</tr>';
     });
@@ -4518,47 +4518,66 @@ async function renameConversationFromSidebar(convId) {
 
 // 删除会话
 async function deleteConversationFromSidebar(convId) {
-  try {
-    // 获取会话数据以清理平台会话
-    const conv = sidebarState.conversations.find(c => c.id === convId);
-    if (conv && conv.memberUrls) {
-      // 清理平台会话
-      for (const [memberId, conversationUrl] of Object.entries(conv.memberUrls)) {
-        if (conversationUrl) {
-          try {
-            await chrome.runtime.sendMessage({
-              action: 'deletePlatformConversation',
-              provider: conv.memberSettings?.[memberId]?.provider,
-              conversationUrl
-            });
-          } catch (e) {
-            console.error('[Sidebar] 删除平台会话失败:', e);
-          }
-        }
+  // 1. 快照待清理的平台会话（本地删除前必须先拿到数据）
+  const conv = sidebarState.conversations.find(c => c.id === convId);
+  const platformTasks = [];
+  if (conv && conv.memberUrls) {
+    for (const [memberId, conversationUrl] of Object.entries(conv.memberUrls)) {
+      if (conversationUrl) {
+        platformTasks.push({
+          provider: conv.memberSettings?.[memberId]?.provider,
+          conversationUrl
+        });
       }
     }
+  }
 
-    // 删除会话
+  // 2. 后台清理平台会话（fire-and-forget，不阻塞 UI）
+  //    消息一旦发出即由 background service worker 独立处理，即使随后跳转也不会丢失
+  if (platformTasks.length > 0) {
+    (async () => {
+      for (const task of platformTasks) {
+        try {
+          await chrome.runtime.sendMessage({
+            action: 'deletePlatformConversation',
+            provider: task.provider,
+            conversationUrl: task.conversationUrl
+          });
+        } catch (e) {
+          console.error('[Sidebar] 后台平台清理失败:', e);
+        }
+      }
+    })();
+  }
+
+  // 3. 删除本地会话（快）
+  try {
     await chrome.runtime.sendMessage({
       action: 'deleteConversation',
       conversationId: convId
     });
-
-    // 如果删除的是当前会话，跳转到第一个会话或显示空状态
-    if (convId === conversationId) {
-      const remaining = sidebarState.conversations.filter(c => c.id !== convId);
-      if (remaining.length > 0) {
-        window.location.href = `chat.html?id=${remaining[0].id}`;
-      } else {
-        window.location.href = `chat.html`;
-      }
-    } else {
-      // 刷新列表
-      await loadSidebarConversations();
-    }
   } catch (error) {
     console.error('[Sidebar] 删除会话失败:', error);
     showToast('删除失败: ' + error.message, 'error');
+    return;
+  }
+
+  // 4. 提示
+  showToast('会话已删除', 'success');
+  if (platformTasks.length > 0) {
+    showToast(`正在后台清理 ${platformTasks.length} 个平台会话...`, 'info');
+  }
+
+  // 5. 跳转 / 刷新列表
+  if (convId === conversationId) {
+    const remaining = sidebarState.conversations.filter(c => c.id !== convId);
+    if (remaining.length > 0) {
+      window.location.href = `chat.html?id=${remaining[0].id}`;
+    } else {
+      window.location.href = `chat.html`;
+    }
+  } else {
+    await loadSidebarConversations();
   }
 }
 
@@ -4732,9 +4751,6 @@ async function showNewConversationModal() {
   newConvState.mode = 'brainstorming';
   newConvState.members = [];
   newConvState.selectedExpertId = null;
-
-  // 清空输入
-  document.getElementById('convNameInput').value = '';
 
   // 重置模式选择
   document.querySelectorAll('input[name="convMode"]').forEach(radio => {
@@ -6179,51 +6195,71 @@ async function executeBatchDelete() {
   // 检查是否包含当前会话
   const includesCurrent = idsToDelete.includes(conversationId);
 
-  try {
-    // 逐个删除
-    for (const convId of idsToDelete) {
-      const conv = sidebarState.conversations.find(c => c.id === convId);
-      if (conv && conv.memberUrls) {
-        // 清理平台会话
-        for (const [memberId, conversationUrl] of Object.entries(conv.memberUrls)) {
-          if (conversationUrl) {
-            try {
-              await chrome.runtime.sendMessage({
-                action: 'deletePlatformConversation',
-                provider: conv.memberSettings?.[memberId]?.provider,
-                conversationUrl
-              });
-            } catch (e) {
-              console.error('[BatchDelete] 删除平台会话失败:', e);
-            }
-          }
+  // 1. 快照待清理的平台会话（本地删除前必须先拿到数据）
+  const platformTasks = [];
+  for (const convId of idsToDelete) {
+    const conv = sidebarState.conversations.find(c => c.id === convId);
+    if (conv && conv.memberUrls) {
+      for (const [memberId, conversationUrl] of Object.entries(conv.memberUrls)) {
+        if (conversationUrl) {
+          platformTasks.push({
+            provider: conv.memberSettings?.[memberId]?.provider,
+            conversationUrl
+          });
         }
       }
+    }
+  }
 
-      await chrome.runtime.sendMessage({
+  // 2. 后台清理平台会话（fire-and-forget，不阻塞 UI）
+  //    消息一旦发出即由 background service worker 独立处理，即使随后跳转也不会丢失
+  if (platformTasks.length > 0) {
+    (async () => {
+      for (const task of platformTasks) {
+        try {
+          await chrome.runtime.sendMessage({
+            action: 'deletePlatformConversation',
+            provider: task.provider,
+            conversationUrl: task.conversationUrl
+          });
+        } catch (e) {
+          console.error('[BatchDelete] 后台平台清理失败:', e);
+        }
+      }
+    })();
+  }
+
+  // 3. 删除本地会话（快，并发执行）
+  try {
+    await Promise.all(idsToDelete.map(convId =>
+      chrome.runtime.sendMessage({
         action: 'deleteConversation',
         conversationId: convId
-      });
-    }
-
-    // 关闭弹窗
-    closeBatchDeleteModal();
-
-    // 如果包含当前会话，跳转
-    if (includesCurrent) {
-      const remaining = sidebarState.conversations.filter(c => !idsToDelete.includes(c.id));
-      if (remaining.length > 0) {
-        window.location.href = `chat.html?id=${remaining[0].id}`;
-      } else {
-        window.location.href = 'chat.html';
-      }
-    } else {
-      // 刷新列表
-      await loadSidebarConversations();
-    }
+      })
+    ));
   } catch (error) {
-    console.error('[BatchDelete] 批量删除失败:', error);
+    console.error('[BatchDelete] 本地删除失败:', error);
     showToast('批量删除失败: ' + error.message, 'error');
+    return;
+  }
+
+  // 4. 关闭弹窗 + 提示
+  closeBatchDeleteModal();
+  showToast(`已删除 ${idsToDelete.length} 个会话`, 'success');
+  if (platformTasks.length > 0) {
+    showToast(`正在后台清理 ${platformTasks.length} 个平台会话...`, 'info');
+  }
+
+  // 5. 刷新列表 / 跳转
+  if (includesCurrent) {
+    const remaining = sidebarState.conversations.filter(c => !idsToDelete.includes(c.id));
+    if (remaining.length > 0) {
+      window.location.href = `chat.html?id=${remaining[0].id}`;
+    } else {
+      window.location.href = 'chat.html';
+    }
+  } else {
+    await loadSidebarConversations();
   }
 }
 
